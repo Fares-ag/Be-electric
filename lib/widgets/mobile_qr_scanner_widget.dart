@@ -215,6 +215,25 @@ class _MobileQRScannerWidgetState extends State<MobileQRScannerWidget> {
     return null; // No valid itemId found
   }
 
+  void _showErrorDialog(String title, String message) {
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+            },
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _processQRCode(String qrCode) async {
     try {
       // Stop scanning to prevent multiple scans
@@ -248,8 +267,8 @@ class _MobileQRScannerWidgetState extends State<MobileQRScannerWidget> {
           'Invalid QR Code',
           'QR code does not contain a valid itemId number.\n\nScanned: $qrCode\n\nPlease scan a QR code that contains an itemId.',
         );
-        // Resume scanning
-        controller?.start();
+        // Resume scanning - disabled for web
+        // controller?.start();
         return;
       }
 
@@ -294,8 +313,8 @@ class _MobileQRScannerWidgetState extends State<MobileQRScannerWidget> {
           'Asset not found',
           'No asset found with itemId: $itemId\n\nChecked:\nâ€¢ Local CMMS database\nâ€¢ Persistent storage\nâ€¢ External Asset Management System\n\nPlease ensure the asset is registered in the Asset Management System.',
         );
-        // Resume scanning
-        controller?.start();
+        // Resume scanning - disabled for web
+        // controller?.start();
       }
     } catch (e) {
       // Close loading dialog
@@ -305,31 +324,12 @@ class _MobileQRScannerWidgetState extends State<MobileQRScannerWidget> {
 
       if (mounted) {
         _showErrorDialog('Error', 'Failed to process QR code: $e');
-        // Resume scanning
-        controller?.start();
+        // Resume scanning - disabled for web
+        // controller?.start();
       }
     }
   }
 
-  void _showErrorDialog(String title, String message) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              // Resume scanning - disabled for web
-              // controller?.start();
-            },
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
 
   Future<void> _showPostScanActionSheet(
       BuildContext context, Asset asset,) async {

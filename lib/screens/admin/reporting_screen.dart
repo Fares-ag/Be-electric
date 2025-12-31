@@ -1,7 +1,8 @@
 // Admin Reporting Screen - Generate all types of reports
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:open_file/open_file.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/advanced_reporting_service.dart' as advanced;
 import '../../utils/app_theme.dart';
@@ -600,7 +601,31 @@ class _ReportingScreenState extends State<ReportingScreen> {
               textColor: Colors.white,
               onPressed: () async {
                 if (report.filePath != null) {
-                  await OpenFile.open(report.filePath);
+                  if (kIsWeb) {
+                    // On web, try to open the file URL
+                    final uri = Uri.tryParse(report.filePath!);
+                    if (uri != null && await canLaunchUrl(uri)) {
+                      await launchUrl(uri);
+                    } else {
+                      // Show message that file download is not available on web
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('File opening not available on web. Please download the file manually.'),
+                          ),
+                        );
+                      }
+                    }
+                  } else {
+                    // On mobile, show message that open_file is disabled
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('File opening feature is temporarily disabled.'),
+                        ),
+                      );
+                    }
+                  }
                 }
               },
             ),

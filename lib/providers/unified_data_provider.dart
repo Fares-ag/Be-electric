@@ -3,9 +3,8 @@
 // NOW WITH REAL-TIME SUPABASE SYNC!
 
 import 'dart:async';
-import 'dart:io';
-
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
+import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/asset.dart';
@@ -676,17 +675,16 @@ class UnifiedDataProvider with ChangeNotifier {
       String? uploadedPhotoUrl;
       if (photoPath != null) {
         try {
-          final photoFile = File(photoPath);
-          if (photoFile.existsSync()) {
-            final storageService = SupabaseStorageService();
-            uploadedPhotoUrl = await storageService.uploadWorkOrderPhoto(
-              photoFile: photoFile,
-              workOrderId: workOrderId,
-            );
-            debugPrint('📤 Uploaded work order photo: $uploadedPhotoUrl');
-          }
+          // Convert file path to XFile (web-compatible)
+          final photoFile = XFile(photoPath);
+          final storageService = SupabaseStorageService();
+          uploadedPhotoUrl = await storageService.uploadWorkOrderPhoto(
+            photoFile: photoFile,
+            workOrderId: workOrderId,
+          );
+          debugPrint('📤 Uploaded work order photo: $uploadedPhotoUrl');
         } catch (e) {
-          debugPrint('⚠️ Failed to upload photo to Firebase Storage: $e');
+          debugPrint('⚠️ Failed to upload photo to Supabase Storage: $e');
           // Continue with local path if upload fails
           uploadedPhotoUrl = photoPath;
         }

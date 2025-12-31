@@ -1606,7 +1606,14 @@ class _WorkOrderDetailScreenState extends State<WorkOrderDetailScreen> {
                 textColor: Colors.white,
                 onPressed: () async {
                   try {
-                    await OpenFile.open(filePath);
+                    // File opening disabled for web compatibility
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('File opening not available on web. Please download the file manually.'),
+                        ),
+                      );
+                    }
                   } catch (e) {
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
