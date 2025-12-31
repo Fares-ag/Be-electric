@@ -3,7 +3,7 @@
 // NOW WITH REAL-TIME SUPABASE SYNC!
 
 import 'dart:async';
-import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
+import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 
