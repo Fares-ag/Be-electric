@@ -7,6 +7,7 @@ import '../../models/work_order.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/unified_data_provider.dart';
 import '../../utils/app_theme.dart';
+import '../../utils/responsive_layout.dart';
 import '../../widgets/custom_app_bar.dart';
 import '../work_orders/work_order_detail_screen.dart';
 import 'asset_selection_screen.dart';
@@ -224,12 +225,47 @@ class _RequestorStatusScreenState extends State<RequestorStatusScreen>
       );
     }
 
+    final isDesktop = ResponsiveLayout.isDesktop(context);
+    final isTablet = ResponsiveLayout.isTablet(context);
+    final padding = ResponsiveLayout.getResponsivePadding(context);
+    final maxWidth = ResponsiveLayout.getMaxContentWidth(context);
+
+    if (isDesktop || isTablet) {
+      // Use grid layout for desktop/tablet
+      final columns = isDesktop ? 2 : 1;
+      return Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: maxWidth),
+          child: GridView.builder(
+            padding: EdgeInsets.only(
+              left: padding.horizontal / 2,
+              right: padding.horizontal / 2,
+              top: padding.vertical,
+              bottom: padding.vertical + 80,
+            ),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: columns,
+              crossAxisSpacing: padding.horizontal / 2,
+              mainAxisSpacing: padding.vertical / 2,
+              childAspectRatio: 1.2,
+            ),
+            itemCount: activeRequests.length,
+            itemBuilder: (context, index) {
+              final request = activeRequests[index];
+              return _buildRequestCard(request);
+            },
+          ),
+        ),
+      );
+    }
+
+    // Mobile: use list view
     return ListView.builder(
       padding: EdgeInsets.only(
-        left: AppTheme.spacingM,
-        right: AppTheme.spacingM,
-        top: AppTheme.spacingM,
-        bottom: AppTheme.spacingM + 80, // Extra padding for floating action button
+        left: padding.horizontal / 2,
+        right: padding.horizontal / 2,
+        top: padding.vertical,
+        bottom: padding.vertical + 80, // Extra padding for floating action button
       ),
       itemCount: activeRequests.length,
       itemBuilder: (context, index) {
@@ -270,12 +306,47 @@ class _RequestorStatusScreenState extends State<RequestorStatusScreen>
       );
     }
 
+    final isDesktop = ResponsiveLayout.isDesktop(context);
+    final isTablet = ResponsiveLayout.isTablet(context);
+    final padding = ResponsiveLayout.getResponsivePadding(context);
+    final maxWidth = ResponsiveLayout.getMaxContentWidth(context);
+
+    if (isDesktop || isTablet) {
+      // Use grid layout for desktop/tablet
+      final columns = isDesktop ? 2 : 1;
+      return Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: maxWidth),
+          child: GridView.builder(
+            padding: EdgeInsets.only(
+              left: padding.horizontal / 2,
+              right: padding.horizontal / 2,
+              top: padding.vertical,
+              bottom: padding.vertical + 80,
+            ),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: columns,
+              crossAxisSpacing: padding.horizontal / 2,
+              mainAxisSpacing: padding.vertical / 2,
+              childAspectRatio: 1.2,
+            ),
+            itemCount: pastRequests.length,
+            itemBuilder: (context, index) {
+              final request = pastRequests[index];
+              return _buildRequestCard(request);
+            },
+          ),
+        ),
+      );
+    }
+
+    // Mobile: use list view
     return ListView.builder(
       padding: EdgeInsets.only(
-        left: AppTheme.spacingM,
-        right: AppTheme.spacingM,
-        top: AppTheme.spacingM,
-        bottom: AppTheme.spacingM + 80, // Extra padding for floating action button
+        left: padding.horizontal / 2,
+        right: padding.horizontal / 2,
+        top: padding.vertical,
+        bottom: padding.vertical + 80, // Extra padding for floating action button
       ),
       itemCount: pastRequests.length,
       itemBuilder: (context, index) {

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../models/asset.dart';
 import '../../providers/auth_provider.dart';
 import '../../utils/app_theme.dart';
+import '../../utils/responsive_layout.dart';
 import '../../widgets/custom_app_bar.dart';
 import 'review_maintenance_request_screen.dart';
 
@@ -159,26 +160,40 @@ class _CreateMaintenanceRequestScreenState
       ),
       body: Form(
         key: _formKey,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(AppTheme.spacingL),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Charger image at top (centered)
-              if (chargerImagePath != null)
-                Center(
-                  child: Image.asset(
-                    chargerImagePath,
-                    height: 120,
-                    fit: BoxFit.contain,
-                    errorBuilder: (context, error, stackTrace) {
-                      return const SizedBox.shrink();
-                    },
-                  ),
-                ),
+        child: Center(
+          child: SingleChildScrollView(
+            child: ResponsiveContainer(
+              maxWidth: ResponsiveLayout.getFormMaxWidth(context),
+              padding: ResponsiveLayout.getResponsivePadding(context),
+              centerContent: ResponsiveLayout.isDesktop(context) || ResponsiveLayout.isTablet(context),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Charger image at top (centered)
+                  if (chargerImagePath != null)
+                    Center(
+                      child: Image.asset(
+                        chargerImagePath,
+                        height: ResponsiveLayout.getResponsiveSpacing(
+                          context,
+                          mobile: 120,
+                          tablet: 140,
+                          desktop: 160,
+                        ),
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, error, stackTrace) {
+                          return const SizedBox.shrink();
+                        },
+                      ),
+                    ),
 
-              const SizedBox(height: AppTheme.spacingXL),
+                  SizedBox(height: ResponsiveLayout.getResponsiveSpacing(
+                    context,
+                    mobile: AppTheme.spacingXL,
+                    tablet: AppTheme.spacingXXL,
+                    desktop: AppTheme.spacingXXL * 1.5,
+                  )),
 
               // NAME field
               _buildFormField(

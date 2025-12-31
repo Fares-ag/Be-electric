@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../providers/auth_provider.dart';
 import '../../utils/app_theme.dart';
+import '../../utils/responsive_layout.dart';
 import '../../widgets/role_based_navigation.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -110,36 +111,55 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-        backgroundColor: const Color(0xFF002911), // Be Electric dark green
-        body: SafeArea(
+  Widget build(BuildContext context) {
+    final isDesktop = ResponsiveLayout.isDesktop(context);
+    final isTablet = ResponsiveLayout.isTablet(context);
+    final formMaxWidth = ResponsiveLayout.getFormMaxWidth(context);
+    final logoSize = ResponsiveLayout.getResponsiveIconSize(
+      context,
+      mobile: 250,
+      tablet: 280,
+      desktop: 300,
+    );
+
+    return Scaffold(
+      backgroundColor: const Color(0xFF002911), // Be Electric dark green
+      body: SafeArea(
+        child: Center(
           child: SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.all(AppTheme.spacingXL),
+            child: ResponsiveContainer(
+              maxWidth: formMaxWidth,
+              padding: ResponsiveLayout.getResponsivePadding(context),
+              centerContent: isDesktop || isTablet,
               child: Form(
                 key: _formKey,
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const SizedBox(height: 40),
-                    // Be Electric Logo - Much Bigger
+                    SizedBox(height: isDesktop ? 60 : 40),
+                    // Be Electric Logo - Responsive Size
                     Center(
                       child: Image.asset(
                         'assets/images/beElectricWhiteLogo.png',
-                        width: 250,
-                        height: 250,
+                        width: logoSize,
+                        height: logoSize,
                         fit: BoxFit.contain,
                         errorBuilder: (context, error, stackTrace) {
-                          return const Icon(
+                          return Icon(
                             Icons.bolt,
-                            size: 200,
+                            size: logoSize * 0.8,
                             color: Colors.white,
                           );
                         },
                       ),
                     ),
-                    const SizedBox(height: AppTheme.spacingXXL),
+                    SizedBox(height: ResponsiveLayout.getResponsiveSpacing(
+                      context,
+                      mobile: AppTheme.spacingXXL,
+                      tablet: AppTheme.spacingXXL * 1.2,
+                      desktop: AppTheme.spacingXXL * 1.5,
+                    )),
 
                   // Email Field
                   TextFormField(
@@ -221,47 +241,63 @@ class _LoginScreenState extends State<LoginScreen> {
                       return null;
                     },
                   ),
-                  const SizedBox(height: AppTheme.spacingXL),
+                    SizedBox(height: ResponsiveLayout.getResponsiveSpacing(
+                      context,
+                      mobile: AppTheme.spacingXL,
+                      tablet: AppTheme.spacingXL * 1.2,
+                      desktop: AppTheme.spacingXL * 1.5,
+                    )),
 
-                  // Login Button
-                  Consumer<AuthProvider>(
-                    builder: (context, authProvider, child) => ElevatedButton(
-                      onPressed: authProvider.isLoading
-                          ? null
-                          : () {
-                              debugPrint('🔘 Login button pressed');
-                              _login();
-                            },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: const Color(0xFF002911),
-                        minimumSize: const Size(0, 56),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                    // Login Button
+                    Consumer<AuthProvider>(
+                      builder: (context, authProvider, child) => ElevatedButton(
+                        onPressed: authProvider.isLoading
+                            ? null
+                            : () {
+                                debugPrint('🔘 Login button pressed');
+                                _login();
+                              },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: const Color(0xFF002911),
+                          minimumSize: Size(
+                            0,
+                            ResponsiveLayout.getResponsiveButtonHeight(context),
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                              ResponsiveLayout.getResponsiveBorderRadius(context),
+                            ),
+                          ),
+                          elevation: ResponsiveLayout.getResponsiveElevation(context),
                         ),
-                        elevation: 4,
-                      ),
-                      child: authProvider.isLoading
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  Color(0xFF002911),
+                        child: authProvider.isLoading
+                            ? SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: const AlwaysStoppedAnimation<Color>(
+                                    Color(0xFF002911),
+                                  ),
+                                ),
+                              )
+                            : Text(
+                                'Login',
+                                style: TextStyle(
+                                  fontSize: ResponsiveLayout.getResponsiveFontSize(
+                                    context,
+                                    mobile: 18,
+                                    tablet: 20,
+                                    desktop: 22,
+                                  ),
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1.0,
                                 ),
                               ),
-                            )
-                          : const Text(
-                              'Login',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 1.0,
-                              ),
-                            ),
+                      ),
                     ),
-                  ),
+                    SizedBox(height: isDesktop ? 40 : 20),
                   ],
                 ),
               ),
@@ -269,4 +305,5 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
       );
+  }
 }

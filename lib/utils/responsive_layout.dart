@@ -204,6 +204,45 @@ class ResponsiveLayout {
         return 6;
     }
   }
+
+  // Get max width for desktop content (prevents content from being too wide)
+  static double getMaxContentWidth(BuildContext context) {
+    final screenType = getScreenType(context);
+    switch (screenType) {
+      case ScreenType.mobile:
+        return double.infinity;
+      case ScreenType.tablet:
+        return 800;
+      case ScreenType.desktop:
+        return 1400; // Optimal reading width for desktop
+    }
+  }
+
+  // Get responsive form width (for login, forms, etc.)
+  static double getFormMaxWidth(BuildContext context) {
+    final screenType = getScreenType(context);
+    switch (screenType) {
+      case ScreenType.mobile:
+        return double.infinity;
+      case ScreenType.tablet:
+        return 500;
+      case ScreenType.desktop:
+        return 450; // Narrower for forms on desktop
+    }
+  }
+
+  // Get responsive horizontal padding for centered content
+  static EdgeInsets getCenteredContentPadding(BuildContext context) {
+    final screenType = getScreenType(context);
+    switch (screenType) {
+      case ScreenType.mobile:
+        return const EdgeInsets.symmetric(horizontal: 16);
+      case ScreenType.tablet:
+        return const EdgeInsets.symmetric(horizontal: 48);
+      case ScreenType.desktop:
+        return const EdgeInsets.symmetric(horizontal: 120);
+    }
+  }
 }
 
 enum ScreenType {
@@ -290,11 +329,13 @@ class ResponsiveContainer extends StatelessWidget {
     this.maxWidth,
     this.padding,
     this.margin,
+    this.centerContent = false,
   });
   final Widget child;
   final double? maxWidth;
   final EdgeInsets? padding;
   final EdgeInsets? margin;
+  final bool centerContent;
 
   @override
   Widget build(BuildContext context) {
@@ -310,17 +351,23 @@ class ResponsiveContainer extends StatelessWidget {
         containerMaxWidth = maxWidth ?? 800;
         break;
       case ScreenType.desktop:
-        containerMaxWidth = maxWidth ?? 1200;
+        containerMaxWidth = maxWidth ?? ResponsiveLayout.getMaxContentWidth(context);
         break;
     }
 
-    return Container(
+    Widget content = Container(
       width: double.infinity,
       constraints: BoxConstraints(maxWidth: containerMaxWidth),
       padding: padding ?? ResponsiveLayout.getResponsivePadding(context),
       margin: margin ?? ResponsiveLayout.getResponsiveMargin(context),
       child: child,
     );
+
+    if (centerContent && screenType != ScreenType.mobile) {
+      return Center(child: content);
+    }
+
+    return content;
   }
 }
 
