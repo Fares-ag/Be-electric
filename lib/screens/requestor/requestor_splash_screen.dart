@@ -189,7 +189,7 @@ class _RequestorSplashScreenState extends State<RequestorSplashScreen>
   @override
   Widget build(BuildContext context) {
     Widget currentScreen;
-    
+
     if (_currentScreen < 3) {
       // Screens 0, 1, 2: Logo on dark green
       currentScreen = _buildLogoScreen();
@@ -214,4 +214,3 @@ class _RequestorSplashScreenState extends State<RequestorSplashScreen>
     );
   }
 }
-
