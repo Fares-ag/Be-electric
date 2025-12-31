@@ -1,6 +1,7 @@
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart';
+import 'package:image_picker/image_picker.dart';
 import 'supabase_auth_service.dart';
 
 /// Service for Supabase Storage access with authentication
@@ -32,9 +33,9 @@ class SupabaseStorageService {
     return true;
   }
 
-  /// Upload a file to Supabase Storage
+  /// Upload a file to Supabase Storage (web-compatible)
   Future<String?> uploadFile({
-    required File file,
+    required XFile file,
     required String fileName,
     String? folder,
   }) async {
@@ -51,13 +52,16 @@ class SupabaseStorageService {
       // Construct the storage path
       final storagePath = folder != null ? '$folder/$fileName' : fileName;
       
+      // Read file bytes (works on all platforms)
+      final fileBytes = await file.readAsBytes();
+      
       debugPrint('   Storage path: $storagePath');
-      debugPrint('   File size: ${await file.length()} bytes');
+      debugPrint('   File size: ${fileBytes.length} bytes');
       
       // Upload the file
       await _client.storage.from('files').uploadBinary(
         storagePath,
-        await file.readAsBytes(),
+        fileBytes,
         fileOptions: const FileOptions(
           upsert: true,
         ),
@@ -81,7 +85,7 @@ class SupabaseStorageService {
 
   /// Upload a photo for work orders
   Future<String?> uploadWorkOrderPhoto({
-    required File photoFile,
+    required XFile photoFile,
     required String workOrderId,
   }) async {
     final fileName =
@@ -95,7 +99,7 @@ class SupabaseStorageService {
 
   /// Upload a signature image
   Future<String?> uploadSignature({
-    required File signatureFile,
+    required XFile signatureFile,
     required String workOrderId,
     required String signatureType, // 'requestor' or 'technician'
   }) async {
@@ -110,7 +114,7 @@ class SupabaseStorageService {
 
   /// Upload a completion photo
   Future<String?> uploadCompletionPhoto({
-    required File photoFile,
+    required XFile photoFile,
     required String workOrderId,
     required String photoType, // 'completion', 'before', 'after'
   }) async {
@@ -125,8 +129,8 @@ class SupabaseStorageService {
 
   /// Upload multiple completion photos
   Future<Map<String, String?>> uploadCompletionPhotos({
-    required Map<String, File>
-        photos, // 'completion', 'before', 'after' -> File
+    required Map<String, XFile>
+        photos, // 'completion', 'before', 'after' -> XFile
     required String workOrderId,
   }) async {
     final results = <String, String?>{};
@@ -149,7 +153,7 @@ class SupabaseStorageService {
 
   /// Upload a completion photo for PM tasks
   Future<String?> uploadPMTaskCompletionPhoto({
-    required File photoFile,
+    required XFile photoFile,
     required String pmTaskId,
   }) async {
     final fileName =
@@ -161,10 +165,9 @@ class SupabaseStorageService {
     );
   }
 
-  /// Download a file from Supabase Storage
-  Future<File?> downloadFile({
+  /// Download a file from Supabase Storage (returns bytes for web compatibility)
+  Future<Uint8List?> downloadFile({
     required String downloadUrl,
-    required String localPath,
   }) async {
     // Ensure user is authenticated
     final isAuthenticated = await _ensureAuthenticated();
@@ -182,11 +185,8 @@ class SupabaseStorageService {
       final storagePath = pathSegments.skip(2).join('/'); // Skip /storage/v1/object/public/files/
 
       final bytes = await _client.storage.from('files').download(storagePath);
-
-      final file = File(localPath);
-      await file.writeAsBytes(bytes);
-      debugPrint('File downloaded successfully: $localPath');
-      return file;
+      debugPrint('File downloaded successfully: ${bytes.length} bytes');
+      return bytes;
     } on Exception catch (e) {
       debugPrint('Download error: $e');
       return null;

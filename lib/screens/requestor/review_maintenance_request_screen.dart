@@ -1,5 +1,6 @@
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../models/asset.dart';
 import '../../models/work_order.dart';
@@ -34,7 +35,7 @@ class ReviewMaintenanceRequestScreen extends StatefulWidget {
   final String email;
   final String category;
   final String problemDescription;
-  final List<File> selectedPhotos;
+  final List<XFile> selectedPhotos;
   final String chargerType;
   final String? chargerImagePath;
 
@@ -251,12 +252,17 @@ Category Issue: ${widget.category.isNotEmpty ? widget.category : 'N/A'}
                                   ),
                                   child: ClipRRect(
                                     borderRadius: BorderRadius.circular(AppTheme.radiusS),
-                                    child: Image.file(
-                                      widget.selectedPhotos[index],
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (context, error, stackTrace) {
+                                    child: FutureBuilder<Uint8List>(
+                                      future: widget.selectedPhotos[index].readAsBytes(),
+                                      builder: (context, snapshot) {
+                                        if (snapshot.hasData) {
+                                          return Image.memory(
+                                            snapshot.data!,
+                                            fit: BoxFit.cover,
+                                          );
+                                        }
                                         return const Center(
-                                          child: Icon(Icons.image, color: Colors.grey),
+                                          child: CircularProgressIndicator(),
                                         );
                                       },
                                     ),

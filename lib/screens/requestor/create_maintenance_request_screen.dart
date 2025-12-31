@@ -1,4 +1,5 @@
-import 'dart:io';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -42,7 +43,7 @@ class _CreateMaintenanceRequestScreenState
 
   // Photo upload
   final ImagePicker _picker = ImagePicker();
-  List<File> _selectedPhotos = [];
+  List<XFile> _selectedPhotos = [];
 
   @override
   void initState() {
@@ -94,7 +95,7 @@ class _CreateMaintenanceRequestScreenState
 
       if (photo != null && mounted) {
         setState(() {
-          _selectedPhotos.add(File(photo.path));
+          _selectedPhotos.add(photo);
         });
       }
     } catch (e) {
@@ -119,7 +120,7 @@ class _CreateMaintenanceRequestScreenState
 
       if (photo != null && mounted) {
         setState(() {
-          _selectedPhotos.add(File(photo.path));
+          _selectedPhotos.add(photo);
         });
       }
     } catch (e) {
@@ -510,11 +511,25 @@ class _CreateMaintenanceRequestScreenState
                     children: [
                       ClipRRect(
                         borderRadius: BorderRadius.circular(AppTheme.radiusS),
-                        child: Image.file(
-                          _selectedPhotos[index],
-                          height: 100,
-                          width: 100,
-                          fit: BoxFit.cover,
+                        child: FutureBuilder<Uint8List>(
+                          future: _selectedPhotos[index].readAsBytes(),
+                          builder: (context, snapshot) {
+                            if (snapshot.hasData) {
+                              return Image.memory(
+                                snapshot.data!,
+                                height: 100,
+                                width: 100,
+                                fit: BoxFit.cover,
+                              );
+                            }
+                            return const SizedBox(
+                              height: 100,
+                              width: 100,
+                              child: Center(
+                                child: CircularProgressIndicator(),
+                              ),
+                            );
+                          },
                         ),
                       ),
                       Positioned(
