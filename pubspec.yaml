@@ -1,0 +1,88 @@
+name: qauto_cmms
+description: Be Electric - A Flutter CMMS mobile application for EV charger maintenance management.
+
+publish_to: "none"
+
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State Management
+  provider: ^6.1.1
+  get_it: ^7.6.0
+
+  # Database (mobile support)
+  sqflite: ^2.3.0
+  sqflite_common_ffi: ^2.3.0
+  path: ^1.8.3
+
+  # UI Components
+  cupertino_icons: ^1.0.2
+  material_design_icons_flutter: ^7.0.7296
+
+  # Camera and Media
+  # camera: ^0.10.5+5  # Temporarily disabled due to SDK 36 requirement
+  image_picker: ^1.0.4
+  permission_handler: ^11.0.1
+  cached_network_image: ^3.3.1
+
+  # QR Code Scanner (mobile support)
+  mobile_scanner: ^3.5.6
+
+  # Signature Capture
+  signature: ^5.3.0
+
+  # Date and Time
+  intl: ^0.19.0
+
+  # HTTP and API
+  http: ^1.1.0
+  connectivity_plus: ^5.0.1
+  url_launcher: ^6.2.2
+
+  # Local Storage
+  shared_preferences: ^2.2.2
+
+  # Supabase (for Be Electric backend - mobile support)
+  supabase_flutter: ^2.5.6
+
+  # Utilities
+  uuid: ^4.2.1
+  path_provider: ^2.1.1
+  device_info_plus: ^9.1.0
+  package_info_plus: ^4.2.0
+  universal_html: ^2.2.4
+
+  # PDF Generation
+  pdf: ^3.10.7
+  open_file: ^3.3.2
+  printing: ^5.12.0
+  syncfusion_flutter_pdf: ^26.2.10
+  syncfusion_flutter_xlsio: ^26.2.10
+
+  # Web Admin Portal - Charts & Tables
+  fl_chart: ^0.68.0
+  data_table_2: ^2.5.12
+  syncfusion_flutter_charts: ^30.2.6+1
+  pluto_grid: ^8.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/beElectricLogo.png
+    - assets/images/beElectricWhiteLogo.png
+    - assets/images/BeelectricPearlImg.png
+    - assets/images/SiemensCharger.png
+    - assets/images/KostadCharger.png
+    - assets/images/MaintenanceRequestBg.png
+    - assets/icons/
