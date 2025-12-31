@@ -1,4 +1,5 @@
-import 'dart:io';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -27,7 +28,7 @@ class _EditRequestScreenState extends State<EditRequestScreen> {
 
   // Photo upload
   final ImagePicker _picker = ImagePicker();
-  File? _selectedPhoto;
+  XFile? _selectedPhoto;
   final SupabaseStorageService _storageService = SupabaseStorageService();
 
   @override
@@ -54,7 +55,7 @@ class _EditRequestScreenState extends State<EditRequestScreen> {
 
       if (photo != null && mounted) {
         setState(() {
-          _selectedPhoto = File(photo.path);
+          _selectedPhoto = photo;
         });
       }
     } catch (e) {
@@ -79,7 +80,7 @@ class _EditRequestScreenState extends State<EditRequestScreen> {
 
       if (photo != null && mounted) {
         setState(() {
-          _selectedPhoto = File(photo.path);
+          _selectedPhoto = photo;
         });
       }
     } catch (e) {
@@ -420,11 +421,26 @@ class _EditRequestScreenState extends State<EditRequestScreen> {
                           children: [
                             ClipRRect(
                               borderRadius: BorderRadius.circular(AppTheme.radiusS),
-                              child: Image.file(
-                                _selectedPhoto!,
-                                height: 200,
-                                width: double.infinity,
-                                fit: BoxFit.cover,
+                              child: FutureBuilder<Uint8List>(
+                                future: _selectedPhoto!.readAsBytes(),
+                                builder: (context, snapshot) {
+                                  if (snapshot.hasData) {
+                                    return Image.memory(
+                                      snapshot.data!,
+                                      height: 200,
+                                      width: double.infinity,
+                                      fit: BoxFit.cover,
+                                    );
+                                  }
+                                  return Container(
+                                    height: 200,
+                                    width: double.infinity,
+                                    color: Colors.grey[300],
+                                    child: const Center(
+                                      child: CircularProgressIndicator(),
+                                    ),
+                                  );
+                                },
                               ),
                             ),
                             Positioned(

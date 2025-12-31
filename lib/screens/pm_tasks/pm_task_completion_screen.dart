@@ -313,15 +313,15 @@ class _PMTaskCompletionScreenState extends State<PMTaskCompletionScreen> {
         final storageService = SupabaseStorageService();
         await storageService.loadConfiguration();
 
-          final file = File(_completionPhotoPath!);
-          if (file.existsSync()) {
-            debugPrint('📸 Uploading PM task completion photo for task ${widget.pmTask.id}');
-            debugPrint('   ✅ Photo file exists: ${file.path}');
-            
-            completionPhotoUrl = await storageService.uploadPMTaskCompletionPhoto(
-              photoFile: file,
-              pmTaskId: widget.pmTask.id,
-            );
+          // Convert path to XFile for web compatibility
+          final xFile = XFile(_completionPhotoPath!);
+          debugPrint('📸 Uploading PM task completion photo for task ${widget.pmTask.id}');
+          debugPrint('   ✅ Photo file path: ${xFile.path}');
+          
+          completionPhotoUrl = await storageService.uploadPMTaskCompletionPhoto(
+            photoFile: xFile,
+            pmTaskId: widget.pmTask.id,
+          );
 
             if (completionPhotoUrl != null) {
               debugPrint('✅ PM task completion photo uploaded successfully: $completionPhotoUrl');
@@ -329,9 +329,6 @@ class _PMTaskCompletionScreenState extends State<PMTaskCompletionScreen> {
               debugPrint('⚠️ PM task completion photo upload returned null URL');
               // Don't fallback to local path - upload must succeed
             }
-          } else {
-            debugPrint('❌ PM task completion photo file does not exist: ${file.path}');
-          }
         } catch (e) {
           debugPrint('❌ Error uploading PM task completion photo: $e');
           // Don't fallback to local path - upload must succeed for cross-device access
