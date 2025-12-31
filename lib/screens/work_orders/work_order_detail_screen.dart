@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:flutter/material.dart';
-import 'package:open_file/open_file.dart';
+// import 'package:open_file/open_file.dart'; // Disabled for web compatibility
 import 'package:provider/provider.dart';
 
 import '../../models/activity_log.dart';

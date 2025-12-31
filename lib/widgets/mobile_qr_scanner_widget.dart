@@ -105,6 +105,7 @@ class _MobileQRScannerWidgetState extends State<MobileQRScannerWidget> {
         ),
       ),
     );
+  }
 
   // Mobile scanner detection - not used on web
   // void _onDetect(BarcodeCapture capture) {
