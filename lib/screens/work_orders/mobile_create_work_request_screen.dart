@@ -1,5 +1,4 @@
-import 'dart:io';
-
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -127,12 +126,13 @@ class _MobileCreateWorkRequestScreenState
 
       // Upload photo to Firebase Storage if one is selected
       var finalPhotoPath = _photoPath;
-      if (_photoPath != null && !kIsWeb && File(_photoPath!).existsSync()) {
+      if (_photoPath != null) {
         try {
           final storageService = SupabaseStorageService();
           await storageService.loadConfiguration();
 
-          final photoFile = File(_photoPath!);
+          // Convert path to XFile for web compatibility
+          final photoFile = XFile(_photoPath!);
           final uploadedUrl = await storageService.uploadWorkOrderPhoto(
             photoFile: photoFile,
             workOrderId: 'temp_${DateTime.now().millisecondsSinceEpoch}',
@@ -447,9 +447,22 @@ class _MobileCreateWorkRequestScreenState
                             ),
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(8),
-                              child: Image.file(
-                                File(_photoPath!),
-                                fit: BoxFit.cover,
+                              child: FutureBuilder<Uint8List>(
+                                future: XFile(_photoPath!).readAsBytes(),
+                                builder: (context, snapshot) {
+                                  if (snapshot.hasData) {
+                                    return Image.memory(
+                                      snapshot.data!,
+                                      fit: BoxFit.cover,
+                                    );
+                                  }
+                                  return Container(
+                                    color: Colors.grey[300],
+                                    child: const Center(
+                                      child: CircularProgressIndicator(),
+                                    ),
+                                  );
+                                },
                               ),
                             ),
                           ),
