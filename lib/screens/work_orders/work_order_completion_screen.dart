@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -196,21 +196,18 @@ class _WorkOrderCompletionScreenState extends State<WorkOrderCompletionScreen> {
           final storageService = SupabaseStorageService();
           await storageService.loadConfiguration();
 
-          final file = File(_completionPhotoPath!);
-          if (file.existsSync()) {
-            debugPrint('   ✅ Completion photo file exists: ${file.path}');
-            debugPrint('📸 Uploading completion photo for work order ${widget.workOrder.id}');
-            
-            completionPhotoUrl = await storageService.uploadCompletionPhoto(
-              photoFile: file,
-              workOrderId: widget.workOrder.id,
-              photoType: 'completion',
-            );
+          // Convert path to XFile for web compatibility
+          final photoFile = XFile(_completionPhotoPath!);
+          debugPrint('   ✅ Completion photo path: ${photoFile.path}');
+          debugPrint('📸 Uploading completion photo for work order ${widget.workOrder.id}');
+          
+          completionPhotoUrl = await storageService.uploadCompletionPhoto(
+            photoFile: photoFile,
+            workOrderId: widget.workOrder.id,
+            photoType: 'completion',
+          );
 
-            debugPrint('✅ Completion photo uploaded: $completionPhotoUrl');
-          } else {
-            debugPrint('   ❌ Completion photo file does not exist: ${file.path}');
-          }
+          debugPrint('✅ Completion photo uploaded: $completionPhotoUrl');
         } catch (e) {
           debugPrint('❌ Error uploading completion photo: $e');
           // Continue without photo - don't block completion
@@ -764,9 +761,22 @@ class _WorkOrderCompletionScreenState extends State<WorkOrderCompletionScreen> {
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(8),
-                child: Image.file(
-                  File(photoPath),
-                  fit: BoxFit.cover,
+                child: FutureBuilder<Uint8List>(
+                  future: XFile(photoPath).readAsBytes(),
+                  builder: (context, snapshot) {
+                    if (snapshot.hasData) {
+                      return Image.memory(
+                        snapshot.data!,
+                        fit: BoxFit.cover,
+                      );
+                    }
+                    return Container(
+                      color: Colors.grey[300],
+                      child: const Center(
+                        child: CircularProgressIndicator(),
+                      ),
+                    );
+                  },
                 ),
               ),
             ),
