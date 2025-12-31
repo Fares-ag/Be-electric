@@ -321,8 +321,8 @@ class _MobileQRScannerWidgetState extends State<MobileQRScannerWidget> {
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              // Resume scanning
-              controller?.start();
+              // Resume scanning - disabled for web
+              // controller?.start();
             },
             child: const Text('OK'),
           ),
