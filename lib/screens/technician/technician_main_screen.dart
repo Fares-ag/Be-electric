@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/unified_data_provider.dart';
 import '../../utils/app_theme.dart';
+import '../../utils/responsive_layout.dart';
 import '../../widgets/mobile_qr_scanner_widget.dart';
 import '../admin/seed_general_assets_screen.dart';
 import '../analytics/consolidated_analytics_dashboard.dart';
@@ -466,13 +467,17 @@ class _TechnicianMainScreenState extends State<TechnicianMainScreen> {
           final workOrders = unifiedProvider.getWorkOrdersByTechnician(user.id);
           final pmTasks = unifiedProvider.getPMTasksByTechnician(user.id);
 
-          // Mobile responsive check
-          final screenWidth = MediaQuery.of(context).size.width;
-          final isMobile = screenWidth < 600;
-          final padding = isMobile ? AppTheme.spacingM : AppTheme.spacingL;
+          // Responsive layout
+          final isMobile = ResponsiveLayout.isMobile(context);
+          final isDesktop = ResponsiveLayout.isDesktop(context);
+          final padding = ResponsiveLayout.getResponsivePadding(context);
+          final maxWidth = ResponsiveLayout.getMaxContentWidth(context);
 
-          return Padding(
-            padding: EdgeInsets.all(padding),
+          return Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: maxWidth),
+              child: Padding(
+                padding: padding,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -693,7 +698,12 @@ class _TechnicianMainScreenState extends State<TechnicianMainScreen> {
                     ],
                   ),
 
-                const SizedBox(height: AppTheme.spacingL),
+                SizedBox(height: ResponsiveLayout.getResponsiveSpacing(
+                  context,
+                  mobile: AppTheme.spacingL,
+                  tablet: AppTheme.spacingXL,
+                  desktop: AppTheme.spacingXXL,
+                )),
 
                 // Recent Tasks
                 Text(
@@ -744,6 +754,8 @@ class _TechnicianMainScreenState extends State<TechnicianMainScreen> {
                   ),
                 ),
               ],
+            ),
+              ),
             ),
           );
         },

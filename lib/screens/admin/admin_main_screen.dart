@@ -5,6 +5,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/unified_data_provider.dart';
 import '../../services/orphan_cleanup_service.dart';
 import '../../utils/app_theme.dart';
+import '../../utils/responsive_layout.dart';
 import '../../utils/complete_database_wipe.dart';
 import '../../utils/comprehensive_duplicate_cleanup.dart';
 import '../../utils/database_reset_utility.dart';
@@ -45,10 +46,10 @@ class _AdminMainScreenState extends State<AdminMainScreen> {
   Widget build(BuildContext context) {
     final user = Provider.of<AuthProvider>(context).currentUser;
 
-    // Responsive breakpoints
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isDesktop = screenWidth >= 1200;
-    final isTablet = screenWidth >= 600 && screenWidth < 1200;
+    // Responsive breakpoints using ResponsiveLayout utilities
+    final isDesktop = ResponsiveLayout.isDesktop(context);
+    final isTablet = ResponsiveLayout.isTablet(context);
+    final maxWidth = ResponsiveLayout.getMaxContentWidth(context);
 
     // Use side navigation for desktop/tablet
     final useSideNav = isDesktop || isTablet;
@@ -424,22 +425,22 @@ class _AdminMainScreenState extends State<AdminMainScreen> {
                 const VerticalDivider(width: 1, thickness: 1),
                 // Main Content Area
                 Expanded(
-                  child: Container(
-                    constraints: BoxConstraints(
-                      maxWidth: isDesktop ? 1600 : double.infinity,
-                    ),
-                    child: IndexedStack(
-                      index: _currentIndex,
-                      children: const [
-                        DashboardScreen(showNavigation: false),
-                        WorkOrderListScreen(),
-                        PMTaskListScreen(),
-                        InventoryListScreen(),
-                        ConsolidatedAnalyticsDashboard(),
-                        TechnicianViewerScreen(),
-                        UserManagementScreen(),
-                        SettingsScreen(),
-                      ],
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: maxWidth),
+                      child: IndexedStack(
+                        index: _currentIndex,
+                        children: const [
+                          DashboardScreen(showNavigation: false),
+                          WorkOrderListScreen(),
+                          PMTaskListScreen(),
+                          InventoryListScreen(),
+                          ConsolidatedAnalyticsDashboard(),
+                          TechnicianViewerScreen(),
+                          UserManagementScreen(),
+                          SettingsScreen(),
+                        ],
+                      ),
                     ),
                   ),
                 ),

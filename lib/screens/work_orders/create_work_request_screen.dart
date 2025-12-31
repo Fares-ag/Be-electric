@@ -12,6 +12,7 @@ import '../../providers/unified_data_provider.dart';
 import '../../screens/assets/enhanced_asset_details_screen.dart';
 import '../../services/performance_service.dart';
 import '../../utils/app_theme.dart';
+import '../../utils/responsive_layout.dart';
 import '../../widgets/enhanced_asset_display_widget.dart';
 import '../../widgets/enhanced_asset_selection_widget.dart';
 import '../../widgets/mobile_qr_scanner_widget.dart';
@@ -293,9 +294,13 @@ class _CreateWorkRequestScreenState extends State<CreateWorkRequestScreen> {
         appBar: AppBar(title: const Text('New Work Request')),
         body: Form(
           key: _formKey,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
+          child: Center(
+            child: SingleChildScrollView(
+              child: ResponsiveContainer(
+                maxWidth: ResponsiveLayout.getFormMaxWidth(context),
+                padding: ResponsiveLayout.getResponsivePadding(context),
+                centerContent: ResponsiveLayout.isDesktop(context) || ResponsiveLayout.isTablet(context),
+                child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // Asset Selection Card
@@ -738,6 +743,8 @@ class _CreateWorkRequestScreenState extends State<CreateWorkRequestScreen> {
                         ),
                 ),
               ],
+            ),
+              ),
             ),
           ),
         ),

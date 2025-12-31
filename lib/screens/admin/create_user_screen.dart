@@ -6,6 +6,7 @@ import '../../providers/unified_data_provider.dart';
 import '../../services/supabase_database_service.dart';
 import '../../services/user_auth_service.dart';
 import '../../utils/app_theme.dart';
+import '../../utils/responsive_layout.dart';
 import '../../utils/data_integrity_guard.dart';
 
 class CreateUserScreen extends StatefulWidget {
@@ -274,10 +275,6 @@ class _CreateUserScreenState extends State<CreateUserScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Mobile responsive
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isMobile = screenWidth < 600;
-
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
@@ -286,10 +283,13 @@ class _CreateUserScreenState extends State<CreateUserScreen> {
         foregroundColor: AppTheme.darkTextColor,
         elevation: AppTheme.elevationS,
       ),
-      body: SingleChildScrollView(
-        padding:
-            EdgeInsets.all(isMobile ? AppTheme.spacingM : AppTheme.spacingL),
-        child: Form(
+      body: Center(
+        child: SingleChildScrollView(
+          child: ResponsiveContainer(
+            maxWidth: ResponsiveLayout.getFormMaxWidth(context),
+            padding: ResponsiveLayout.getResponsivePadding(context),
+            centerContent: ResponsiveLayout.isDesktop(context) || ResponsiveLayout.isTablet(context),
+            child: Form(
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -478,6 +478,7 @@ class _CreateUserScreenState extends State<CreateUserScreen> {
                 ),
               ),
             ],
+            ),
           ),
         ),
       ),

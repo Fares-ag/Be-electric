@@ -6,6 +6,7 @@ import '../../models/work_order.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/unified_data_provider.dart';
 import '../../utils/app_theme.dart';
+import '../../utils/responsive_layout.dart';
 import '../../widgets/technician_assignment_dialog.dart';
 import 'create_work_request_screen.dart';
 import 'work_order_detail_screen.dart';
@@ -367,18 +368,7 @@ class _WorkOrderListScreenState extends State<WorkOrderListScreen> {
                             ],
                           ),
                         )
-                      : ListView.builder(
-                          padding: const EdgeInsets.all(16),
-                          itemCount: workOrders.length,
-                          itemBuilder: (context, index) {
-                            final workOrder = workOrders[index];
-                            return _buildWorkOrderCard(
-                              workOrder,
-                              context,
-                              unifiedProvider,
-                            );
-                          },
-                        ),
+                      : _buildWorkOrderList(workOrders, unifiedProvider),
             ),
             floatingActionButton: !widget.isTechnicianView &&
                     (authProvider.isManager ||
@@ -1036,6 +1026,65 @@ class _WorkOrderListScreenState extends State<WorkOrderListScreen> {
         }
       }
     }
+  }
+
+  Widget _buildWorkOrderList(List<WorkOrder> workOrders, UnifiedDataProvider unifiedProvider) {
+    final isDesktop = ResponsiveLayout.isDesktop(context);
+    final isTablet = ResponsiveLayout.isTablet(context);
+    final padding = ResponsiveLayout.getResponsivePadding(context);
+    final maxWidth = ResponsiveLayout.getMaxContentWidth(context);
+
+    if (isDesktop || isTablet) {
+      // Use grid layout for desktop/tablet
+      final columns = isDesktop ? 2 : 1;
+      return Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: maxWidth),
+          child: GridView.builder(
+            padding: EdgeInsets.only(
+              left: padding.horizontal / 2,
+              right: padding.horizontal / 2,
+              top: padding.vertical,
+              bottom: padding.vertical + 80,
+            ),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: columns,
+              crossAxisSpacing: padding.horizontal / 2,
+              mainAxisSpacing: padding.vertical / 2,
+              childAspectRatio: 1.1,
+            ),
+            itemCount: workOrders.length,
+            itemBuilder: (context, index) {
+              final workOrder = workOrders[index];
+              return _buildWorkOrderCard(
+                workOrder,
+                context,
+                unifiedProvider,
+              );
+            },
+          ),
+        ),
+      );
+    }
+
+    // Mobile: use list view
+    return ListView.builder(
+      padding: EdgeInsets.only(
+        left: padding.horizontal / 2,
+        right: padding.horizontal / 2,
+        top: padding.vertical,
+        bottom: padding.vertical + 80,
+      ),
+      itemCount: workOrders.length,
+      itemBuilder: (context, index) {
+        final workOrder = workOrders[index];
+        return _buildWorkOrderCard(
+          workOrder,
+          context,
+          unifiedProvider,
+        );
+      },
+    );
   }
 
   List<WorkOrder> _sortWorkOrders(List<WorkOrder> workOrders) {
