@@ -165,7 +165,8 @@ class _CreateMaintenanceRequestScreenState
             child: ResponsiveContainer(
               maxWidth: ResponsiveLayout.getFormMaxWidth(context),
               padding: ResponsiveLayout.getResponsivePadding(context),
-              centerContent: ResponsiveLayout.isDesktop(context) || ResponsiveLayout.isTablet(context),
+              centerContent: ResponsiveLayout.isDesktop(context) ||
+                  ResponsiveLayout.isTablet(context),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 mainAxisSize: MainAxisSize.min,
@@ -188,169 +189,173 @@ class _CreateMaintenanceRequestScreenState
                       ),
                     ),
 
-                  SizedBox(height: ResponsiveLayout.getResponsiveSpacing(
-                    context,
-                    mobile: AppTheme.spacingXL,
-                    tablet: AppTheme.spacingXXL,
-                    desktop: AppTheme.spacingXXL * 1.5,
-                  )),
+                  SizedBox(
+                    height: ResponsiveLayout.getResponsiveSpacing(
+                      context,
+                      mobile: AppTheme.spacingXL,
+                      tablet: AppTheme.spacingXXL,
+                      desktop: AppTheme.spacingXXL * 1.5,
+                    ),
+                  ),
 
-              // NAME field
-              _buildFormField(
-                label: 'NAME',
-                controller: _nameController,
-                hintText: 'Enter name',
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Please enter your name';
-                  }
-                  return null;
-                },
-              ),
+                  // NAME field
+                  _buildFormField(
+                    label: 'NAME',
+                    controller: _nameController,
+                    hintText: 'Enter name',
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Please enter your name';
+                      }
+                      return null;
+                    },
+                  ),
 
-              const SizedBox(height: AppTheme.spacingL),
+                  const SizedBox(height: AppTheme.spacingL),
 
-              // CHARGER dropdown
-              _buildDropdownField<String>(
-                label: 'CHARGER',
-                value: _selectedCharger,
-                hintText: 'Select your charger',
-                items: const ['Siemens', 'Kostad'],
-                onChanged: (value) {
-                  setState(() {
-                    _selectedCharger = value;
-                  });
-                },
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please select a charger';
-                  }
-                  return null;
-                },
-              ),
+                  // CHARGER dropdown
+                  _buildDropdownField<String>(
+                    label: 'CHARGER',
+                    value: _selectedCharger,
+                    hintText: 'Select your charger',
+                    items: const ['Siemens', 'Kostad'],
+                    onChanged: (value) {
+                      setState(() {
+                        _selectedCharger = value;
+                      });
+                    },
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please select a charger';
+                      }
+                      return null;
+                    },
+                  ),
 
-              const SizedBox(height: AppTheme.spacingL),
+                  const SizedBox(height: AppTheme.spacingL),
 
-              // DEPARTMENT field
-              _buildFormField(
-                label: 'DEPARTMENT',
-                controller: _departmentController,
-                hintText: 'Enter department',
-              ),
+                  // DEPARTMENT field
+                  _buildFormField(
+                    label: 'DEPARTMENT',
+                    controller: _departmentController,
+                    hintText: 'Enter department',
+                  ),
 
-              const SizedBox(height: AppTheme.spacingL),
+                  const SizedBox(height: AppTheme.spacingL),
 
-              // CONTACT NUMBER field
-              _buildFormField(
-                label: 'CONTACT NUMBER',
-                controller: _contactNumberController,
-                hintText: 'Enter number',
-                keyboardType: TextInputType.phone,
-              ),
+                  // CONTACT NUMBER field
+                  _buildFormField(
+                    label: 'CONTACT NUMBER',
+                    controller: _contactNumberController,
+                    hintText: 'Enter number',
+                    keyboardType: TextInputType.phone,
+                  ),
 
-              const SizedBox(height: AppTheme.spacingL),
+                  const SizedBox(height: AppTheme.spacingL),
 
-              // EMAIL field
-              _buildFormField(
-                label: 'EMAIL',
-                controller: _emailController,
-                hintText: 'Enter your work email',
-                keyboardType: TextInputType.emailAddress,
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Please enter your email';
-                  }
-                  if (!value.contains('@')) {
-                    return 'Please enter a valid email';
-                  }
-                  return null;
-                },
-              ),
+                  // EMAIL field
+                  _buildFormField(
+                    label: 'EMAIL',
+                    controller: _emailController,
+                    hintText: 'Enter your work email',
+                    keyboardType: TextInputType.emailAddress,
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Please enter your email';
+                      }
+                      if (!value.contains('@')) {
+                        return 'Please enter a valid email';
+                      }
+                      return null;
+                    },
+                  ),
 
-              const SizedBox(height: AppTheme.spacingL),
+                  const SizedBox(height: AppTheme.spacingL),
 
-              // CATEGORY ISSUE dropdown
-              _buildDropdownField<String>(
-                label: 'CATEGORY ISSUE',
-                value: _selectedCategoryIssue,
-                hintText: 'Select type of issue',
-                items: const [
-                  'Electrical',
-                  'Mechanical',
-                  'Software',
-                  'Hardware',
-                  'Other',
+                  // CATEGORY ISSUE dropdown
+                  _buildDropdownField<String>(
+                    label: 'CATEGORY ISSUE',
+                    value: _selectedCategoryIssue,
+                    hintText: 'Select type of issue',
+                    items: const [
+                      'Electrical',
+                      'Mechanical',
+                      'Software',
+                      'Hardware',
+                      'Other',
+                    ],
+                    onChanged: (value) {
+                      setState(() {
+                        _selectedCategoryIssue = value;
+                      });
+                    },
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please select a category';
+                      }
+                      return null;
+                    },
+                  ),
+
+                  const SizedBox(height: AppTheme.spacingL),
+
+                  // PHOTO section
+                  _buildPhotoSection(),
+
+                  const SizedBox(height: AppTheme.spacingL),
+
+                  // PROBLEM DESCRIPTION field
+                  _buildFormField(
+                    label: 'PROBLEM DESCRIPTION',
+                    controller: _problemDescriptionController,
+                    hintText: 'Enter a description...',
+                    maxLines: 4,
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Please describe the problem';
+                      }
+                      if (value.trim().length < 10) {
+                        return 'Please provide a more detailed description';
+                      }
+                      return null;
+                    },
+                  ),
+
+                  const SizedBox(height: AppTheme.spacingXL),
+
+                  // NEXT button
+                  ElevatedButton(
+                    onPressed: _isLoading ? null : _handleNext,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF424242), // Dark grey
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppTheme.spacingL,
+                        vertical: AppTheme.spacingM,
+                      ),
+                      minimumSize: const Size(0, 50),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppTheme.radiusS),
+                      ),
+                    ),
+                    child: _isLoading
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : const Text('NEXT'),
+                  ),
+
+                  // Add bottom padding to prevent overflow when keyboard is open
+                  SizedBox(height: MediaQuery.of(context).viewInsets.bottom),
                 ],
-                onChanged: (value) {
-                  setState(() {
-                    _selectedCategoryIssue = value;
-                  });
-                },
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please select a category';
-                  }
-                  return null;
-                },
               ),
-
-              const SizedBox(height: AppTheme.spacingL),
-
-              // PHOTO section
-              _buildPhotoSection(),
-
-              const SizedBox(height: AppTheme.spacingL),
-
-              // PROBLEM DESCRIPTION field
-              _buildFormField(
-                label: 'PROBLEM DESCRIPTION',
-                controller: _problemDescriptionController,
-                hintText: 'Enter a description...',
-                maxLines: 4,
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Please describe the problem';
-                  }
-                  if (value.trim().length < 10) {
-                    return 'Please provide a more detailed description';
-                  }
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: AppTheme.spacingXL),
-
-              // NEXT button
-              ElevatedButton(
-                onPressed: _isLoading ? null : _handleNext,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF424242), // Dark grey
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppTheme.spacingL,
-                    vertical: AppTheme.spacingM,
-                  ),
-                  minimumSize: const Size(0, 50),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppTheme.radiusS),
-                  ),
-                ),
-                child: _isLoading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor:
-                              AlwaysStoppedAnimation<Color>(Colors.white),
-                        ),
-                      )
-                    : const Text('NEXT'),
-              ),
-
-              // Add bottom padding to prevent overflow when keyboard is open
-              SizedBox(height: MediaQuery.of(context).viewInsets.bottom),
-            ],
+            ),
           ),
         ),
       ),
@@ -435,7 +440,7 @@ class _CreateMaintenanceRequestScreenState
         ),
         const SizedBox(height: AppTheme.spacingS),
         DropdownButtonFormField<T>(
-          value: value,
+          initialValue: value,
           style: const TextStyle(color: Colors.black),
           decoration: InputDecoration(
             hintText: hintText,
@@ -519,12 +524,15 @@ class _CreateMaintenanceRequestScreenState
                           onTap: () => _removePhoto(index),
                           child: Container(
                             padding: const EdgeInsets.all(4),
-                            decoration: BoxDecoration(
+                            decoration: const BoxDecoration(
                               color: Colors.black54,
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(Icons.close,
-                                color: Colors.white, size: 16),
+                            child: const Icon(
+                              Icons.close,
+                              color: Colors.white,
+                              size: 16,
+                            ),
                           ),
                         ),
                       ),
