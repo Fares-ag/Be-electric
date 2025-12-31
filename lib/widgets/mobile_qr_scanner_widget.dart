@@ -1,6 +1,6 @@
 ﻿import 'dart:convert';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../models/asset.dart';
 import '../screens/assets/asset_detail_screen.dart';
@@ -23,124 +23,99 @@ class MobileQRScannerWidget extends StatefulWidget {
 }
 
 class _MobileQRScannerWidgetState extends State<MobileQRScannerWidget> {
-  MobileScannerController? controller;
+  // Mobile scanner controller - only used on mobile platforms
+  // ignore: unused_field
+  dynamic controller;
   bool _isScanning = true;
 
   @override
   void initState() {
     super.initState();
-    controller = MobileScannerController();
+    // Mobile scanner not available on web
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) {
+    // Web fallback - show manual entry dialog
+    if (kIsWeb) {
+      return Scaffold(
         appBar: AppBar(
-          title: const Text('Scan QR Code'),
-          actions: [
-            IconButton(
-              icon: Icon(_isScanning ? Icons.pause : Icons.play_arrow),
-              onPressed: () {
-                setState(() {
-                  _isScanning = !_isScanning;
-                });
-                if (_isScanning) {
-                  controller?.start();
-                } else {
-                  controller?.stop();
-                }
-              },
-            ),
-            IconButton(
-              icon: const Icon(Icons.flash_on),
-              onPressed: () => controller?.toggleTorch(),
-            ),
-            IconButton(
-              icon: const Icon(Icons.camera_rear),
-              onPressed: () => controller?.switchCamera(),
-            ),
-          ],
+          title: const Text('QR Code Scanner'),
         ),
-        body: Column(
-          children: <Widget>[
-            Expanded(
-              flex: 4,
-              child: Stack(
-                children: [
-                  MobileScanner(
-                    controller: controller,
-                    onDetect: _onDetect,
-                  ),
-                  // Custom overlay
-                  Container(
-                    decoration: const ShapeDecoration(
-                      shape: QrScannerOverlayShape(
-                        borderRadius: 10,
-                        borderLength: 30,
-                        borderWidth: 10,
-                        cutOutSize: 300,
-                      ),
-                    ),
-                  ),
-                ],
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.qr_code_scanner, size: 64, color: Colors.grey),
+              const SizedBox(height: 16),
+              const Text(
+                'QR Scanner not available on web',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
-            ),
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Text(
-                      'Point your camera at a QR code',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Make sure the QR code is within the frame',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        ElevatedButton.icon(
-                          onPressed: () {
-                            Navigator.pop(context);
-                          },
-                          icon: const Icon(Icons.close),
-                          label: const Text('Cancel'),
-                        ),
-                        OutlinedButton.icon(
-                          onPressed: _showManualEntryDialog,
-                          icon: const Icon(Icons.keyboard),
-                          label: const Text('Manual Entry'),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+              const SizedBox(height: 8),
+              const Text('Please use manual entry'),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: () => _showManualEntryDialog(context),
+                icon: const Icon(Icons.keyboard),
+                label: const Text('Enter QR Code Manually'),
               ),
-            ),
-          ],
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close),
+                label: const Text('Cancel'),
+              ),
+            ],
+          ),
         ),
       );
-
-  void _onDetect(BarcodeCapture capture) {
-    final barcodes = capture.barcodes;
-
-    for (final barcode in barcodes) {
-      if (barcode.rawValue != null) {
-        _processQRCode(barcode.rawValue!);
-        break; // Process only the first detected code
-      }
     }
-  }
+
+    // For mobile platforms, show manual entry since mobile_scanner is disabled
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('QR Code Scanner'),
+      ),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.qr_code_scanner, size: 64, color: Colors.grey),
+            const SizedBox(height: 16),
+            const Text(
+              'QR Scanner not available',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            const Text('Please use manual entry'),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () => _showManualEntryDialog(context),
+              icon: const Icon(Icons.keyboard),
+              label: const Text('Enter QR Code Manually'),
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: () => Navigator.pop(context),
+              icon: const Icon(Icons.close),
+              label: const Text('Cancel'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+  // Mobile scanner detection - not used on web
+  // void _onDetect(BarcodeCapture capture) {
+  //   final barcodes = capture.barcodes;
+  //   for (final barcode in barcodes) {
+  //     if (barcode.rawValue != null) {
+  //       _processQRCode(barcode.rawValue!);
+  //       break;
+  //     }
+  //   }
+  // }
 
   /// Extract itemId from QR code content
   /// Supports various QR code formats that contain itemId numbers
@@ -436,7 +411,7 @@ class _MobileQRScannerWidgetState extends State<MobileQRScannerWidget> {
     }
   }
 
-  void _showManualEntryDialog() {
+  void _showManualEntryDialog(BuildContext context) {
     final qrCodeController = TextEditingController();
 
     showDialog(
@@ -473,7 +448,7 @@ class _MobileQRScannerWidgetState extends State<MobileQRScannerWidget> {
 
   @override
   void dispose() {
-    controller?.dispose();
+    // controller?.dispose(); // Mobile scanner not available
     super.dispose();
   }
 }

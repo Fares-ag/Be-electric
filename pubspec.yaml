@@ -16,9 +16,9 @@ dependencies:
   provider: ^6.1.1
   get_it: ^7.6.0
 
-  # Database (mobile support)
-  sqflite: ^2.3.0
-  sqflite_common_ffi: ^2.3.0
+  # Database (mobile support only - not for web)
+  # sqflite: ^2.3.0  # Disabled for web compatibility
+  # sqflite_common_ffi: ^2.3.0  # Disabled for web compatibility
   path: ^1.8.3
 
   # UI Components
@@ -31,8 +31,8 @@ dependencies:
   permission_handler: ^11.0.1
   cached_network_image: ^3.3.1
 
-  # QR Code Scanner (mobile support)
-  mobile_scanner: ^3.5.6
+  # QR Code Scanner (mobile support only - not for web)
+  # mobile_scanner: ^3.5.6  # Disabled for web compatibility
 
   # Signature Capture
   signature: ^5.3.0
@@ -60,7 +60,7 @@ dependencies:
 
   # PDF Generation
   pdf: ^3.10.7
-  open_file: ^3.3.2
+  # open_file: ^3.3.2  # Disabled for web compatibility
   printing: ^5.12.0
   syncfusion_flutter_pdf: ^26.2.10
   syncfusion_flutter_xlsio: ^26.2.10
