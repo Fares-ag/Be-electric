@@ -181,6 +181,8 @@ class DeterministicIdGenerator {
   /// Validate if an ID follows the expected format
   static bool isValidUserId(String id) =>
       (id.startsWith('USER-') || id.startsWith('user_')) && id.length > 5;
+  static bool isValidCompanyId(String id) =>
+      id.startsWith('COMPANY-') && id.length > 8;
   static bool isValidAssetId(String id) =>
       id.startsWith('asset_') && id.length > 6;
   static bool isValidInventoryId(String id) =>

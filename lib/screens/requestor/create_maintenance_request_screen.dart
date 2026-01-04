@@ -378,7 +378,8 @@ class _CreateMaintenanceRequestScreenState
     );
   }
 
-  Widget _buildMobileTabletLayout(BuildContext context, String? chargerImagePath) {
+  Widget _buildMobileTabletLayout(
+      BuildContext context, String? chargerImagePath) {
     return ResponsiveContainer(
       maxWidth: ResponsiveLayout.getFormMaxWidth(context),
       padding: ResponsiveLayout.getResponsivePadding(context),
@@ -560,8 +561,7 @@ class _CreateMaintenanceRequestScreenState
                     height: 20,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      valueColor:
-                          AlwaysStoppedAnimation<Color>(Colors.white),
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                     ),
                   )
                 : const Text('NEXT'),
@@ -614,24 +614,28 @@ class _CreateMaintenanceRequestScreenState
             filled: true,
             fillColor: Colors.white,
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(isDesktop ? 8 : AppTheme.radiusS),
+              borderRadius:
+                  BorderRadius.circular(isDesktop ? 8 : AppTheme.radiusS),
             ),
             enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(isDesktop ? 8 : AppTheme.radiusS),
+              borderRadius:
+                  BorderRadius.circular(isDesktop ? 8 : AppTheme.radiusS),
               borderSide: BorderSide(
                 color: Colors.grey[300]!,
                 width: isDesktop ? 1.5 : 1,
               ),
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(isDesktop ? 8 : AppTheme.radiusS),
+              borderRadius:
+                  BorderRadius.circular(isDesktop ? 8 : AppTheme.radiusS),
               borderSide: BorderSide(
                 color: const Color(0xFF424242),
                 width: isDesktop ? 2.5 : 2,
               ),
             ),
             errorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(isDesktop ? 8 : AppTheme.radiusS),
+              borderRadius:
+                  BorderRadius.circular(isDesktop ? 8 : AppTheme.radiusS),
               borderSide: const BorderSide(color: Colors.red, width: 1.5),
             ),
             contentPadding: EdgeInsets.symmetric(
@@ -683,24 +687,28 @@ class _CreateMaintenanceRequestScreenState
             filled: true,
             fillColor: Colors.white,
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(isDesktop ? 8 : AppTheme.radiusS),
+              borderRadius:
+                  BorderRadius.circular(isDesktop ? 8 : AppTheme.radiusS),
             ),
             enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(isDesktop ? 8 : AppTheme.radiusS),
+              borderRadius:
+                  BorderRadius.circular(isDesktop ? 8 : AppTheme.radiusS),
               borderSide: BorderSide(
                 color: Colors.grey[300]!,
                 width: isDesktop ? 1.5 : 1,
               ),
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(isDesktop ? 8 : AppTheme.radiusS),
+              borderRadius:
+                  BorderRadius.circular(isDesktop ? 8 : AppTheme.radiusS),
               borderSide: BorderSide(
                 color: const Color(0xFF424242),
                 width: isDesktop ? 2.5 : 2,
               ),
             ),
             errorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(isDesktop ? 8 : AppTheme.radiusS),
+              borderRadius:
+                  BorderRadius.circular(isDesktop ? 8 : AppTheme.radiusS),
               borderSide: const BorderSide(color: Colors.red, width: 1.5),
             ),
             contentPadding: EdgeInsets.symmetric(

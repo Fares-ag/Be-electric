@@ -25,6 +25,7 @@ import '../settings/settings_screen.dart';
 import '../work_orders/work_order_list_screen.dart';
 import 'assignment_diagnostic_screen.dart';
 import 'cleanup_users_screen.dart';
+import 'company_management_screen.dart';
 import 'duplicate_monitor_screen.dart';
 import 'performance_diagnostic_screen.dart';
 import 'reporting_screen.dart';
@@ -438,6 +439,7 @@ class _AdminMainScreenState extends State<AdminMainScreen> {
                           ConsolidatedAnalyticsDashboard(),
                           TechnicianViewerScreen(),
                           UserManagementScreen(),
+                          CompanyManagementScreen(),
                           SettingsScreen(),
                         ],
                       ),
@@ -456,6 +458,7 @@ class _AdminMainScreenState extends State<AdminMainScreen> {
                 ConsolidatedAnalyticsDashboard(),
                 TechnicianViewerScreen(),
                 UserManagementScreen(),
+                CompanyManagementScreen(),
                 SettingsScreen(),
               ],
             ),
@@ -500,6 +503,10 @@ class _AdminMainScreenState extends State<AdminMainScreen> {
                 BottomNavigationBarItem(
                   icon: Icon(Icons.people),
                   label: 'Users',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.business),
+                  label: 'Companies',
                 ),
                 BottomNavigationBarItem(
                   icon: Icon(Icons.settings),
@@ -759,6 +766,11 @@ class _AdminMainScreenState extends State<AdminMainScreen> {
         icon: Icon(Icons.people_outlined),
         selectedIcon: Icon(Icons.people),
         label: Text('Users'),
+      ),
+      const NavigationRailDestination(
+        icon: Icon(Icons.business_outlined),
+        selectedIcon: Icon(Icons.business),
+        label: Text('Companies'),
       ),
       const NavigationRailDestination(
         icon: Icon(Icons.settings_outlined),

@@ -18,6 +18,7 @@ import '../../widgets/authenticated_image.dart';
 import '../../widgets/pause_reason_dialog.dart';
 import '../../widgets/technician_assignment_dialog.dart';
 import '../../widgets/work_timer.dart';
+import '../requestor/edit_request_screen.dart';
 import 'work_order_completion_screen.dart';
 
 class WorkOrderDetailScreen extends StatefulWidget {
@@ -986,8 +987,10 @@ class _WorkOrderDetailScreenState extends State<WorkOrderDetailScreen> {
                           const SizedBox(height: 16),
                         ],
 
-                        if (_currentWorkOrder.isOpen ||
-                            _currentWorkOrder.isAssigned) ...[
+                        // Start Work button - only for technicians, admins, and managers
+                        if ((_currentWorkOrder.isOpen ||
+                            _currentWorkOrder.isAssigned) &&
+                            _canPerformWorkActions()) ...[
                           SizedBox(
                             width: double.infinity,
                             child: ElevatedButton.icon(
@@ -1013,7 +1016,9 @@ class _WorkOrderDetailScreenState extends State<WorkOrderDetailScreen> {
                             ),
                           ),
                         ],
-                        if (_currentWorkOrder.isInProgress) ...[
+                        // Work control buttons (pause/resume/complete) - only for technicians, admins, and managers
+                        if (_currentWorkOrder.isInProgress &&
+                            _canPerformWorkActions()) ...[
                           // Pause/Resume button
                           if (_currentWorkOrder.isPaused) ...[
                             SizedBox(
@@ -1091,6 +1096,50 @@ class _WorkOrderDetailScreenState extends State<WorkOrderDetailScreen> {
                                     const EdgeInsets.symmetric(vertical: 16),
                               ),
                             ),
+                          ),
+                        ],
+                        
+                        // Requestor actions - Edit and Cancel (only for OPEN or ASSIGNED status)
+                        if ((_currentWorkOrder.isOpen ||
+                            _currentWorkOrder.isAssigned) &&
+                            _isRequestor()) ...[
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: _editRequestAsRequestor,
+                                  icon: const Icon(Icons.edit, size: 18),
+                                  label: const Text('Edit Request'),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: AppTheme.accentBlue,
+                                    side: const BorderSide(
+                                      color: AppTheme.accentBlue,
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 12,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: _cancelWorkOrder,
+                                  icon: const Icon(Icons.cancel, size: 18),
+                                  label: const Text('Cancel Request'),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: AppTheme.accentRed,
+                                    side: const BorderSide(
+                                      color: AppTheme.accentRed,
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 12,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ],
@@ -1324,6 +1373,152 @@ class _WorkOrderDetailScreenState extends State<WorkOrderDetailScreen> {
     }
     
     return true;
+  }
+
+  /// Check if the current user can perform work actions (start, pause, resume, complete)
+  /// Requestors cannot perform work actions - only technicians, admins, and managers can
+  bool _canPerformWorkActions() {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final currentUser = authProvider.currentUser;
+    
+    // Requestors cannot perform work actions
+    if (currentUser?.role == 'requestor') {
+      return false;
+    }
+    
+    // Technicians, admins, and managers can perform work actions
+    return currentUser?.role == 'technician' ||
+        currentUser?.role == 'admin' ||
+        currentUser?.role == 'manager' ||
+        authProvider.isManager ||
+        (currentUser?.isAdmin ?? false);
+  }
+
+  /// Check if the current user is a requestor
+  bool _isRequestor() {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    return authProvider.currentUser?.role == 'requestor';
+  }
+
+  /// Navigate to edit request screen for requestors
+  Future<void> _editRequestAsRequestor() async {
+    final result = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => EditRequestScreen(workOrder: _currentWorkOrder),
+      ),
+    );
+
+    if (result == true && mounted) {
+      // Refresh work order after edit
+      _refreshWorkOrderFromProvider();
+    }
+  }
+
+  /// Cancel work order (for requestors only)
+  Future<void> _cancelWorkOrder() async {
+    // Check if work order can still be cancelled
+    if (_currentWorkOrder.isInProgress ||
+        _currentWorkOrder.isCompleted ||
+        _currentWorkOrder.isClosed) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('This work order cannot be cancelled as work has already started'),
+            backgroundColor: AppTheme.warningColor,
+          ),
+        );
+      }
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning, color: AppTheme.warningColor),
+            SizedBox(width: 8),
+            Text('Cancel Work Order?'),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to cancel work order ${_currentWorkOrder.ticketNumber}?\n\nThis action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('No, Keep It'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.accentRed,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Yes, Cancel'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed ?? false && mounted) {
+      setState(() {
+        _isLoading = true;
+      });
+
+      try {
+        final unifiedProvider =
+            Provider.of<UnifiedDataProvider>(context, listen: false);
+
+        final updatedWorkOrder = _currentWorkOrder.copyWith(
+          status: WorkOrderStatus.cancelled,
+          updatedAt: DateTime.now(),
+        );
+
+        await unifiedProvider.updateWorkOrder(updatedWorkOrder);
+
+        // Log activity
+        final authProvider = Provider.of<AuthProvider>(context, listen: false);
+        if (authProvider.currentUser != null) {
+          await _activityLogService.logActivity(
+            entityId: _currentWorkOrder.id,
+            entityType: 'work_order',
+            activityType: ActivityType.cancelled,
+            userId: authProvider.currentUser!.id,
+            userName: authProvider.currentUser!.name,
+            description: 'Cancelled work order',
+          );
+        }
+
+        setState(() {
+          _currentWorkOrder = updatedWorkOrder;
+          _isLoading = false;
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Work order cancelled successfully'),
+              backgroundColor: AppTheme.accentGreen,
+            ),
+          );
+        }
+      } on Exception catch (e) {
+        setState(() {
+          _isLoading = false;
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error cancelling work order: $e'),
+              backgroundColor: AppTheme.errorColor,
+            ),
+          );
+        }
+      }
+    }
   }
 
   Future<void> _showAssignmentDialog() async {

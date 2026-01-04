@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../models/company.dart';
 import '../../models/user.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/unified_data_provider.dart';
@@ -636,6 +637,34 @@ class _CreateUserScreenState extends State<CreateUserScreen> {
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
+  String? _selectedCompanyId;
+  List<Company> _companies = [];
+  bool _loadingCompanies = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.userRole == 'requestor') {
+      _loadCompanies();
+    }
+  }
+
+  Future<void> _loadCompanies() async {
+    setState(() => _loadingCompanies = true);
+    try {
+      final companies = await SupabaseDatabaseService.instance.getAllCompanies();
+      if (mounted) {
+        setState(() {
+          _companies = companies;
+          _loadingCompanies = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _loadingCompanies = false);
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -678,6 +707,7 @@ class _CreateUserScreenState extends State<CreateUserScreen> {
         workEmail: widget.userRole == 'requestor'
             ? _workEmailController.text.trim()
             : null,
+        companyId: widget.userRole == 'requestor' ? _selectedCompanyId : null,
         createdAt: DateTime.now(),
       );
 
@@ -955,6 +985,34 @@ class _CreateUserScreenState extends State<CreateUserScreen> {
                     ),
                   ),
                 ),
+                // Company selection (for requestors)
+                if (widget.userRole == 'requestor') ...[
+                  const SizedBox(height: AppTheme.spacingL),
+                  _loadingCompanies
+                      ? const CircularProgressIndicator()
+                      : DropdownButtonFormField<String>(
+                          decoration: const InputDecoration(
+                            labelText: 'Company',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.all(Radius.circular(AppTheme.radiusS)),
+                            ),
+                          ),
+                          value: _selectedCompanyId,
+                          items: [
+                            const DropdownMenuItem<String>(
+                              value: null,
+                              child: Text('No Company'),
+                            ),
+                            ..._companies
+                                .where((c) => c.isActive)
+                                .map((company) => DropdownMenuItem<String>(
+                                      value: company.id,
+                                      child: Text(company.name),
+                                    )),
+                          ],
+                          onChanged: (value) => setState(() => _selectedCompanyId = value),
+                        ),
+                ],
                 const SizedBox(height: AppTheme.spacingL),
                 TextFormField(
                   controller: _passwordController,

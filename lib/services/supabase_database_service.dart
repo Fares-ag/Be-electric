@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/asset.dart';
+import '../models/company.dart';
 import '../models/inventory_item.dart';
 import '../models/parts_request.dart';
 import '../models/pm_task.dart';
@@ -1734,6 +1735,122 @@ class SupabaseDatabaseService {
     } on Exception catch (e) {
       debugPrint('Supabase: Error getting vendors: $e');
       throw Exception('Failed to get vendors: $e');
+    }
+  }
+
+  // ============================================================================
+  // COMPANIES
+  // ============================================================================
+
+  /// Get all companies
+  Future<List<Company>> getAllCompanies() async {
+    try {
+      if (!_isAuthenticated) throw Exception('User not authenticated');
+
+      debugPrint('Supabase: Getting all companies');
+
+      final response = await _client
+          .from('companies')
+          .select()
+          .order('name', ascending: true);
+
+      final companies = (response as List).map((doc) {
+        final data = convertFromSupabaseMap(Map<String, dynamic>.from(doc));
+        data['id'] = doc['id'];
+        return Company.fromMap(data);
+      }).toList();
+
+      debugPrint('Supabase: Retrieved ${companies.length} companies');
+      return companies;
+    } on Exception catch (e) {
+      debugPrint('Supabase: Error getting companies: $e');
+      return [];
+    }
+  }
+
+  /// Create company in Supabase
+  Future<String> createCompany(Company company) async {
+    try {
+      if (!_isAuthenticated) throw Exception('User not authenticated');
+
+      final readableId = DeterministicIdGenerator.generateCompanyId(company.name);
+      
+      final companyWithId = company.id.isEmpty || 
+          !DeterministicIdGenerator.isValidCompanyId(company.id)
+          ? company.copyWith(id: readableId)
+          : company;
+      
+      debugPrint('Supabase: Creating company $readableId');
+
+      final data = convertToSupabaseMap(companyWithId.toMap());
+      data['id'] = readableId;
+
+      await _client.from('companies').upsert(data);
+      
+      debugPrint('Supabase: Company created/upserted: $readableId');
+      return readableId;
+    } on Exception catch (e) {
+      debugPrint('Supabase: Error creating company: $e');
+      throw Exception('Failed to create company: $e');
+    }
+  }
+
+  /// Update company in Supabase
+  Future<void> updateCompany(String companyId, Company company) async {
+    try {
+      if (!_isAuthenticated) throw Exception('User not authenticated');
+
+      debugPrint('Supabase: Updating company $companyId');
+
+      final data = convertToSupabaseMap(company.toMap());
+      data['updatedAt'] = DateTime.now().toIso8601String();
+
+      await _client.from('companies').update(data).eq('id', companyId);
+      
+      debugPrint('Supabase: Company updated: $companyId');
+    } on Exception catch (e) {
+      debugPrint('Supabase: Error updating company: $e');
+      throw Exception('Failed to update company: $e');
+    }
+  }
+
+  /// Delete company in Supabase
+  Future<void> deleteCompany(String companyId) async {
+    try {
+      if (!_isAuthenticated) throw Exception('User not authenticated');
+
+      debugPrint('Supabase: Deleting company $companyId');
+
+      await _client.from('companies').delete().eq('id', companyId);
+      
+      debugPrint('Supabase: Company deleted: $companyId');
+    } on Exception catch (e) {
+      debugPrint('Supabase: Error deleting company: $e');
+      throw Exception('Failed to delete company: $e');
+    }
+  }
+
+  /// Get company by ID
+  Future<Company?> getCompanyById(String companyId) async {
+    try {
+      if (!_isAuthenticated) throw Exception('User not authenticated');
+
+      final response = await _client
+          .from('companies')
+          .select()
+          .eq('id', companyId)
+          .maybeSingle();
+
+      if (response != null) {
+        final data = convertFromSupabaseMap(Map<String, dynamic>.from(response));
+        data['id'] = companyId;
+        return Company.fromMap(data);
+      }
+
+      return null;
+    } on Exception catch (e) {
+      debugPrint('Supabase: Error getting company $companyId: $e');
+      return null;
     }
   }
 }
