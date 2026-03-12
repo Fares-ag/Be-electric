@@ -8,7 +8,7 @@ import { uploadPmTaskCompletionPhoto } from '@/lib/storage';
 import { useUsersMap } from '@/hooks/useUsersMap';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
+import { Badge, StatusBadge } from '@/components/ui/Badge';
 
 type PMTaskDetail = {
   id: string;
@@ -115,7 +115,7 @@ export default function PMTaskDetailPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-8">
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">{task.taskName}</h1>
         <div className="flex gap-2">
-          <Badge variant="secondary">{task.status}</Badge>
+          <StatusBadge status={task.status} />
           <Badge>{task.frequency}</Badge>
         </div>
       </div>

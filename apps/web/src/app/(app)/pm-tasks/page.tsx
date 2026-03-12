@@ -8,7 +8,7 @@ import { useAuthStore } from '@/stores/auth-store';
 import { useUsersMap } from '@/hooks/useUsersMap';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
+import { StatusBadge } from '@/components/ui/Badge';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 
 const FREQUENCIES = [
@@ -148,7 +148,7 @@ export default function PMTasksPage() {
                   <tr key={t.id as string} className="border-b border-[#E0E0E0]">
                     <td className="py-3 px-4 font-medium">{t.taskName as string}</td>
                     <td className="py-3 px-4">
-                      <Badge>{t.status as string}</Badge>
+                      <StatusBadge status={t.status as string} />
                     </td>
                     <td className="py-3 px-4">{t.frequency as string}</td>
                     <td className="py-3 px-4">

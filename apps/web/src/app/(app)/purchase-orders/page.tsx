@@ -7,6 +7,7 @@ import { useAuthStore } from '@/stores/auth-store';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Modal, ModalActions } from '@/components/ui/Modal';
+import { StatusBadge } from '@/components/ui/Badge';
 
 export default function PurchaseOrdersPage() {
   const queryClient = useQueryClient();
@@ -80,7 +81,9 @@ export default function PurchaseOrdersPage() {
                 {pos.map((po: Record<string, unknown>) => (
                   <tr key={po.id as string} className="border-b border-[#E0E0E0]">
                     <td className="py-3 px-4 font-medium">{String(po.orderNumber ?? po.poNumber ?? po.id)}</td>
-                    <td className="py-3 px-4">{po.status != null ? String(po.status) : '-'}</td>
+                    <td className="py-3 px-4">
+                      <StatusBadge status={po.status != null ? String(po.status) : undefined} />
+                    </td>
                     <td className="py-3 px-4">
                       {po.createdAt
                         ? new Date(po.createdAt as string).toLocaleDateString()

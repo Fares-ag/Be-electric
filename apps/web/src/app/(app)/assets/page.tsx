@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Modal, ModalActions } from '@/components/ui/Modal';
+import { StatusBadge } from '@/components/ui/Badge';
 
 type Asset = {
   id: string;
@@ -189,7 +190,9 @@ export default function AssetsPage() {
                     <td className="py-3 px-4">{a.company?.name ?? '-'}</td>
                     <td className="py-3 px-4">{a.location ?? '-'}</td>
                     <td className="py-3 px-4">{a.assetType ?? '-'}</td>
-                    <td className="py-3 px-4">{a.status ?? '-'}</td>
+                    <td className="py-3 px-4">
+                      <StatusBadge status={a.status} />
+                    </td>
                     <td className="py-3 px-4 flex gap-2">
                       <Button variant="outline" size="sm" onClick={() => openEdit(a)}>
                         Edit

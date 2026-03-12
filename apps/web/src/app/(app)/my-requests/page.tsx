@@ -1,37 +1,91 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
+import { StatusBadge } from '@/components/ui/Badge';
+import { Modal, ModalActions } from '@/components/ui/Modal';
 import { ChevronRight } from 'lucide-react';
 
-const statusVariants: Record<string, 'default' | 'success' | 'warning' | 'secondary'> = {
-  open: 'secondary',
-  assigned: 'default',
-  inProgress: 'default',
-  completed: 'success',
-  closed: 'secondary',
-};
+const MAX_REOPEN_COUNT = 3;
 
 export default function MyRequestsPage() {
   const user = useAuthStore((s) => s.user);
+  const queryClient = useQueryClient();
   const { data: workOrders, isLoading } = useQuery({
     queryKey: ['my-work-orders', user?.id],
     queryFn: async () => {
       if (!user) return [];
       const { data } = await supabase
         .from('work_orders')
-        .select('id, ticketNumber, problemDescription, status, priority, createdAt')
+        .select('id, ticketNumber, problemDescription, status, priority, createdAt, completedAt, closedAt, metadata')
         .eq('requestorId', user.id)
         .order('createdAt', { ascending: false });
       return data ?? [];
     },
     enabled: !!user?.id,
   });
+
+  const [reopenWo, setReopenWo] = useState<Record<string, unknown> | null>(null);
+  const [reopenReason, setReopenReason] = useState('');
+  const [reopenDescription, setReopenDescription] = useState('');
+  const [reopenError, setReopenError] = useState<string | null>(null);
+
+  const reopenMutation = useMutation({
+    mutationFn: async () => {
+      if (!user?.id || !reopenWo) throw new Error('Not allowed');
+      if (reopenReason.trim().length < 10) throw new Error('Reason must be at least 10 characters');
+      const rawMeta = reopenWo.metadata as Record<string, unknown> | undefined;
+      const reopenCount = Number(rawMeta?.reopenCount ?? rawMeta?.reopen_count ?? 0);
+      const now = new Date().toISOString();
+      const previousCompletion = (reopenWo.completedAt ?? reopenWo.closedAt) as string | null ?? null;
+      const newMeta = {
+        ...(typeof reopenWo.metadata === 'object' && reopenWo.metadata !== null ? (reopenWo.metadata as Record<string, unknown>) : {}),
+        reopenedAt: now,
+        reopenedBy: user.id,
+        reopenReason: reopenReason.trim(),
+        reopenCount: reopenCount + 1,
+        previousCompletionDate: previousCompletion,
+        previousStatus: reopenWo.status,
+      };
+      const { error } = await supabase
+        .from('work_orders')
+        .update({
+          status: 'reopened',
+          problemDescription: reopenDescription.trim().length >= 10 ? reopenDescription.trim() : reopenWo.problemDescription,
+          assignedTechnicianIds: [],
+          primaryTechnicianId: null,
+          assignedAt: null,
+          startedAt: null,
+          completedAt: null,
+          closedAt: null,
+          metadata: newMeta,
+          updatedAt: now,
+        })
+        .eq('id', reopenWo.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      setReopenWo(null);
+      setReopenReason('');
+      setReopenDescription('');
+      setReopenError(null);
+      queryClient.invalidateQueries({ queryKey: ['my-work-orders', user?.id] });
+    },
+    onError: (err: Error) => setReopenError(err.message),
+  });
+
+  function canReopen(wo: Record<string, unknown>): boolean {
+    const status = wo.status as string;
+    if (status !== 'completed') return false;
+    const rawMeta = wo.metadata as Record<string, unknown> | undefined;
+    const count = Number(rawMeta?.reopenCount ?? rawMeta?.reopen_count ?? 0);
+    return count < MAX_REOPEN_COUNT;
+  }
 
   return (
     <div>
@@ -53,30 +107,39 @@ export default function MyRequestsPage() {
               {/* Mobile: card list */}
               <div className="md:hidden divide-y divide-border">
                 {workOrders?.map((wo: Record<string, unknown>) => (
-                  <Link
-                    key={wo.id as string}
-                    href={`/work-orders/${wo.id}`}
-                    className="block p-4 active:bg-muted/50 transition-colors"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <p className="font-medium text-foreground">{wo.ticketNumber as string}</p>
-                        <p className="text-sm text-muted-foreground line-clamp-2 mt-0.5">
-                          {wo.problemDescription as string}
-                        </p>
-                        <div className="flex flex-wrap items-center gap-2 mt-2">
-                          <Badge variant={statusVariants[wo.status as string] ?? 'default'}>
-                            {String(wo.status).replace(/([A-Z])/g, ' $1').trim()}
-                          </Badge>
-                          <span className="text-xs text-muted-foreground capitalize">{wo.priority as string}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {new Date(wo.createdAt as string).toLocaleDateString()}
-                          </span>
+                  <div key={wo.id as string} className="p-4">
+                    <Link href={`/work-orders/${wo.id}`} className="block active:bg-muted/50 transition-colors">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium text-foreground">{wo.ticketNumber as string}</p>
+                          <p className="text-sm text-muted-foreground line-clamp-2 mt-0.5">
+                            {wo.problemDescription as string}
+                          </p>
+                          <div className="flex flex-wrap items-center gap-2 mt-2">
+                            <StatusBadge status={wo.status as string} />
+                            <span className="text-xs text-muted-foreground capitalize">{wo.priority as string}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(wo.createdAt as string).toLocaleDateString()}
+                            </span>
+                          </div>
                         </div>
+                        <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
                       </div>
-                      <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
-                    </div>
-                  </Link>
+                    </Link>
+                    {canReopen(wo) && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-2 w-full sm:w-auto"
+                        onClick={() => {
+                          setReopenWo(wo);
+                          setReopenError(null);
+                        }}
+                      >
+                        Reopen
+                      </Button>
+                    )}
+                  </div>
                 ))}
               </div>
               {/* Desktop: table */}
@@ -103,21 +166,34 @@ export default function MyRequestsPage() {
                           {wo.problemDescription as string}
                         </td>
                         <td className="py-4 px-6">
-                          <Badge variant={statusVariants[wo.status as string] ?? 'default'}>
-                            {String(wo.status).replace(/([A-Z])/g, ' $1').trim()}
-                          </Badge>
+                          <StatusBadge status={wo.status as string} />
                         </td>
                         <td className="py-4 px-6 text-sm capitalize">{wo.priority as string}</td>
                         <td className="py-4 px-6 text-sm text-muted-foreground">
                           {new Date(wo.createdAt as string).toLocaleDateString()}
                         </td>
                         <td className="py-4 px-6">
-                          <Link href={`/work-orders/${wo.id}`}>
-                            <Button variant="ghost" size="sm" className="gap-1">
-                              View
-                              <ChevronRight className="h-4 w-4" />
-                            </Button>
-                          </Link>
+                          <div className="flex items-center gap-2">
+                            {canReopen(wo) && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  setReopenWo(wo);
+                                  setReopenError(null);
+                                }}
+                              >
+                                Reopen
+                              </Button>
+                            )}
+                            <Link href={`/work-orders/${wo.id}`}>
+                              <Button variant="ghost" size="sm" className="gap-1">
+                                View
+                                <ChevronRight className="h-4 w-4" />
+                              </Button>
+                            </Link>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -128,6 +204,66 @@ export default function MyRequestsPage() {
           )}
         </CardContent>
       </Card>
+
+      <Modal
+        open={!!reopenWo}
+        onClose={() => {
+          setReopenWo(null);
+          setReopenError(null);
+        }}
+        title="Reopen work order"
+      >
+        {reopenWo && (() => {
+          const raw = reopenWo.metadata as Record<string, unknown> | undefined;
+          const count = Number(raw?.reopenCount ?? raw?.reopen_count ?? 0);
+          const left = MAX_REOPEN_COUNT - count;
+          return (
+          <>
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                This will set the work order back to &quot;Reopened&quot; and clear assignments. You have {left} reopen{left === 1 ? '' : 's'} left.
+              </p>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1.5">
+                  Reason for reopening <span className="text-destructive">*</span>
+                </label>
+                <textarea
+                  value={reopenReason}
+                  onChange={(e) => setReopenReason(e.target.value)}
+                  placeholder="At least 10 characters"
+                  rows={3}
+                  className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1.5">
+                  Updated problem description (optional)
+                </label>
+                <textarea
+                  value={reopenDescription}
+                  onChange={(e) => setReopenDescription(e.target.value)}
+                  placeholder="Leave blank to keep current description"
+                  rows={2}
+                  className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
+              {reopenError && <p className="text-sm text-destructive">{reopenError}</p>}
+            </div>
+            <ModalActions>
+              <Button variant="outline" onClick={() => setReopenWo(null)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => reopenMutation.mutate()}
+                disabled={reopenReason.trim().length < 10 || reopenMutation.isPending}
+              >
+                {reopenMutation.isPending ? 'Reopening…' : 'Reopen'}
+              </Button>
+            </ModalActions>
+          </>
+          );
+        })()}
+      </Modal>
     </div>
   );
 }

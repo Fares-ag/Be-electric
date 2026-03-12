@@ -7,7 +7,7 @@ import { useAuthStore } from '@/stores/auth-store';
 import { useUsersMap } from '@/hooks/useUsersMap';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
+import { StatusBadge } from '@/components/ui/Badge';
 
 type PartsRequestRow = {
   id: string;
@@ -167,7 +167,7 @@ export default function PartsRequestsPage() {
                         {r.requestedAt ? new Date(r.requestedAt).toLocaleDateString() : '-'}
                       </td>
                       <td className="py-3 px-4">
-                        <Badge>{r.status}</Badge>
+                        <StatusBadge status={r.status} />
                       </td>
                       <td className="py-3 px-4">
                         {r.status === 'pending' && (

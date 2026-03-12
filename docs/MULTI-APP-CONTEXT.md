@@ -31,6 +31,7 @@ This document is the **single source of truth** for how the React admin app and 
 ### Flutter user flow (for React alignment)
 
 - **`docs/FLUTTER_USER_FLOW.md`** — Full requestor/technician flow: auth, RPCs (`get_user_by_email`, `upsert_work_order`, etc.), how work orders and parts requests are created/read, and what React should assume. Use it when changing users, roles, work orders, or RLS so the admin stays aligned with the Flutter app.
+- **`docs/WORK_ORDER_REOPEN.md`** — How work order reopening works in Flutter: only requestor can reopen; status must be completed/closed/cancelled; reopen data (reopenedAt, reopenReason, reopenCount, previousCompletionDate, previousStatus) lives in **`work_orders.metadata`**; status column is set to `reopened`. Use it for reopen history in the admin and for any web reopen feature.
 - **RPCs for Flutter** are defined in this repo: `get_user_by_email(p_email)`, `upsert_work_order(p_row jsonb)` (see `supabase/migrations/20260311140000_flutter_sync_rpcs.sql`). Run that migration (or the ensure script) so Flutter can resolve users and create work orders.
 
 ### Env (all apps)

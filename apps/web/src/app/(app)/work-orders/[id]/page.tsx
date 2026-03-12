@@ -1,13 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { useAuthStore } from '@/stores/auth-store';
 import { useUsersMap } from '@/hooks/useUsersMap';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
+import { Badge, StatusBadge } from '@/components/ui/Badge';
+import { Modal, ModalActions } from '@/components/ui/Modal';
 
 type WorkOrderActivityEntry = {
   at: string;
@@ -15,9 +17,19 @@ type WorkOrderActivityEntry = {
   note?: string;
 };
 
+/** Reopen fields stored in metadata by Flutter (see docs/WORK_ORDER_REOPEN.md). */
+type ReopenMetadata = {
+  reopenedAt?: string;
+  reopenedBy?: string;
+  reopenReason?: string;
+  reopenCount?: number;
+  previousCompletionDate?: string;
+  previousStatus?: string;
+};
+
 type WorkOrderMetadata = {
   completionPhotoPaths?: string[];
-};
+} & ReopenMetadata;
 
 type WorkOrderDetail = {
   id: string;
@@ -92,10 +104,16 @@ function SignatureImage({ value, alt }: { value: string; alt: string }) {
   );
 }
 
+const MAX_REOPEN_COUNT = 3;
+
 export default function WorkOrderDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const id = params.id as string;
   const queryClient = useQueryClient();
+  const user = useAuthStore((s) => s.user);
+  const isRequestor = user?.role === 'requestor';
+  const isAdminOrManager = user?.role === 'admin' || user?.role === 'manager';
 
   const { data: wo, isLoading } = useQuery({
     queryKey: ['work-order', id],
@@ -150,6 +168,69 @@ export default function WorkOrderDetailPage() {
   };
 
   const isCompletionLocked = ['completed', 'closed', 'cancelled'].includes(wo?.status ?? '');
+  const rawMeta = wo?.metadata as Record<string, unknown> | undefined;
+  const reopenCount = Number(rawMeta?.reopenCount ?? rawMeta?.reopen_count ?? 0);
+  const canReopen =
+    isRequestor &&
+    user?.id &&
+    wo?.requestorId === user.id &&
+    ['completed', 'closed', 'cancelled'].includes(wo?.status ?? '') &&
+    reopenCount < MAX_REOPEN_COUNT;
+
+  const [reopenOpen, setReopenOpen] = useState(false);
+  const [reopenReason, setReopenReason] = useState('');
+  const [reopenDescription, setReopenDescription] = useState('');
+  const [reopenError, setReopenError] = useState<string | null>(null);
+
+  const reopenMutation = useMutation({
+    mutationFn: async () => {
+      if (!user?.id || !wo) throw new Error('Not allowed');
+      if (reopenReason.trim().length < 10) throw new Error('Reason must be at least 10 characters');
+      const now = new Date().toISOString();
+      const previousCompletion = wo.completedAt ?? wo.closedAt ?? null;
+      const newMeta = {
+        ...(typeof wo.metadata === 'object' && wo.metadata !== null ? (wo.metadata as Record<string, unknown>) : {}),
+        reopenedAt: now,
+        reopenedBy: user.id,
+        reopenReason: reopenReason.trim(),
+        reopenCount: reopenCount + 1,
+        previousCompletionDate: previousCompletion,
+        previousStatus: wo.status,
+      };
+      const { error } = await supabase
+        .from('work_orders')
+        .update({
+          status: 'reopened',
+          problemDescription: reopenDescription.trim().length >= 10 ? reopenDescription.trim() : wo.problemDescription,
+          assignedTechnicianIds: [],
+          primaryTechnicianId: null,
+          assignedAt: null,
+          startedAt: null,
+          completedAt: null,
+          closedAt: null,
+          metadata: newMeta,
+          updatedAt: now,
+        })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      setReopenOpen(false);
+      setReopenReason('');
+      setReopenDescription('');
+      setReopenError(null);
+      queryClient.invalidateQueries({ queryKey: ['work-order', id] });
+      router.refresh();
+    },
+    onError: (err: Error) => {
+      setReopenError(err.message);
+    },
+  });
+
+  const handleReopenSubmit = () => {
+    setReopenError(null);
+    reopenMutation.mutate();
+  };
   const requestPhotos = parsePhotoPaths(wo?.photoPath);
   // Flutter stores all completion photo URLs in metadata.completionPhotoPaths; first URL in completionPhotoPath
   const completionPhotos =
@@ -175,14 +256,79 @@ export default function WorkOrderDetailPage() {
   return (
     <div>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-8">
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-          {wo.ticketNumber}
-        </h1>
-        <div className="flex gap-2">
-          <Badge variant="secondary">{wo.status}</Badge>
-          <Badge>{wo.priority}</Badge>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+            {wo.ticketNumber}
+          </h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge status={wo.status} />
+            <Badge>{wo.priority}</Badge>
+            {canReopen && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setReopenOpen(true)}
+              >
+                Reopen work order
+              </Button>
+            )}
+          </div>
         </div>
       </div>
+
+      <Modal
+        open={reopenOpen}
+        onClose={() => {
+          setReopenOpen(false);
+          setReopenError(null);
+        }}
+        title="Reopen work order"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            This will set the work order back to &quot;Reopened&quot; and clear assignments. You have {MAX_REOPEN_COUNT - reopenCount} reopen{MAX_REOPEN_COUNT - reopenCount === 1 ? '' : 's'} left.
+          </p>
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-1.5">
+              Reason for reopening <span className="text-destructive">*</span>
+            </label>
+            <textarea
+              value={reopenReason}
+              onChange={(e) => setReopenReason(e.target.value)}
+              placeholder="At least 10 characters"
+              rows={3}
+              className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-1.5">
+              Updated problem description (optional)
+            </label>
+            <textarea
+              value={reopenDescription}
+              onChange={(e) => setReopenDescription(e.target.value)}
+              placeholder="Leave blank to keep current description"
+              rows={2}
+              className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+            />
+          </div>
+          {reopenError && (
+            <p className="text-sm text-destructive">{reopenError}</p>
+          )}
+        </div>
+        <ModalActions>
+          <Button variant="outline" onClick={() => setReopenOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleReopenSubmit}
+            disabled={reopenReason.trim().length < 10 || reopenMutation.isPending}
+          >
+            {reopenMutation.isPending ? 'Reopening…' : 'Reopen'}
+          </Button>
+        </ModalActions>
+      </Modal>
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader>
@@ -213,73 +359,127 @@ export default function WorkOrderDetailPage() {
             </dl>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Assigned technicians</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {assignError && (
-              <p className="text-sm text-destructive bg-destructive/10 px-2 py-1.5 rounded">
-                {assignError}
-              </p>
-            )}
-            {assignedUsers && assignedUsers.length > 0 ? (
-              <ul className="space-y-1.5">
-                {(assignedUsers as { id: string; name: string }[]).map((u) => (
-                  <li
-                    key={u.id}
-                    className="flex items-center justify-between rounded-md bg-muted/50 px-2 py-1.5 text-sm"
-                  >
-                    <span>{u.name}</span>
-                    {!isCompletionLocked && (
+        {isAdminOrManager && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Assigned technicians</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {assignError && (
+                <p className="text-sm text-destructive bg-destructive/10 px-2 py-1.5 rounded">
+                  {assignError}
+                </p>
+              )}
+              {assignedUsers && assignedUsers.length > 0 ? (
+                <ul className="space-y-1.5">
+                  {(assignedUsers as { id: string; name: string }[]).map((u) => (
+                    <li
+                      key={u.id}
+                      className="flex items-center justify-between rounded-md bg-muted/50 px-2 py-1.5 text-sm"
+                    >
+                      <span>{u.name}</span>
+                      {!isCompletionLocked && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-muted-foreground hover:text-destructive"
+                          onClick={() => removeTechnician(u.id)}
+                          disabled={updateAssignees.isPending}
+                        >
+                          Remove
+                        </Button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">No one assigned yet.</p>
+              )}
+              {!isCompletionLocked && allUsers.length > 0 && (
+                <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
+                  <p className="w-full text-xs text-muted-foreground mb-1">Assign technician:</p>
+                  {allUsers
+                    .filter((u) => !assignedIds.includes(u.id) && (u.role === 'technician' || u.role === 'manager' || u.role === 'admin'))
+                    .slice(0, 12)
+                    .map((u) => (
                       <Button
+                        key={u.id}
                         type="button"
-                        variant="ghost"
+                        variant="outline"
                         size="sm"
-                        className="h-7 text-muted-foreground hover:text-destructive"
-                        onClick={() => removeTechnician(u.id)}
+                        onClick={() => addTechnician(u.id)}
                         disabled={updateAssignees.isPending}
                       >
-                        Remove
+                        + {u.name}
                       </Button>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-muted-foreground">No one assigned yet.</p>
-            )}
-            {!isCompletionLocked && allUsers.length > 0 && (
-              <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
-                <p className="w-full text-xs text-muted-foreground mb-1">Assign technician:</p>
-                {allUsers
-                  .filter((u) => !assignedIds.includes(u.id) && (u.role === 'technician' || u.role === 'manager' || u.role === 'admin'))
-                  .slice(0, 12)
-                  .map((u) => (
-                    <Button
-                      key={u.id}
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => addTechnician(u.id)}
-                      disabled={updateAssignees.isPending}
-                    >
-                      + {u.name}
-                    </Button>
-                  ))}
-                {allUsers.filter((u) => !assignedIds.includes(u.id) && (u.role === 'technician' || u.role === 'manager' || u.role === 'admin')).length === 0 && (
-                  <p className="text-xs text-muted-foreground">No other technicians to assign. Add users with role Technician in Users.</p>
-                )}
-              </div>
-            )}
-            {isCompletionLocked && (
-              <p className="text-xs text-muted-foreground pt-2 border-t border-border">
-                Assignments cannot be changed after the work order is completed.
-              </p>
-            )}
-          </CardContent>
-        </Card>
+                    ))}
+                  {allUsers.filter((u) => !assignedIds.includes(u.id) && (u.role === 'technician' || u.role === 'manager' || u.role === 'admin')).length === 0 && (
+                    <p className="text-xs text-muted-foreground">No other technicians to assign. Add users with role Technician in Users.</p>
+                  )}
+                </div>
+              )}
+              {isCompletionLocked && (
+                <p className="text-xs text-muted-foreground pt-2 border-t border-border">
+                  Assignments cannot be changed after the work order is completed.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
+
+      {(() => {
+        const raw = wo?.metadata as Record<string, unknown> | undefined;
+        if (!raw) return null;
+        const count = Number(raw.reopenCount ?? raw.reopen_count ?? 0);
+        if (count < 1) return null;
+        const reopenedAt = String(raw.reopenedAt ?? raw.reopened_at ?? '').trim() || null;
+        const reopenedBy = String(raw.reopenedBy ?? raw.reopened_by ?? '').trim() || null;
+        const reopenReason = String(raw.reopenReason ?? raw.reopen_reason ?? '').trim() || null;
+        const previousStatus = String(raw.previousStatus ?? raw.previous_status ?? '').trim() || null;
+        const previousCompletionDate = String(raw.previousCompletionDate ?? raw.previous_completion_date ?? '').trim() || null;
+        const reopenedByName = reopenedBy ? (allUsers.find((u) => u.id === reopenedBy) as { name?: string } | undefined)?.name : null;
+        return (
+          <Card className="mt-4">
+            <CardHeader>
+              <CardTitle>Reopen history</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <p className="font-medium text-foreground">
+                Reopened {count} time{count !== 1 ? 's' : ''}
+              </p>
+              {reopenedAt && (
+                <div>
+                  <span className="text-muted-foreground">Last reopened: </span>
+                  {new Date(reopenedAt).toLocaleString()}
+                  {reopenedByName && (
+                    <span className="text-muted-foreground"> by {reopenedByName}</span>
+                  )}
+                </div>
+              )}
+              {reopenReason && (
+                <div>
+                  <span className="text-muted-foreground">Reason: </span>
+                  <span className="text-foreground">{reopenReason}</span>
+                </div>
+              )}
+              {previousStatus && (
+                <div>
+                  <span className="text-muted-foreground">Previous status: </span>
+                  <StatusBadge status={previousStatus} />
+                </div>
+              )}
+              {previousCompletionDate && (
+                <div>
+                  <span className="text-muted-foreground">Previous completion: </span>
+                  {new Date(previousCompletionDate).toLocaleString()}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       {hasAnyPhotos && (
         <Card className="mt-4">

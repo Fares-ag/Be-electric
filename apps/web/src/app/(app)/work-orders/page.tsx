@@ -6,16 +6,8 @@ import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
+import { StatusBadge } from '@/components/ui/Badge';
 import { ChevronRight } from 'lucide-react';
-
-const statusVariants: Record<string, 'default' | 'success' | 'warning' | 'destructive' | 'secondary'> = {
-  open: 'secondary',
-  assigned: 'default',
-  inProgress: 'default',
-  completed: 'success',
-  closed: 'secondary',
-};
 
 export default function WorkOrdersPage() {
   const searchParams = useSearchParams();
@@ -96,9 +88,7 @@ export default function WorkOrdersPage() {
                         {wo.problemDescription as string}
                       </td>
                       <td>
-                        <Badge variant={statusVariants[wo.status as string] ?? 'default'}>
-                          {String(wo.status).replace(/([A-Z])/g, ' $1').trim()}
-                        </Badge>
+                        <StatusBadge status={wo.status as string} />
                       </td>
                       <td className="text-sm capitalize">
                         {wo.priority as string}
