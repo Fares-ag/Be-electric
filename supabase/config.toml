@@ -1,0 +1,36 @@
+# Supabase local dev config (CLI: supabase start)
+# https://supabase.com/docs/guides/local-development/cli/config
+#
+# The app uses the HOSTED Supabase project via env vars (NEXT_PUBLIC_SUPABASE_URL, etc.).
+# This file is only for optional local Supabase (supabase start). For migrations on the
+# hosted DB, use Dashboard SQL Editor or: supabase db push (after linking with supabase link).
+project_id = "beelectric"
+
+[api]
+port = 54321
+schemas = ["public", "storage", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 17
+
+[studio]
+port = 54323
+
+[inbucket]
+port = 54324
+
+[storage]
+file_size_limit = "50MiB"
+
+[auth]
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000/*", "http://127.0.0.1:3000/*"]
+jwt_expiry = 3600
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+enable_confirmations = false

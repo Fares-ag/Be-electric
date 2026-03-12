@@ -1,0 +1,29 @@
+{
+  "name": "beelectric-cmms",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=@beelectric/web",
+    "build": "node node_modules/turbo/bin/turbo run build",
+    "lint": "turbo run lint",
+    "clean": "turbo run clean && rm -rf node_modules",
+    "stack:up": "node scripts/stack-up.mjs",
+    "stack:down": "docker compose down",
+    "supabase:start": "npx supabase start",
+    "supabase:stop": "npx supabase stop",
+    "supabase:status": "npx supabase status",
+    "schema:types": "node scripts/schema-pull.mjs",
+    "schema:pull": "node scripts/schema-pull.mjs --schema",
+    "e2e": "npm run e2e --workspace=@beelectric/web"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.0"
+  },
+  "packageManager": "npm@10.2.0",
+  "engines": {
+    "node": ">=18"
+  }
+}

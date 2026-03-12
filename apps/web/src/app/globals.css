@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 250 250 249;
+    --foreground: 28 25 23;
+    --card: 255 255 255;
+    --card-foreground: 28 25 23;
+    --primary: 5 46 22;
+    --primary-hover: 6 78 36;
+    --primary-foreground: 255 255 255;
+    --secondary: 245 245 244;
+    --secondary-foreground: 68 64 60;
+    --muted: 250 250 249;
+    --muted-foreground: 120 113 108;
+    --accent: 240 253 244;
+    --accent-foreground: 5 46 22;
+    --destructive: 185 28 28;
+    --destructive-foreground: 255 255 255;
+    --border: 231 229 228;
+    --input: 231 229 228;
+    --ring: 5 46 22;
+    --radius: 0.625rem;
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.04);
+    --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.06);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.06), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.06), 0 4px 6px -4px rgb(0 0 0 / 0.05);
+  }
+
+  * {
+    @apply border-[rgb(var(--border))];
+  }
+
+  body {
+    @apply bg-[rgb(var(--background))] text-[rgb(var(--foreground))] antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* Consistent table styling for data pages */
+  .table-modern {
+    @apply w-full text-sm;
+  }
+  .table-modern thead tr {
+    @apply border-b border-[rgb(var(--border))] bg-[rgb(var(--muted))]/60;
+  }
+  .table-modern th {
+    @apply text-left py-4 px-6 font-semibold text-[rgb(var(--muted-foreground))] tracking-tight;
+  }
+  .table-modern td {
+    @apply py-4 px-6 border-b border-[rgb(var(--border))]/80;
+  }
+  .table-modern tbody tr {
+    @apply transition-colors hover:bg-[rgb(var(--muted))]/50;
+  }
+  .table-modern tbody tr:last-child td {
+    @apply border-b-0;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}

@@ -1,0 +1,28 @@
+---
+description: Beelectric multi-app setup — React admin + Flutter technician + requestor; shared Supabase
+alwaysApply: true
+---
+
+# Beelectric multi-app context
+
+This codebase is **one of three apps** in the Beelectric CMMS ecosystem. Keep API, schema, and conventions in sync with the others.
+
+## The three apps
+
+| App | Stack | Role |
+|-----|--------|-----|
+| **This repo** (beelectric-react) | React/Next.js, Turborepo | Admin / back-office web app |
+| **Technician app** | Flutter | Field technicians (another Cursor project) |
+| **Requestor app** | Flutter | Requestors (another Cursor project) |
+
+## Shared backend
+
+- **Supabase** is the single backend for all three apps (auth, DB, RLS, Realtime).
+- Schema and RLS are defined in this repo under `supabase/` (migrations, types, policies).
+- Any change to tables, RLS, or auth that affects mobile apps must stay consistent; document in `docs/MULTI-APP-CONTEXT.md` when relevant.
+
+## Keeping in sync
+
+- When changing Supabase schema, RLS, or API contracts, consider impact on the Flutter technician and requestor apps.
+- Shared context for **both Cursor projects** is in `docs/MULTI-APP-CONTEXT.md`. The Flutter project should have the same (or a copy) of that doc so the AI there knows about this React app and the shared backend.
+- Env: all apps use the same Supabase URL and anon key (from `.env.example` / equivalent in each app).

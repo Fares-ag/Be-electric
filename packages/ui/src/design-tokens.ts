@@ -1,0 +1,38 @@
+export const tokens = {
+  colors: {
+    primary: '#000000',
+    accent: '#002911',
+    accentGreen: '#002911',
+    accentRed: '#D32F2F',
+    accentBlue: '#1976D2',
+    accentOrange: '#F57C00',
+    background: '#F5F5F5',
+    surface: '#FFFFFF',
+    border: '#E0E0E0',
+    secondaryText: '#757575',
+    darkText: '#424242',
+  },
+  status: {
+    open: '#BDBDBD',
+    assigned: '#BDBDBD',
+    inProgress: '#9E9E9E',
+    completed: '#9E9E9E',
+    closed: '#757575',
+    cancelled: '#757575',
+    reopened: '#BDBDBD',
+  },
+  priority: {
+    low: '#E0E0E0',
+    medium: '#BDBDBD',
+    high: '#9E9E9E',
+    urgent: '#FF7043',
+    critical: '#757575',
+  },
+  spacing: { xs: 4, s: 8, m: 16, l: 20, xl: 24, xxl: 32 },
+  radius: { card: 16, button: 8, input: 8 },
+  font: {
+    sans: '"Suisse Int\'l", system-ui, -apple-system, sans-serif',
+    sizes: { h1: 24, h2: 20, body: 16, secondary: 14, small: 12 },
+    weights: { normal: 400, semibold: 600, bold: 700 },
+  },
+} as const;
