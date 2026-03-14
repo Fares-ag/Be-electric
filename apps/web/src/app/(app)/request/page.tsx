@@ -11,22 +11,9 @@ import { Button } from '@/components/ui/Button';
 import { PhotoUploader } from '@/components/PhotoUploader';
 import { cn } from '@/lib/utils';
 
-const categories = [
-  'mechanicalHvac',
-  'electrical',
-  'structural',
-  'plumbing',
-  'interior',
-  'exterior',
-  'itLowVoltage',
-  'specializedEquipment',
-  'safetyCompliance',
-  'emergency',
-  'preventive',
-  'reactive',
-] as const;
-
 const priorities = ['low', 'medium', 'high', 'urgent', 'critical'] as const;
+
+const MIN_PHOTOS = 2;
 
 const inputClass = cn(
   'w-full rounded-lg border border-input bg-background px-4 py-3 text-sm min-h-[44px]',
@@ -40,7 +27,6 @@ export default function RequestMaintenancePage() {
   const user = useAuthStore((s) => s.user);
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<(typeof priorities)[number]>('medium');
-  const [category, setCategory] = useState<(typeof categories)[number]>('reactive');
   const [location, setLocation] = useState('');
   const [assetId, setAssetId] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
@@ -63,6 +49,10 @@ export default function RequestMaintenancePage() {
       setError('Problem description is required');
       return;
     }
+    if (photos.length < MIN_PHOTOS) {
+      setError(`Please add at least ${MIN_PHOTOS} photos.`);
+      return;
+    }
     if (!user) return;
     setSubmitting(true);
 
@@ -78,7 +68,7 @@ export default function RequestMaintenancePage() {
           requestorName: user.name,
           status: 'open',
           priority,
-          category,
+          category: null,
           location: location || null,
           assetId: assetId || null,
           notes: notes || null,
@@ -92,7 +82,7 @@ export default function RequestMaintenancePage() {
         return;
       }
 
-      if (photos.length > 0 && wo?.id) {
+      if (wo?.id) {
         try {
           const urls = await uploadRequestPhotos(photos, wo.id);
           const photoPath = urls.length === 1 ? urls[0] : JSON.stringify(urls);
@@ -136,35 +126,19 @@ export default function RequestMaintenancePage() {
                 className={cn(inputClass, 'min-h-[100px] py-3')}
               />
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-foreground">
-                  Priority
-                </label>
-                <select
-                  value={priority}
-                  onChange={(e) => setPriority(e.target.value as (typeof priorities)[number])}
-                  className={inputClass}
-                >
-                  {priorities.map((p) => (
-                    <option key={p} value={p}>{p}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-foreground">
-                  Category
-                </label>
-                <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value as (typeof categories)[number])}
-                  className={inputClass}
-                >
-                  {categories.map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
-              </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-foreground">
+                Priority
+              </label>
+              <select
+                value={priority}
+                onChange={(e) => setPriority(e.target.value as (typeof priorities)[number])}
+                className={inputClass}
+              >
+                {priorities.map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-foreground">
@@ -193,7 +167,17 @@ export default function RequestMaintenancePage() {
                 className={inputClass}
               />
             </div>
-            <PhotoUploader files={photos} onChange={setPhotos} />
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-foreground">
+                Photos <span className="text-destructive">*</span> (at least {MIN_PHOTOS} required)
+              </label>
+              <PhotoUploader files={photos} onChange={setPhotos} />
+              {photos.length > 0 && photos.length < MIN_PHOTOS && (
+                <p className="mt-1.5 text-sm text-muted-foreground">
+                  Add {MIN_PHOTOS - photos.length} more photo{MIN_PHOTOS - photos.length === 1 ? '' : 's'}.
+                </p>
+              )}
+            </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-foreground">
                 Notes
@@ -207,7 +191,7 @@ export default function RequestMaintenancePage() {
               />
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button type="submit" disabled={submitting} className="min-h-[48px] w-full sm:w-auto touch-manipulation">
+            <Button type="submit" disabled={submitting || photos.length < MIN_PHOTOS} className="min-h-[48px] w-full sm:w-auto touch-manipulation">
               {submitting ? 'Submitting...' : 'Submit Request'}
             </Button>
           </form>
