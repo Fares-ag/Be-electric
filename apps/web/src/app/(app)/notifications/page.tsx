@@ -1,8 +1,11 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Pagination } from '@/components/Pagination';
+import { SearchFilterBar } from '@/components/SearchFilterBar';
+import { usePagination } from '@/hooks/usePagination';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
 import { Card, CardContent } from '@/components/ui/Card';
@@ -69,6 +72,23 @@ export default function NotificationsPage() {
     };
   }, [user?.id, queryClient]);
 
+  const [search, setSearch] = useState('');
+  const filtered = useMemo(() => {
+    const list = notifications ?? [];
+    if (!search.trim()) return list;
+    const q = search.trim().toLowerCase();
+    return list.filter(
+      (n) =>
+        n.title.toLowerCase().includes(q) ||
+        (n.message ?? '').toLowerCase().includes(q)
+    );
+  }, [notifications, search]);
+
+  const { page, setPage, pageSize, setPageSize, paginatedItems, totalItems } =
+    usePagination(filtered);
+
+  useEffect(() => setPage(1), [search, setPage]);
+
   const markReadMutation = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase
@@ -83,8 +103,16 @@ export default function NotificationsPage() {
   });
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold text-[#000] mb-6">Notifications</h1>
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col gap-4">
+        <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">Notifications</h1>
+        <SearchFilterBar
+          search={search}
+          onSearchChange={setSearch}
+          placeholder="Search title, message..."
+          className="max-w-md"
+        />
+      </div>
       <Card>
         {isLoading ? (
           <p className="text-[#757575]">Loading...</p>
@@ -92,7 +120,7 @@ export default function NotificationsPage() {
           <p className="text-[#757575]">No notifications.</p>
         ) : (
           <ul className="divide-y divide-[#E0E0E0]">
-            {notifications.map((n) => {
+            {paginatedItems.map((n) => {
               const href = relatedHref(n);
               const content = (
                 <>
@@ -133,6 +161,15 @@ export default function NotificationsPage() {
               );
             })}
           </ul>
+        )}
+        {!isLoading && totalItems > 0 && (
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            totalItems={totalItems}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
         )}
       </Card>
     </div>

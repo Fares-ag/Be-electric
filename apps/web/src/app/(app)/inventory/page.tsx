@@ -1,8 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { Pagination } from '@/components/Pagination';
+import { SearchFilterBar } from '@/components/SearchFilterBar';
+import { usePagination } from '@/hooks/usePagination';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Modal, ModalActions } from '@/components/ui/Modal';
@@ -155,23 +158,50 @@ export default function InventoryPage() {
   const minS = (i: InventoryItem) => (i as Record<string, unknown>).minimumStock ?? i.minStock;
   const lowStock = items?.filter((i) => minS(i) != null && Number(stock(i)) <= Number(minS(i))) ?? [];
 
+  const [search, setSearch] = useState('');
+  const filtered = useMemo(() => {
+    const list = items ?? [];
+    if (!search.trim()) return list;
+    const q = search.trim().toLowerCase();
+    return list.filter(
+      (i) =>
+        i.name.toLowerCase().includes(q) ||
+        (i.category ?? '').toLowerCase().includes(q) ||
+        (i.sku ?? '').toLowerCase().includes(q) ||
+        (i.location ?? '').toLowerCase().includes(q)
+    );
+  }, [items, search]);
+
+  const { page, setPage, pageSize, setPageSize, paginatedItems, totalItems } =
+    usePagination(filtered);
+
+  useEffect(() => setPage(1), [search, setPage]);
+
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-[#000]">Inventory</h1>
-        {lowStock.length > 0 && (
-          <div className="text-sm text-[#F57C00] font-medium">
-            {lowStock.length} low stock item(s)
-          </div>
-        )}
-        <Button onClick={openAdd}>Add Item</Button>
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">Inventory</h1>
+        <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+          <SearchFilterBar
+            search={search}
+            onSearchChange={setSearch}
+            placeholder="Search name, category, SKU..."
+            className="sm:min-w-[220px]"
+          />
+          {lowStock.length > 0 && (
+          <span className="text-sm text-amber-600 font-medium">
+            {lowStock.length} low stock
+          </span>
+          )}
+          <Button onClick={openAdd} className="shrink-0">Add Item</Button>
+        </div>
       </div>
       <Card>
         {isLoading ? (
           <p className="text-[#757575]">Loading...</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="table-modern">
               <thead>
                 <tr className="border-b border-[#E0E0E0]">
                   <th className="text-left py-3 px-4 font-semibold">Name</th>
@@ -184,7 +214,7 @@ export default function InventoryPage() {
                 </tr>
               </thead>
               <tbody>
-                {items?.map((i) => {
+                {paginatedItems.map((i) => {
                   const qty = Number(stock(i));
                   const min = minS(i) != null ? Number(minS(i)) : null;
                   const isLow = min != null && qty <= min;
@@ -217,6 +247,15 @@ export default function InventoryPage() {
               </tbody>
             </table>
           </div>
+        )}
+        {!isLoading && totalItems > 0 && (
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            totalItems={totalItems}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
         )}
       </Card>
 

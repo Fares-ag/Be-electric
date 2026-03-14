@@ -1,7 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Pagination } from '@/components/Pagination';
+import { SearchFilterBar } from '@/components/SearchFilterBar';
+import { usePagination } from '@/hooks/usePagination';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
 import { Card } from '@/components/ui/Card';
@@ -48,6 +51,23 @@ export default function PurchaseOrdersPage() {
     onError: (err: Error) => setError(err.message),
   });
 
+  const [search, setSearch] = useState('');
+  const filtered = useMemo(() => {
+    const list = pos ?? [];
+    if (!search.trim()) return list;
+    const q = search.trim().toLowerCase();
+    return list.filter(
+      (po: Record<string, unknown>) =>
+        String(po.orderNumber ?? po.poNumber ?? po.id ?? '').toLowerCase().includes(q) ||
+        String(po.status ?? '').toLowerCase().includes(q)
+    );
+  }, [pos, search]);
+
+  const { page, setPage, pageSize, setPageSize, paginatedItems, totalItems } =
+    usePagination(filtered);
+
+  useEffect(() => setPage(1), [search, setPage]);
+
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -56,10 +76,18 @@ export default function PurchaseOrdersPage() {
   };
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-[#000]">Purchase Orders</h1>
-        <Button onClick={() => { setModalOpen(true); setError(null); setOrderNumber(''); }}>Create PO</Button>
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">Purchase Orders</h1>
+        <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+          <SearchFilterBar
+            search={search}
+            onSearchChange={setSearch}
+            placeholder="Search PO #, status..."
+            className="sm:min-w-[220px]"
+          />
+          <Button onClick={() => { setModalOpen(true); setError(null); setOrderNumber(''); }} className="shrink-0">Create PO</Button>
+        </div>
       </div>
       <Card>
         {isLoading ? (
@@ -68,7 +96,7 @@ export default function PurchaseOrdersPage() {
           <p className="text-[#757575]">No purchase orders yet.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="table-modern">
               <thead>
                 <tr className="border-b border-[#E0E0E0]">
                   <th className="text-left py-3 px-4 font-semibold">PO #</th>
@@ -78,7 +106,7 @@ export default function PurchaseOrdersPage() {
                 </tr>
               </thead>
               <tbody>
-                {pos.map((po: Record<string, unknown>) => (
+                {paginatedItems.map((po: Record<string, unknown>) => (
                   <tr key={po.id as string} className="border-b border-[#E0E0E0]">
                     <td className="py-3 px-4 font-medium">{String(po.orderNumber ?? po.poNumber ?? po.id)}</td>
                     <td className="py-3 px-4">
@@ -97,6 +125,15 @@ export default function PurchaseOrdersPage() {
               </tbody>
             </table>
           </div>
+        )}
+        {!isLoading && totalItems > 0 && (
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            totalItems={totalItems}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
         )}
       </Card>
 

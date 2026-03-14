@@ -5,8 +5,8 @@ import { Button } from '@/components/ui/Button';
 
 export default function ReportsPage() {
   return (
-    <div>
-      <h1 className="text-2xl font-bold text-[#000] mb-6">Reports</h1>
+    <div className="space-y-6">
+      <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">Reports</h1>
       <Card>
         <p className="text-[#757575] mb-4">
           Export reports (work orders, PM completion, inventory, etc.).

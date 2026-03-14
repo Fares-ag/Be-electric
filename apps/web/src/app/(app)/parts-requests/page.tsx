@@ -1,6 +1,10 @@
 'use client';
 
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Pagination } from '@/components/Pagination';
+import { SearchFilterBar } from '@/components/SearchFilterBar';
+import { usePagination } from '@/hooks/usePagination';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
@@ -113,23 +117,48 @@ export default function PartsRequestsPage() {
   };
 
   const pending = requests?.filter((r) => r.status === 'pending') ?? [];
+  const [search, setSearch] = useState('');
+  const filtered = useMemo(() => {
+    const list = requests ?? [];
+    if (!search.trim()) return list;
+    const q = search.trim().toLowerCase();
+    return list.filter(
+      (r) =>
+        (r.workOrder?.ticketNumber ?? '').toLowerCase().includes(q) ||
+        (usersMap.get(r.requestedBy)?.name ?? '').toLowerCase().includes(q) ||
+        r.status.toLowerCase().includes(q)
+    );
+  }, [requests, search, usersMap]);
+
+  const { page, setPage, pageSize, setPageSize, paginatedItems, totalItems } =
+    usePagination(filtered);
+
+  useEffect(() => setPage(1), [search, setPage]);
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-[#000]">Parts Requests</h1>
-        {pending.length > 0 && (
-          <div className="text-sm text-[#1976D2] font-medium">
-            {pending.length} pending
-          </div>
-        )}
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">Parts Requests</h1>
+        <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+          <SearchFilterBar
+            search={search}
+            onSearchChange={setSearch}
+            placeholder="Search WO, requester, status..."
+            className="sm:min-w-[220px]"
+          />
+          {pending.length > 0 && (
+            <span className="text-sm text-primary font-medium">
+              {pending.length} pending
+            </span>
+          )}
+        </div>
       </div>
       <Card>
         {isLoading ? (
           <p className="text-[#757575]">Loading...</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="table-modern">
               <thead>
                 <tr className="border-b border-[#E0E0E0]">
                   <th className="text-left py-3 px-4 font-semibold">WO</th>
@@ -141,7 +170,7 @@ export default function PartsRequestsPage() {
                 </tr>
               </thead>
               <tbody>
-                {requests?.map((r) => {
+                {paginatedItems.map((r) => {
                   const parts = r.requestedParts as Array<{ name?: string; quantity?: number; unit?: string }> | undefined;
                   const partsSummary = Array.isArray(parts)
                     ? parts.map((p) => `${p.name ?? '?'} (×${p.quantity ?? 0})`).join(', ') || '-'
@@ -194,6 +223,15 @@ export default function PartsRequestsPage() {
               </tbody>
             </table>
           </div>
+        )}
+        {!isLoading && totalItems > 0 && (
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            totalItems={totalItems}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
         )}
       </Card>
     </div>

@@ -1,7 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Pagination } from '@/components/Pagination';
+import { SearchFilterBar } from '@/components/SearchFilterBar';
+import { usePagination } from '@/hooks/usePagination';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
@@ -79,6 +82,23 @@ export default function MyRequestsPage() {
     onError: (err: Error) => setReopenError(err.message),
   });
 
+  const [search, setSearch] = useState('');
+  const filtered = useMemo(() => {
+    const list = workOrders ?? [];
+    if (!search.trim()) return list;
+    const q = search.trim().toLowerCase();
+    return list.filter(
+      (wo: Record<string, unknown>) =>
+        String(wo.ticketNumber ?? '').toLowerCase().includes(q) ||
+        String(wo.problemDescription ?? '').toLowerCase().includes(q)
+    );
+  }, [workOrders, search]);
+
+  const { page, setPage, pageSize, setPageSize, paginatedItems, totalItems } =
+    usePagination(filtered);
+
+  useEffect(() => setPage(1), [search, setPage]);
+
   function canReopen(wo: Record<string, unknown>): boolean {
     const status = wo.status as string;
     if (status !== 'completed') return false;
@@ -88,10 +108,18 @@ export default function MyRequestsPage() {
   }
 
   return (
-    <div>
-      <h1 className="text-2xl font-semibold tracking-tight text-foreground mb-6 md:mb-8">
-        My Requests
-      </h1>
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col gap-4">
+        <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">
+          My Requests
+        </h1>
+        <SearchFilterBar
+          search={search}
+          onSearchChange={setSearch}
+          placeholder="Search ticket, description..."
+          className="max-w-md"
+        />
+      </div>
       <Card>
         <CardContent className="p-0">
           {isLoading ? (
@@ -106,7 +134,7 @@ export default function MyRequestsPage() {
             <>
               {/* Mobile: card list */}
               <div className="md:hidden divide-y divide-border">
-                {workOrders?.map((wo: Record<string, unknown>) => (
+                {paginatedItems.map((wo: Record<string, unknown>) => (
                   <div key={wo.id as string} className="p-4">
                     <Link href={`/work-orders/${wo.id}`} className="block active:bg-muted/50 transition-colors">
                       <div className="flex items-start justify-between gap-3">
@@ -156,7 +184,7 @@ export default function MyRequestsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {workOrders?.map((wo: Record<string, unknown>) => (
+                    {paginatedItems.map((wo: Record<string, unknown>) => (
                       <tr
                         key={wo.id as string}
                         className="border-b border-border last:border-0 hover:bg-muted/50 transition-colors"
@@ -200,6 +228,15 @@ export default function MyRequestsPage() {
                   </tbody>
                 </table>
               </div>
+              {totalItems > 0 && (
+                <Pagination
+                  page={page}
+                  pageSize={pageSize}
+                  totalItems={totalItems}
+                  onPageChange={setPage}
+                  onPageSizeChange={setPageSize}
+                />
+              )}
             </>
           )}
         </CardContent>

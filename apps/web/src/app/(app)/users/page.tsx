@@ -1,7 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Pagination } from '@/components/Pagination';
+import { SearchFilterBar } from '@/components/SearchFilterBar';
+import { usePagination } from '@/hooks/usePagination';
 import { supabase } from '@/lib/supabase';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -70,6 +73,24 @@ export default function UsersPage() {
       return (data ?? []) as { id: string; name: string }[];
     },
   });
+
+  const [search, setSearch] = useState('');
+  const filtered = useMemo(() => {
+    const list = users ?? [];
+    if (!search.trim()) return list;
+    const q = search.trim().toLowerCase();
+    return list.filter(
+      (u) =>
+        u.name.toLowerCase().includes(q) ||
+        u.email.toLowerCase().includes(q) ||
+        u.role.toLowerCase().includes(q)
+    );
+  }, [users, search]);
+
+  const { page, setPage, pageSize, setPageSize, paginatedItems, totalItems } =
+    usePagination(filtered);
+
+  useEffect(() => setPage(1), [search, setPage]);
 
   const createMutation = useMutation({
     mutationFn: async (payload: typeof emptyForm) => {
@@ -184,10 +205,18 @@ export default function UsersPage() {
   const isAdd = !editing;
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-8">
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">Users</h1>
-        <Button onClick={openAdd}>Add User</Button>
+        <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+          <SearchFilterBar
+            search={search}
+            onSearchChange={setSearch}
+            placeholder="Search name, email, role..."
+            className="sm:min-w-[220px]"
+          />
+          <Button onClick={openAdd} className="shrink-0">Add User</Button>
+        </div>
       </div>
       <Card>
         {queryError && (
@@ -217,7 +246,7 @@ export default function UsersPage() {
                 </tr>
               </thead>
               <tbody>
-                {users?.map((u) => (
+                {paginatedItems.map((u) => (
                   <tr key={u.id}>
                     <td className="font-medium text-foreground">{u.name}</td>
                     <td className="text-sm">{u.email}</td>
@@ -241,6 +270,15 @@ export default function UsersPage() {
               </tbody>
             </table>
           </div>
+        )}
+        {!isLoading && totalItems > 0 && (
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            totalItems={totalItems}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
         )}
       </Card>
 

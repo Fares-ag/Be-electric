@@ -1,7 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Pagination } from '@/components/Pagination';
+import { SearchFilterBar } from '@/components/SearchFilterBar';
+import { usePagination } from '@/hooks/usePagination';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
@@ -107,10 +110,34 @@ export default function PMTasksPage() {
     (u) => u.role === 'technician' || u.role === 'manager' || u.role === 'admin'
   );
 
+  const [search, setSearch] = useState('');
+  const filtered = useMemo(() => {
+    const list = pmTasks ?? [];
+    if (!search.trim()) return list;
+    const q = search.trim().toLowerCase();
+    return list.filter(
+      (t: Record<string, unknown>) =>
+        String(t.taskName ?? '').toLowerCase().includes(q) ||
+        String((t.asset as { name?: string })?.name ?? '').toLowerCase().includes(q) ||
+        String(t.frequency ?? '').toLowerCase().includes(q)
+    );
+  }, [pmTasks, search]);
+
+  const { page, setPage, pageSize, setPageSize, paginatedItems, totalItems } =
+    usePagination(filtered);
+
+  useEffect(() => setPage(1), [search, setPage]);
+
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-[#000]">PM Tasks</h1>
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">PM Tasks</h1>
+        <SearchFilterBar
+          search={search}
+          onSearchChange={setSearch}
+          placeholder="Search task, charger, frequency..."
+          className="sm:min-w-[220px]"
+        />
         <Button
           onClick={() => {
             setModalOpen(true);
@@ -131,7 +158,7 @@ export default function PMTasksPage() {
           <p className="text-[#757575]">Loading...</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="table-modern">
               <thead>
                 <tr className="border-b border-[#E0E0E0]">
                   <th className="text-left py-3 px-4 font-semibold">Task</th>
@@ -144,7 +171,7 @@ export default function PMTasksPage() {
                 </tr>
               </thead>
               <tbody>
-                {pmTasks?.map((t: Record<string, unknown>) => (
+                {paginatedItems.map((t: Record<string, unknown>) => (
                   <tr key={t.id as string} className="border-b border-[#E0E0E0]">
                     <td className="py-3 px-4 font-medium">{t.taskName as string}</td>
                     <td className="py-3 px-4">
@@ -174,6 +201,15 @@ export default function PMTasksPage() {
               </tbody>
             </table>
           </div>
+        )}
+        {!isLoading && totalItems > 0 && (
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            totalItems={totalItems}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
         )}
       </Card>
 

@@ -36,7 +36,6 @@ export default function LoginPage() {
               priority
             />
           </div>
-          <p className="text-muted-foreground mt-1 text-sm">QAuto CMMS</p>
         </div>
         <div className="rounded-xl border border-border bg-card p-8 shadow-card">
           <form onSubmit={handleSubmit} className="space-y-5">
@@ -87,9 +86,6 @@ export default function LoginPage() {
             </Button>
           </form>
         </div>
-        <p className="text-xs text-muted-foreground text-center mt-6">
-          Demo: admin@qauto.com / demo123
-        </p>
       </div>
     </div>
   );

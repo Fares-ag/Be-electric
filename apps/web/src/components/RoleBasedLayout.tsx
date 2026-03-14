@@ -230,7 +230,7 @@ export function RoleBasedLayout({ children }: { children: React.ReactNode }) {
       </div>
 
       <main className="flex-1 overflow-auto min-h-screen">
-        <div className="container max-w-7xl px-4 pt-14 pb-8 md:px-6 md:pt-8 md:pb-8">{children}</div>
+        <div className="container max-w-7xl px-4 sm:px-5 md:px-6 pt-16 sm:pt-20 pb-8 sm:pb-10 md:pt-8 md:pb-10">{children}</div>
       </main>
     </div>
   );

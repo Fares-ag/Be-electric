@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
@@ -7,6 +8,9 @@ import { supabase } from '@/lib/supabase';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { StatusBadge } from '@/components/ui/Badge';
+import { Pagination } from '@/components/Pagination';
+import { SearchFilterBar } from '@/components/SearchFilterBar';
+import { usePagination } from '@/hooks/usePagination';
 import { ChevronRight } from 'lucide-react';
 
 export default function WorkOrdersPage() {
@@ -28,15 +32,40 @@ export default function WorkOrdersPage() {
     },
   });
 
+  const [search, setSearch] = useState('');
+  const filtered = useMemo(() => {
+    const list = workOrders ?? [];
+    if (!search.trim()) return list;
+    const q = search.trim().toLowerCase();
+    return list.filter(
+      (wo: Record<string, unknown>) =>
+        String(wo.ticketNumber ?? '').toLowerCase().includes(q) ||
+        String(wo.problemDescription ?? '').toLowerCase().includes(q) ||
+        String(wo.requestorName ?? '').toLowerCase().includes(q)
+    );
+  }, [workOrders, search]);
+
+  const { page, setPage, pageSize, setPageSize, paginatedItems, totalItems } =
+    usePagination(filtered);
+
+  useEffect(() => {
+    setPage(1);
+  }, [statusFilter, search, setPage]);
+
   const filters = ['open', 'assigned', 'inProgress', 'completed', 'closed'];
 
   return (
-    <div>
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-8">
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col gap-4 sm:gap-6">
         <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">
           Work Orders
         </h1>
-        <div className="flex flex-wrap gap-2">
+        <SearchFilterBar
+          search={search}
+          onSearchChange={setSearch}
+          placeholder="Search ticket, description, requestor..."
+        >
+          <div className="flex flex-wrap gap-2 shrink-0">
           {filters.map((s) => (
             <Link
               key={s}
@@ -50,7 +79,8 @@ export default function WorkOrdersPage() {
               </Button>
             </Link>
           ))}
-        </div>
+          </div>
+        </SearchFilterBar>
       </div>
       <Card>
         <CardContent className="p-0">
@@ -79,7 +109,7 @@ export default function WorkOrdersPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {workOrders?.map((wo: Record<string, unknown>) => (
+                  {paginatedItems.map((wo: Record<string, unknown>) => (
                     <tr key={wo.id as string}>
                       <td className="font-medium text-foreground">
                         {wo.ticketNumber as string}
@@ -114,6 +144,15 @@ export default function WorkOrdersPage() {
             </div>
           )}
         </CardContent>
+        {!isLoading && !error && totalItems > 0 && (
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            totalItems={totalItems}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
+        )}
       </Card>
     </div>
   );

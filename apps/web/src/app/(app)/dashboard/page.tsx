@@ -58,11 +58,11 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div>
-      <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground mb-8">
+    <div className="space-y-6 sm:space-y-8">
+      <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">
         Dashboard
       </h1>
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {cards.map(({ href, label, value, icon: Icon }) => (
           <Link key={href} href={href}>
             <Card className="cursor-pointer transition-all duration-200 hover:border-primary/30">
@@ -81,7 +81,7 @@ export default function DashboardPage() {
           </Link>
         ))}
       </div>
-      <Card>
+      <Card className="mt-6 sm:mt-8">
         <CardHeader>
           <CardTitle>Recent Activity</CardTitle>
         </CardHeader>

@@ -1,8 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { Pagination } from '@/components/Pagination';
+import { SearchFilterBar } from '@/components/SearchFilterBar';
+import { usePagination } from '@/hooks/usePagination';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Modal, ModalActions } from '@/components/ui/Modal';
@@ -58,6 +61,25 @@ export default function AssetsPage() {
       return (data ?? []) as { id: string; name: string }[];
     },
   });
+
+  const [search, setSearch] = useState('');
+  const filtered = useMemo(() => {
+    const list = assets ?? [];
+    if (!search.trim()) return list;
+    const q = search.trim().toLowerCase();
+    return list.filter(
+      (a) =>
+        a.name.toLowerCase().includes(q) ||
+        (a.location ?? '').toLowerCase().includes(q) ||
+        (a.company?.name ?? '').toLowerCase().includes(q) ||
+        (a.assetType ?? '').toLowerCase().includes(q)
+    );
+  }, [assets, search]);
+
+  const { page, setPage, pageSize, setPageSize, paginatedItems, totalItems } =
+    usePagination(filtered);
+
+  useEffect(() => setPage(1), [search, setPage]);
 
   const createMutation = useMutation({
     mutationFn: async (payload: typeof emptyForm) => {
@@ -162,17 +184,25 @@ export default function AssetsPage() {
   };
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-[#000]">Chargers</h1>
-        <Button onClick={openAdd}>Add Charger</Button>
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">Chargers</h1>
+        <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+          <SearchFilterBar
+            search={search}
+            onSearchChange={setSearch}
+            placeholder="Search name, location, company..."
+            className="sm:min-w-[220px]"
+          />
+          <Button onClick={openAdd} className="shrink-0">Add Charger</Button>
+        </div>
       </div>
       <Card>
         {isLoading ? (
           <p className="text-[#757575]">Loading...</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="table-modern">
               <thead>
                 <tr className="border-b border-[#E0E0E0]">
                   <th className="text-left py-3 px-4 font-semibold">Name</th>
@@ -184,7 +214,7 @@ export default function AssetsPage() {
                 </tr>
               </thead>
               <tbody>
-                {assets?.map((a) => (
+                {paginatedItems.map((a) => (
                   <tr key={a.id} className="border-b border-[#E0E0E0]">
                     <td className="py-3 px-4 font-medium">{a.name}</td>
                     <td className="py-3 px-4">{a.company?.name ?? '-'}</td>
@@ -211,6 +241,15 @@ export default function AssetsPage() {
               </tbody>
             </table>
           </div>
+        )}
+        {!isLoading && totalItems > 0 && (
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            totalItems={totalItems}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
         )}
       </Card>
 

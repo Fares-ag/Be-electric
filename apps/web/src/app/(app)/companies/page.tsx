@@ -1,8 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { Pagination } from '@/components/Pagination';
+import { SearchFilterBar } from '@/components/SearchFilterBar';
+import { usePagination } from '@/hooks/usePagination';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Modal, ModalActions } from '@/components/ui/Modal';
@@ -40,6 +43,25 @@ export default function CompaniesPage() {
       return (data ?? []) as Company[];
     },
   });
+
+  const [search, setSearch] = useState('');
+  const filtered = useMemo(() => {
+    const list = companies ?? [];
+    if (!search.trim()) return list;
+    const q = search.trim().toLowerCase();
+    return list.filter(
+      (c) =>
+        c.name.toLowerCase().includes(q) ||
+        (c.contactEmail ?? '').toLowerCase().includes(q) ||
+        (c.contactPhone ?? '').toLowerCase().includes(q) ||
+        (c.address ?? '').toLowerCase().includes(q)
+    );
+  }, [companies, search]);
+
+  const { page, setPage, pageSize, setPageSize, paginatedItems, totalItems } =
+    usePagination(filtered);
+
+  useEffect(() => setPage(1), [search, setPage]);
 
   const createMutation = useMutation({
     mutationFn: async (payload: typeof emptyForm) => {
@@ -133,17 +155,25 @@ export default function CompaniesPage() {
   };
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-[#000]">Companies</h1>
-        <Button onClick={openAdd}>Add Company</Button>
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">Companies</h1>
+        <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+          <SearchFilterBar
+            search={search}
+            onSearchChange={setSearch}
+            placeholder="Search name, email, phone, address..."
+            className="sm:min-w-[220px]"
+          />
+          <Button onClick={openAdd} className="shrink-0">Add Company</Button>
+        </div>
       </div>
       <Card>
         {isLoading ? (
           <p className="text-[#757575]">Loading...</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="table-modern">
               <thead>
                 <tr className="border-b border-[#E0E0E0]">
                   <th className="text-left py-3 px-4 font-semibold">Name</th>
@@ -154,7 +184,7 @@ export default function CompaniesPage() {
                 </tr>
               </thead>
               <tbody>
-                {companies?.map((c) => (
+                {paginatedItems.map((c) => (
                   <tr key={c.id} className="border-b border-[#E0E0E0]">
                     <td className="py-3 px-4 font-medium">{c.name}</td>
                     <td className="py-3 px-4">{c.contactEmail ?? '-'}</td>
@@ -178,6 +208,15 @@ export default function CompaniesPage() {
               </tbody>
             </table>
           </div>
+        )}
+        {!isLoading && totalItems > 0 && (
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            totalItems={totalItems}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
         )}
       </Card>
 

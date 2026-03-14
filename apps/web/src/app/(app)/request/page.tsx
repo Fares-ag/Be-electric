@@ -116,8 +116,8 @@ export default function RequestMaintenancePage() {
   }
 
   return (
-    <div>
-      <h1 className="text-2xl font-semibold tracking-tight text-foreground mb-6 md:mb-8">
+    <div className="space-y-6 sm:space-y-8">
+      <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">
         Request Maintenance
       </h1>
       <Card>

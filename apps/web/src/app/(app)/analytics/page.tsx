@@ -27,8 +27,8 @@ export default function AnalyticsPage() {
   }));
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold text-[#000] mb-6">Analytics</h1>
+    <div className="space-y-6">
+      <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">Analytics</h1>
       <AnalyticsCharts statusData={statusData} />
       <Card>
         <h2 className="text-lg font-semibold mb-4">Summary</h2>
