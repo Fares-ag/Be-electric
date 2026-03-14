@@ -138,7 +138,7 @@ export default function PMTasksPage() {
                   <th className="text-left py-3 px-4 font-semibold">Status</th>
                   <th className="text-left py-3 px-4 font-semibold">Frequency</th>
                   <th className="text-left py-3 px-4 font-semibold">Next Due</th>
-                  <th className="text-left py-3 px-4 font-semibold">Asset</th>
+                  <th className="text-left py-3 px-4 font-semibold">Charger</th>
                   <th className="text-left py-3 px-4 font-semibold">Assigned</th>
                   <th />
                 </tr>
@@ -199,20 +199,20 @@ export default function PMTasksPage() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Asset *</label>
+            <label className="block text-sm font-medium text-foreground mb-1">Charger *</label>
             <select
               required
               value={form.assetId}
               onChange={(e) => setForm((f) => ({ ...f, assetId: e.target.value }))}
               className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
             >
-              <option value="">— Select asset —</option>
+              <option value="">— Select charger —</option>
               {assets?.map((a) => (
                 <option key={a.id} value={a.id}>{a.name}</option>
               ))}
             </select>
             {assets?.length === 0 && (
-              <p className="text-xs text-muted-foreground mt-1">Create an asset first in Assets.</p>
+              <p className="text-xs text-muted-foreground mt-1">Create a charger first in Chargers.</p>
             )}
           </div>
           <div>

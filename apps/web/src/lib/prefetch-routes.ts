@@ -23,7 +23,7 @@ export async function prefetchRoute(
             if (error) throw error;
             return data ?? [];
           },
-          staleTime: 30 * 1000,
+          staleTime: 60 * 1000,
         });
         break;
       }
@@ -37,7 +37,7 @@ export async function prefetchRoute(
               .order('name');
             return (data ?? []) as unknown[];
           },
-          staleTime: 30 * 1000,
+          staleTime: 60 * 1000,
         });
         break;
       }
@@ -51,7 +51,7 @@ export async function prefetchRoute(
               .order('nextDueDate', { ascending: true });
             return data ?? [];
           },
-          staleTime: 30 * 1000,
+          staleTime: 60 * 1000,
         });
         break;
       }
@@ -62,7 +62,7 @@ export async function prefetchRoute(
             const { data } = await supabase.from('companies').select('*').order('name');
             return (data ?? []) as unknown[];
           },
-          staleTime: 30 * 1000,
+          staleTime: 60 * 1000,
         });
         break;
       }
@@ -70,10 +70,11 @@ export async function prefetchRoute(
         await queryClient.prefetchQuery({
           queryKey: ['users'],
           queryFn: async () => {
-            const { data } = await supabase.from('users').select('*').order('email');
+            const { data, error } = await (supabase as any).rpc('get_users_list');
+            if (error) throw error;
             return (data ?? []) as unknown[];
           },
-          staleTime: 30 * 1000,
+          staleTime: 60 * 1000,
         });
         break;
       }
@@ -88,7 +89,7 @@ export async function prefetchRoute(
                 .in('status', ['open', 'assigned', 'inProgress']);
               return (data ?? []) as unknown[];
             },
-            staleTime: 30 * 1000,
+            staleTime: 60 * 1000,
           }),
           queryClient.prefetchQuery({
             queryKey: ['pm-tasks-overdue'],
@@ -99,7 +100,7 @@ export async function prefetchRoute(
                 .eq('status', 'overdue');
               return (data ?? []) as unknown[];
             },
-            staleTime: 30 * 1000,
+            staleTime: 60 * 1000,
           }),
           queryClient.prefetchQuery({
             queryKey: ['inventory-low-stock'],
@@ -109,7 +110,7 @@ export async function prefetchRoute(
                 .select('id, name, currentStock, minStock');
               return (data ?? []) as unknown[];
             },
-            staleTime: 30 * 1000,
+            staleTime: 60 * 1000,
           }),
         ]);
         break;
@@ -121,7 +122,7 @@ export async function prefetchRoute(
             const { data } = await supabase.from('inventory_items').select('*').order('name');
             return (data ?? []) as unknown[];
           },
-          staleTime: 30 * 1000,
+          staleTime: 60 * 1000,
         });
         break;
       }
@@ -132,7 +133,7 @@ export async function prefetchRoute(
             const { data } = await supabase.from('parts_requests').select('*');
             return (data ?? []) as unknown[];
           },
-          staleTime: 30 * 1000,
+          staleTime: 60 * 1000,
         });
         break;
       }
@@ -143,7 +144,20 @@ export async function prefetchRoute(
             const { data } = await supabase.from('purchase_orders').select('*');
             return (data ?? []) as unknown[];
           },
-          staleTime: 30 * 1000,
+          staleTime: 60 * 1000,
+        });
+        break;
+      }
+      case '/analytics': {
+        await queryClient.prefetchQuery({
+          queryKey: ['analytics-work-orders'],
+          queryFn: async () => {
+            const { data } = await supabase
+              .from('work_orders')
+              .select('status, priority');
+            return data ?? [];
+          },
+          staleTime: 60 * 1000,
         });
         break;
       }

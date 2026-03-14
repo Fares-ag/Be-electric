@@ -158,14 +158,14 @@ export default function AssetsPage() {
   };
 
   const handleDelete = (a: Asset) => {
-    if (window.confirm(`Delete asset "${a.name}"?`)) deleteMutation.mutate(a.id);
+    if (window.confirm(`Delete charger "${a.name}"?`)) deleteMutation.mutate(a.id);
   };
 
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-[#000]">Assets</h1>
-        <Button onClick={openAdd}>Add Asset</Button>
+        <h1 className="text-2xl font-bold text-[#000]">Chargers</h1>
+        <Button onClick={openAdd}>Add Charger</Button>
       </div>
       <Card>
         {isLoading ? (
@@ -217,7 +217,7 @@ export default function AssetsPage() {
       <Modal
         open={modalOpen}
         onClose={() => { setModalOpen(false); setError(null); }}
-        title={editing ? 'Edit Asset' : 'Add Asset'}
+        title={editing ? 'Edit Charger' : 'Add Charger'}
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
@@ -309,7 +309,7 @@ export default function AssetsPage() {
               Cancel
             </Button>
             <Button type="submit" disabled={submitting}>
-              {submitting ? 'Saving...' : editing ? 'Save' : 'Add Asset'}
+              {submitting ? 'Saving...' : editing ? 'Save' : 'Add Charger'}
             </Button>
           </ModalActions>
         </form>

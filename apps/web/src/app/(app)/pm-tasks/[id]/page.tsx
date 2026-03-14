@@ -140,7 +140,7 @@ export default function PMTaskDetailPage() {
                 <dd>{new Date(task.nextDueDate).toLocaleDateString()}</dd>
               </div>
               <div>
-                <dt className="text-muted-foreground">Asset</dt>
+                <dt className="text-muted-foreground">Charger</dt>
                 <dd>{(task.asset as { name?: string })?.name ?? task.assetId}</dd>
               </div>
               {task.lastCompletedDate && (

@@ -75,7 +75,7 @@ function parsePhotoPaths(value: string | null | undefined): string[] {
 }
 
 function formatCurrency(value: number): string {
-  return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(value);
+  return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'QAR' }).format(value);
 }
 
 function parseActivityHistory(
@@ -105,6 +105,16 @@ function SignatureImage({ value, alt }: { value: string; alt: string }) {
 }
 
 const MAX_REOPEN_COUNT = 3;
+
+const WORK_ORDER_STATUSES = [
+  'open',
+  'assigned',
+  'inProgress',
+  'completed',
+  'closed',
+  'cancelled',
+  'reopened',
+] as const;
 
 export default function WorkOrderDetailPage() {
   const params = useParams();
@@ -166,6 +176,26 @@ export default function WorkOrderDetailPage() {
     const current = wo?.assignedTechnicianIds ?? [];
     updateAssignees.mutate(current.filter((id) => id !== userId));
   };
+
+  const updateStatusMutation = useMutation({
+    mutationFn: async (newStatus: string) => {
+      const updates: Record<string, unknown> = {
+        status: newStatus,
+        updatedAt: new Date().toISOString(),
+      };
+      if (['completed', 'closed'].includes(newStatus)) {
+        updates.completedAt = new Date().toISOString();
+        if (newStatus === 'closed') updates.closedAt = new Date().toISOString();
+      }
+      const { error } = await supabase.from('work_orders').update(updates).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['work-order', id] });
+      queryClient.invalidateQueries({ queryKey: ['work-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['my-work-orders'] });
+    },
+  });
 
   const isCompletionLocked = ['completed', 'closed', 'cancelled'].includes(wo?.status ?? '');
   const rawMeta = wo?.metadata as Record<string, unknown> | undefined;
@@ -262,6 +292,20 @@ export default function WorkOrderDetailPage() {
           </h1>
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={wo.status} />
+            {isAdminOrManager && (
+              <select
+                value={wo.status}
+                onChange={(e) => updateStatusMutation.mutate(e.target.value)}
+                disabled={updateStatusMutation.isPending}
+                className="rounded-md border border-input bg-background px-3 py-1.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20"
+              >
+                {WORK_ORDER_STATUSES.map((s) => (
+                  <option key={s} value={s}>
+                    {s.replace(/([A-Z])/g, ' $1').trim()}
+                  </option>
+                ))}
+              </select>
+            )}
             <Badge>{wo.priority}</Badge>
             {canReopen && (
               <Button
@@ -345,7 +389,7 @@ export default function WorkOrderDetailPage() {
                 <dd>{wo.requestorName ?? wo.requestorId}</dd>
               </div>
               <div>
-                <dt className="text-muted-foreground mb-0.5">Asset</dt>
+                <dt className="text-muted-foreground mb-0.5">Charger</dt>
                 <dd>{(wo.asset as { name?: string })?.name ?? wo.assetId ?? '-'}</dd>
               </div>
               <div>
@@ -563,7 +607,8 @@ export default function WorkOrderDetailPage() {
         </Card>
       )}
 
-      {(wo.startedAt || wo.closedAt || wo.completedAt || wo.nextMaintenanceDate || wo.laborCost != null || wo.partsCost != null || wo.totalCost != null) && (
+      {((wo.startedAt || wo.closedAt || wo.completedAt || wo.nextMaintenanceDate) ||
+        (!isRequestor && (wo.laborCost != null || wo.partsCost != null || wo.totalCost != null))) && (
         <Card className="mt-4">
           <CardHeader>
             <CardTitle>Completion summary</CardTitle>
@@ -594,19 +639,19 @@ export default function WorkOrderDetailPage() {
                   </dd>
                 </>
               )}
-              {wo.laborCost != null && (
+              {!isRequestor && wo.laborCost != null && (
                 <>
                   <dt className="text-muted-foreground">Labor cost</dt>
                   <dd className="font-medium">{formatCurrency(wo.laborCost)}</dd>
                 </>
               )}
-              {wo.partsCost != null && (
+              {!isRequestor && wo.partsCost != null && (
                 <>
                   <dt className="text-muted-foreground">Parts cost</dt>
                   <dd className="font-medium">{formatCurrency(wo.partsCost)}</dd>
                 </>
               )}
-              {wo.totalCost != null && (
+              {!isRequestor && wo.totalCost != null && (
                 <>
                   <dt className="text-muted-foreground">Total cost</dt>
                   <dd className="font-semibold">{formatCurrency(wo.totalCost)}</dd>

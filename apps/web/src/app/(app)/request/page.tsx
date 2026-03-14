@@ -168,7 +168,7 @@ export default function RequestMaintenancePage() {
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-foreground">
-                Asset (optional)
+                Charger (optional)
               </label>
               <select
                 value={assetId ?? ''}
@@ -189,7 +189,7 @@ export default function RequestMaintenancePage() {
                 type="text"
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
-                placeholder="Location if not linked to asset"
+                placeholder="Location if not linked to charger"
                 className={inputClass}
               />
             </div>

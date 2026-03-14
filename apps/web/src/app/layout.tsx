@@ -8,8 +8,18 @@ import { useRealtimeSubscriptions } from '@/hooks/useRealtime';
 import { Inter, Plus_Jakarta_Sans } from 'next/font/google';
 import './globals.css';
 
-const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
-const plusJakarta = Plus_Jakarta_Sans({ subsets: ['latin'], variable: '--font-display' });
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-sans',
+  display: 'swap',
+  preload: true,
+});
+const plusJakarta = Plus_Jakarta_Sans({
+  subsets: ['latin'],
+  variable: '--font-display',
+  display: 'swap',
+  preload: true,
+});
 
 const queryClient = new QueryClient({
   defaultOptions: {

@@ -53,7 +53,7 @@ async function createFallbackUser(
 }
 
 async function getAdminRoleByEmail(email: string): Promise<'admin' | 'manager' | null> {
-  const { data } = await supabase.rpc('get_admin_by_email', { p_email: email });
+  const { data } = await (supabase as any).rpc('get_admin_by_email', { p_email: email });
   const row = (data as { is_admin?: boolean; is_manager?: boolean }[] | null)?.[0];
   if (!row) return null;
   if (row.is_admin) return 'admin';
@@ -63,7 +63,7 @@ async function getAdminRoleByEmail(email: string): Promise<'admin' | 'manager' |
 
 /** Fetches user row only (no admin role override). */
 async function getUserByAuthIdOnly(authId: string): Promise<User | null> {
-  const { data, error } = await supabase.rpc('get_user_by_id', { p_id: authId });
+  const { data, error } = await (supabase as any).rpc('get_user_by_id', { p_id: authId });
   if (error) {
     console.warn('[auth] users table fetch failed:', error.message);
     return null;

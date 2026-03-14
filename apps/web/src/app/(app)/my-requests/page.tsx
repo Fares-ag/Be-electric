@@ -50,13 +50,13 @@ export default function MyRequestsPage() {
         reopenReason: reopenReason.trim(),
         reopenCount: reopenCount + 1,
         previousCompletionDate: previousCompletion,
-        previousStatus: reopenWo.status,
+        previousStatus: String(reopenWo.status ?? ''),
       };
       const { error } = await supabase
         .from('work_orders')
         .update({
           status: 'reopened',
-          problemDescription: reopenDescription.trim().length >= 10 ? reopenDescription.trim() : reopenWo.problemDescription,
+          problemDescription: reopenDescription.trim().length >= 10 ? reopenDescription.trim() : (reopenWo.problemDescription as string) ?? '',
           assignedTechnicianIds: [],
           primaryTechnicianId: null,
           assignedAt: null,
@@ -66,7 +66,7 @@ export default function MyRequestsPage() {
           metadata: newMeta,
           updatedAt: now,
         })
-        .eq('id', reopenWo.id);
+        .eq('id', reopenWo.id as string);
       if (error) throw error;
     },
     onSuccess: () => {

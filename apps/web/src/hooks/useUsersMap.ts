@@ -11,7 +11,8 @@ export function useUsersMap(enabled = true) {
   const query = useQuery({
     queryKey: ['users-list'],
     queryFn: async (): Promise<UserEntry[]> => {
-      const { data, error } = await supabase.rpc('get_users_list');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- RPC exists in DB, may not be in generated types
+      const { data, error } = await (supabase as any).rpc('get_users_list');
       if (error) throw error;
       return ((data ?? []) as Record<string, unknown>[]).map((u) => ({
         id: String(u.id),

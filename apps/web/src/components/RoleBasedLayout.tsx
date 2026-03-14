@@ -34,7 +34,7 @@ const adminNav = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/work-orders', label: 'Work Orders', icon: Wrench },
   { href: '/pm-tasks', label: 'PM Tasks', icon: ClipboardList },
-  { href: '/assets', label: 'Assets', icon: Package },
+  { href: '/assets', label: 'Chargers', icon: Package },
   { href: '/users', label: 'Users', icon: Users },
   { href: '/companies', label: 'Companies', icon: Building2 },
   { href: '/inventory', label: 'Inventory', icon: Boxes },
@@ -57,12 +57,12 @@ const requestorNav = [
 function NavLinks({
   nav,
   pathname,
-  onNavMouseEnter,
+  onPrefetch,
   onLinkClick,
 }: {
   nav: typeof adminNav;
   pathname: string;
-  onNavMouseEnter: (href: string) => void;
+  onPrefetch: (href: string) => void;
   onLinkClick?: () => void;
 }) {
   return (
@@ -75,7 +75,8 @@ function NavLinks({
             href={href}
             prefetch
             onClick={onLinkClick}
-            onMouseEnter={() => onNavMouseEnter(href)}
+            onMouseEnter={() => onPrefetch(href)}
+            onTouchStart={() => onPrefetch(href)}
             className={cn(
               'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 min-h-[44px]',
               isActive
@@ -116,17 +117,18 @@ export function RoleBasedLayout({ children }: { children: React.ReactNode }) {
     };
   }, [mobileMenuOpen]);
 
-  const handleNavMouseEnter = (href: string) => {
+  const handleNavPrefetch = (href: string) => {
     router.prefetch(href);
     prefetchRoute(queryClient, href);
   };
 
   const brand = (
-    <div className="flex h-16 items-center gap-3 border-b border-border px-5 shrink-0">
+      <div className="flex h-16 items-center gap-3 border-b border-border px-5 shrink-0">
       <Image
         src={beElectricLogo}
         alt="Be Electric"
         className="h-9 w-auto object-contain"
+        priority
       />
     </div>
   );
@@ -156,7 +158,7 @@ export function RoleBasedLayout({ children }: { children: React.ReactNode }) {
       <aside className="hidden md:flex w-64 flex-col border-r border-border bg-card shadow-soft">
         {brand}
         <nav className="flex-1 space-y-0.5 overflow-y-auto p-3">
-          <NavLinks nav={nav} pathname={pathname} onNavMouseEnter={handleNavMouseEnter} />
+          <NavLinks nav={nav} pathname={pathname} onPrefetch={handleNavPrefetch} />
         </nav>
         {footerBlock}
       </aside>
@@ -169,6 +171,7 @@ export function RoleBasedLayout({ children }: { children: React.ReactNode }) {
             src={beElectricLogo}
             alt="Be Electric"
             className="h-8 w-auto object-contain"
+            priority
           />
         </div>
         <div className="flex justify-end">
@@ -218,7 +221,7 @@ export function RoleBasedLayout({ children }: { children: React.ReactNode }) {
             <NavLinks
               nav={nav}
               pathname={pathname}
-              onNavMouseEnter={handleNavMouseEnter}
+              onPrefetch={handleNavPrefetch}
               onLinkClick={() => setMobileMenuOpen(false)}
             />
           </nav>

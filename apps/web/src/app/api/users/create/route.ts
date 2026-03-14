@@ -4,18 +4,46 @@ import { NextResponse } from 'next/server';
 /**
  * Creates a user in Supabase Auth AND in public.users so they appear in the app
  * and in Supabase Dashboard → Authentication → Users.
- * Uses the service role key (server-only).
+ * Requires: caller must be an admin/manager (verified via Bearer token).
+ * Uses the service role key (server-only) for user creation.
  */
 export async function POST(request: Request) {
+  // 1. Verify caller is authenticated and is admin/manager
+  const authHeader = request.headers.get('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  const token = authHeader.slice(7);
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !anonKey) {
+    return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 });
+  }
+  const supabaseAuth = createClient(url, anonKey, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  });
+  const { data: { user }, error: userError } = await supabaseAuth.auth.getUser();
+  if (userError || !user?.email) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: adminData } = await (supabaseAuth as any).rpc('get_admin_by_email', {
+    p_email: user.email,
+  });
+  const adminRow = (adminData as { is_admin?: boolean; is_manager?: boolean }[] | null)?.[0];
+  if (!adminRow?.is_admin && !adminRow?.is_manager) {
+    return NextResponse.json({ error: 'Forbidden: admin or manager role required' }, { status: 403 });
+  }
+
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!serviceRoleKey) {
     return NextResponse.json(
-      { error: 'SUPABASE_SERVICE_ROLE_KEY is not set. Add it to .env.local to create users that can sign in.' },
+      { error: 'SUPABASE_SERVICE_ROLE_KEY is not set. Add it to Vercel env vars to create users.' },
       { status: 500 }
     );
   }
 
-  const body = await request.json();
+  const body = await request.json().catch(() => ({}));
   const { email, name, role = 'requestor', companyId = null, department = null } = body as {
     email?: string;
     name?: string;

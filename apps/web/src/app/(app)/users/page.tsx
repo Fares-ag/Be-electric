@@ -24,7 +24,7 @@ function toUserRow(r: Record<string, unknown>): UserRow {
     name: String(r.name ?? ''),
     email: String(r.email ?? ''),
     role: String(r.role ?? 'requestor'),
-    isActive: r.isActive ?? r.is_active !== false,
+    isActive: r.isActive !== false && r.is_active !== false,
     companyId: r.companyId != null ? String(r.companyId) : r.company_id != null ? String(r.company_id) : null,
     department: r.department != null ? String(r.department) : null,
   };
@@ -33,7 +33,7 @@ function toUserRow(r: Record<string, unknown>): UserRow {
 const emptyForm = {
   name: '',
   email: '',
-  role: 'requestor' as const,
+  role: 'requestor',
   isActive: true,
   companyId: '',
   department: '',
@@ -56,7 +56,8 @@ export default function UsersPage() {
   } = useQuery({
     queryKey: ['users'],
     queryFn: async () => {
-      const { data, error: e } = await supabase.rpc('get_users_list');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- get_users_list exists in DB, may not be in generated types
+      const { data, error: e } = await (supabase as any).rpc('get_users_list');
       if (e) throw e;
       return ((data ?? []) as Record<string, unknown>[]).map(toUserRow);
     },
@@ -72,9 +73,15 @@ export default function UsersPage() {
 
   const createMutation = useMutation({
     mutationFn: async (payload: typeof emptyForm) => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error('Not signed in');
       const res = await fetch('/api/users/create', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
           email: payload.email.trim().toLowerCase(),
           name: payload.name.trim(),
@@ -104,7 +111,8 @@ export default function UsersPage() {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, ...payload }: UserRow & { companyId?: string; department?: string }) => {
-      const { error: e } = await supabase.rpc('update_user', {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- RPCs exist in DB, may not be in generated types
+      const { error: e } = await (supabase as any).rpc('update_user', {
         p_id:         id,
         p_name:       payload.name.trim(),
         p_role:       payload.role,
@@ -124,7 +132,8 @@ export default function UsersPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error: e } = await supabase.rpc('delete_user_by_id', { p_id: id });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- RPC exists in DB
+      const { error: e } = await (supabase as any).rpc('delete_user_by_id', { p_id: id });
       if (e) throw e;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['users'] }),

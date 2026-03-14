@@ -29,12 +29,10 @@ npm install
 cp apps/web/.env.example apps/web/.env.local
 ```
 
-Default values (from docs):
-
-```
-NEXT_PUBLIC_SUPABASE_URL=https://sdhqjyjeczrbnvukrmny.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_jymzllhRW_CVJH6pY3qleA_7GRd1ETA
-```
+Edit `.env.local` and set:
+- `NEXT_PUBLIC_SUPABASE_URL` — your Supabase project URL
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` — your Supabase anon (publishable) key
+- `SUPABASE_SERVICE_ROLE_KEY` — (optional) required for admin "Add User"; get from Supabase Dashboard → API
 
 3. Run dev (from repo root):
 
@@ -63,7 +61,7 @@ From `apps/web`: `npm run e2e`. Starts the dev server if needed and runs smoke t
 - `/work-orders` — Work order list with filters
 - `/work-orders/:id` — Work order detail
 - `/pm-tasks` — PM task list
-- `/assets` — Asset list
+- `/assets` — Charger list
 - `/users` — User management
 - `/companies` — Company management
 - `/inventory` — Inventory items, low stock
@@ -81,12 +79,33 @@ From `apps/web`: `npm run e2e`. Starts the dev server if needed and runs smoke t
 - `/notification-settings` — Notification prefs
 - `/notifications` — Notification list
 
-## Demo credentials
+## Demo credentials (local/dev only)
 
-| Role | Email | Password |
-|------|-------|----------|
-| Admin | admin@qauto.com | demo123 |
-| Requestor | requestor@qauto.com | demo123 |
+For local development you can create users in Supabase Auth. Example:
+- Admin: ensure email is in `public.admin_users` with `is_admin = true`
+- Requestor: user with `role = 'requestor'` in `public.users`
+
+**Production:** Do not use demo credentials. Create real users and enforce strong passwords.
+
+## Deploy to Vercel
+
+1. **Connect repo** to [Vercel](https://vercel.com). Vercel auto-detects Next.js and uses the root `package.json` build.
+
+2. **Set environment variables** in Vercel → Project → Settings → Environment Variables:
+
+   | Variable | Required | Notes |
+   |----------|----------|-------|
+   | `NEXT_PUBLIC_SUPABASE_URL` | Yes | Supabase project URL |
+   | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Supabase anon key |
+   | `SUPABASE_SERVICE_ROLE_KEY` | For Add User | Required if admins create users; keep secret |
+
+3. **Root directory:** Leave as `.` (repo root). The build runs `npm run build` from root (Turborepo).
+
+4. **Root directory:** Use `apps/web` and enable **Include source files outside of the Root Directory** so Vercel can access `packages/` (shared UI and Supabase packages). Vercel will run the build from `apps/web` and Next.js will transpile the local packages.
+
+5. **Output directory:** Auto-detected; no override needed.
+
+6. After deploy, add your production URL in Supabase Dashboard → **Authentication → URL Configuration** (Site URL, Redirect URLs).
 
 ## Local full stack (Docker + Supabase CLI)
 
@@ -178,7 +197,9 @@ If you sign in with Supabase Auth but don't have a matching row in `public.users
 ## Security & keys
 
 - **Do not commit real API keys.** Use `.env.local` (gitignored) and keep `NEXT_PUBLIC_SUPABASE_ANON_KEY` and any secret keys out of the repo. If keys were ever committed, rotate them in the Supabase dashboard and update local env.
-- Next.js is kept at a patched version (14.2.35+) for security fixes.
+- Next.js is kept at 14.2.35+ for security patches.
+- **Production:** The `/api/users/create` route requires an admin/manager Bearer token. Never expose `SUPABASE_SERVICE_ROLE_KEY` to the client.
+- **npm audit:** Run `npm audit` periodically. The puppeteer dependency (used for `scripts/html-to-pdf.mjs`) is dev/build-time only and does not run on Vercel.
 
 ## Design system
 
