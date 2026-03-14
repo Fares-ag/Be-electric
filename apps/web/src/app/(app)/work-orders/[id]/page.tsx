@@ -116,6 +116,8 @@ const WORK_ORDER_STATUSES = [
   'reopened',
 ] as const;
 
+const STATUSES_REQUIRING_REASON = ['completed', 'closed', 'cancelled', 'reopened'] as const;
+
 export default function WorkOrderDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -177,23 +179,71 @@ export default function WorkOrderDetailPage() {
     updateAssignees.mutate(current.filter((id) => id !== userId));
   };
 
+  const [statusModalOpen, setStatusModalOpen] = useState(false);
+  const [statusModalTarget, setStatusModalTarget] = useState<string | null>(null);
+  const [statusReason, setStatusReason] = useState('');
+  const [statusReasonError, setStatusReasonError] = useState<string | null>(null);
+
   const updateStatusMutation = useMutation({
-    mutationFn: async (newStatus: string) => {
+    mutationFn: async ({
+      newStatus,
+      reason,
+    }: {
+      newStatus: string;
+      reason?: string;
+    }) => {
+      const now = new Date().toISOString();
       const updates: Record<string, unknown> = {
         status: newStatus,
-        updatedAt: new Date().toISOString(),
+        updatedAt: now,
       };
       if (['completed', 'closed'].includes(newStatus)) {
-        updates.completedAt = new Date().toISOString();
-        if (newStatus === 'closed') updates.closedAt = new Date().toISOString();
+        updates.completedAt = now;
+        if (newStatus === 'closed') updates.closedAt = now;
+      }
+      if (newStatus === 'reopened') {
+        updates.assignedTechnicianIds = [];
+        updates.primaryTechnicianId = null;
+        updates.assignedAt = null;
+        updates.startedAt = null;
+        updates.completedAt = null;
+        updates.closedAt = null;
+        if (reason) {
+          const raw = wo?.metadata as Record<string, unknown> | undefined;
+          const prevMeta = typeof raw === 'object' && raw !== null ? raw : {};
+          const count = Number(prevMeta.reopenCount ?? prevMeta.reopen_count ?? 0);
+          updates.metadata = {
+            ...prevMeta,
+            reopenedAt: now,
+            reopenedBy: user?.id ?? null,
+            reopenReason: reason,
+            reopenCount: count + 1,
+            previousCompletionDate: wo?.completedAt ?? wo?.closedAt ?? null,
+            previousStatus: wo?.status,
+          };
+        }
+      }
+      if (reason) {
+        const existing = parseActivityHistory(wo?.activityHistory);
+        updates.activityHistory = [
+          ...existing,
+          { at: now, type: newStatus, note: reason },
+        ];
       }
       const { error } = await supabase.from('work_orders').update(updates).eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => {
+      setStatusModalOpen(false);
+      setStatusModalTarget(null);
+      setStatusReason('');
+      setStatusReasonError(null);
       queryClient.invalidateQueries({ queryKey: ['work-order', id] });
       queryClient.invalidateQueries({ queryKey: ['work-orders'] });
       queryClient.invalidateQueries({ queryKey: ['my-work-orders'] });
+    },
+    onError: (err: Error) => {
+      setStatusReasonError(err.message);
     },
   });
 
@@ -295,7 +345,17 @@ export default function WorkOrderDetailPage() {
             {isAdminOrManager && (
               <select
                 value={wo.status}
-                onChange={(e) => updateStatusMutation.mutate(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (STATUSES_REQUIRING_REASON.includes(val as typeof STATUSES_REQUIRING_REASON[number])) {
+                    setStatusModalTarget(val);
+                    setStatusReason('');
+                    setStatusReasonError(null);
+                    setStatusModalOpen(true);
+                  } else {
+                    updateStatusMutation.mutate({ newStatus: val });
+                  }
+                }}
                 disabled={updateStatusMutation.isPending}
                 className="rounded-md border border-input bg-background px-3 py-1.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20"
               >
@@ -320,6 +380,71 @@ export default function WorkOrderDetailPage() {
           </div>
         </div>
       </div>
+
+      <Modal
+        open={statusModalOpen}
+        onClose={() => {
+          setStatusModalOpen(false);
+          setStatusModalTarget(null);
+          setStatusReason('');
+          setStatusReasonError(null);
+        }}
+        title={statusModalTarget ? `Reason for ${statusModalTarget.replace(/([A-Z])/g, ' $1').trim()}` : ''}
+      >
+        {statusModalTarget && (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Please provide a reason for changing the status to &quot;{statusModalTarget.replace(/([A-Z])/g, ' $1').trim()}&quot;.
+            </p>
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1.5">
+                Reason <span className="text-destructive">*</span>
+              </label>
+              <textarea
+                value={statusReason}
+                onChange={(e) => setStatusReason(e.target.value)}
+                placeholder="At least 10 characters"
+                rows={3}
+                className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+              />
+            </div>
+            {statusReasonError && (
+              <p className="text-sm text-destructive">{statusReasonError}</p>
+            )}
+          </div>
+        )}
+        {statusModalTarget && (
+          <ModalActions>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setStatusModalOpen(false);
+                setStatusModalTarget(null);
+                setStatusReason('');
+                setStatusReasonError(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                setStatusReasonError(null);
+                if (statusReason.trim().length < 10) {
+                  setStatusReasonError('Reason must be at least 10 characters');
+                  return;
+                }
+                updateStatusMutation.mutate({
+                  newStatus: statusModalTarget!,
+                  reason: statusReason.trim(),
+                });
+              }}
+              disabled={updateStatusMutation.isPending || statusReason.trim().length < 10}
+            >
+              {updateStatusMutation.isPending ? 'Updating…' : 'Update status'}
+            </Button>
+          </ModalActions>
+        )}
+      </Modal>
 
       <Modal
         open={reopenOpen}
