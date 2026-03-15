@@ -681,6 +681,7 @@ export type Database = {
       }
       work_orders: {
         Row: {
+          activityHistory: Json | null
           actualCost: number | null
           afterPhotoPath: string | null
           assetId: string | null
@@ -735,6 +736,7 @@ export type Database = {
           updatedAt: string
         }
         Insert: {
+          activityHistory?: Json | null
           actualCost?: number | null
           afterPhotoPath?: string | null
           assetId?: string | null
@@ -789,6 +791,7 @@ export type Database = {
           updatedAt?: string
         }
         Update: {
+          activityHistory?: Json | null
           actualCost?: number | null
           afterPhotoPath?: string | null
           assetId?: string | null

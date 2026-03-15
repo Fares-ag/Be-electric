@@ -210,6 +210,7 @@ export default function UsersPage() {
       isActive: u.isActive,
       companyId: u.companyId ?? '',
       department: u.department ?? '',
+      password: '',
     });
     setError(null);
     setModalOpen(true);

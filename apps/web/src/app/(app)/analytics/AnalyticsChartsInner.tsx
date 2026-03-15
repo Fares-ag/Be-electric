@@ -22,11 +22,8 @@ const gridStroke = 'rgb(var(--border))';
 
 type ChartData = { name: string; value: number }[];
 
-function renderCustomPieLegend({
-  payload,
-}: {
-  payload?: { value?: string; name?: string; color: string }[];
-}) {
+function renderCustomPieLegend(props: { payload?: Array<{ value?: string; name?: string; color?: string }> }) {
+  const { payload } = props;
   if (!payload?.length) return null;
   return (
     <ul className="flex flex-wrap justify-center gap-x-4 gap-y-1 mt-3 text-sm text-muted-foreground">
@@ -34,7 +31,7 @@ function renderCustomPieLegend({
         <li key={i} className="flex items-center gap-2">
           <span
             className="inline-block w-3 h-3 rounded-full shrink-0"
-            style={{ backgroundColor: entry.color }}
+            style={{ backgroundColor: entry.color ?? 'transparent' }}
           />
           <span>{entry.name ?? entry.value}</span>
         </li>
