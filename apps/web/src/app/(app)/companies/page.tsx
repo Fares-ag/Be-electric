@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { Pagination } from '@/components/Pagination';
 import { SearchFilterBar } from '@/components/SearchFilterBar';
@@ -35,12 +36,29 @@ export default function CompaniesPage() {
 
   const { data: companies, isLoading } = useQuery({
     queryKey: ['companies'],
+    staleTime: 60 * 1000,
     queryFn: async () => {
       const { data } = await supabase
         .from('companies')
         .select('*')
         .order('name');
       return (data ?? []) as Company[];
+    },
+  });
+
+  const { data: chargerCountByCompany } = useQuery({
+    queryKey: ['assets', 'charger-count-by-company'],
+    staleTime: 60 * 1000,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('assets')
+        .select('companyId');
+      const list = (data ?? []) as { companyId: string | null }[];
+      return list.reduce<Record<string, number>>((acc, a) => {
+        const id = a.companyId ?? '_none';
+        acc[id] = (acc[id] ?? 0) + 1;
+        return acc;
+      }, {});
     },
   });
 
@@ -177,6 +195,7 @@ export default function CompaniesPage() {
               <thead>
                 <tr className="border-b border-[#E0E0E0]">
                   <th className="text-left py-3 px-4 font-semibold">Name</th>
+                  <th className="text-left py-3 px-4 font-semibold">Chargers</th>
                   <th className="text-left py-3 px-4 font-semibold">Email</th>
                   <th className="text-left py-3 px-4 font-semibold">Phone</th>
                   <th className="text-left py-3 px-4 font-semibold">Address</th>
@@ -184,9 +203,19 @@ export default function CompaniesPage() {
                 </tr>
               </thead>
               <tbody>
-                {paginatedItems.map((c) => (
+                {paginatedItems.map((c) => {
+                  const chargerCount = chargerCountByCompany?.[c.id] ?? 0;
+                  return (
                   <tr key={c.id} className="border-b border-[#E0E0E0]">
                     <td className="py-3 px-4 font-medium">{c.name}</td>
+                    <td className="py-3 px-4">
+                      <Link
+                        href={chargerCount > 0 ? `/assets?companyId=${c.id}` : '/assets'}
+                        className="text-primary hover:underline font-medium"
+                      >
+                        {chargerCount}
+                      </Link>
+                    </td>
                     <td className="py-3 px-4">{c.contactEmail ?? '-'}</td>
                     <td className="py-3 px-4">{c.contactPhone ?? '-'}</td>
                     <td className="py-3 px-4 max-w-[200px] truncate">{c.address ?? '-'}</td>
@@ -204,7 +233,7 @@ export default function CompaniesPage() {
                       </Button>
                     </td>
                   </tr>
-                ))}
+                );})}
               </tbody>
             </table>
           </div>

@@ -15,6 +15,7 @@
     "supabase:start": "npx supabase start",
     "supabase:stop": "npx supabase stop",
     "supabase:status": "npx supabase status",
+    "supabase:deploy-push": "npx supabase functions deploy send-push-notification --no-verify-jwt",
     "schema:types": "node scripts/schema-pull.mjs",
     "schema:pull": "node scripts/schema-pull.mjs --schema",
     "e2e": "npm run e2e --workspace=@beelectric/web",
@@ -22,6 +23,7 @@
   },
   "devDependencies": {
     "puppeteer": "^23.11.1",
+    "supabase": "^2.45.0",
     "turbo": "^2.3.0"
   },
   "packageManager": "npm@10.2.0",

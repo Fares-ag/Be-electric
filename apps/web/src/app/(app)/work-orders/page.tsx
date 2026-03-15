@@ -20,6 +20,7 @@ export default function WorkOrdersPage() {
 
   const { data: workOrders, isLoading, error } = useQuery({
     queryKey: ['work-orders', statusFilter],
+    staleTime: 60 * 1000,
     queryFn: async () => {
       let q = supabase
         .from('work_orders')

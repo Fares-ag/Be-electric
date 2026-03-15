@@ -37,6 +37,7 @@ export default function NotificationsPage() {
 
   const { data: notifications, isLoading } = useQuery({
     queryKey: ['notifications', user?.id],
+    staleTime: 60 * 1000,
     queryFn: async (): Promise<NotificationRow[]> => {
       if (!user) return [];
       const { data } = await supabase

@@ -78,13 +78,13 @@ function NavLinks({
             onMouseEnter={() => onPrefetch(href)}
             onTouchStart={() => onPrefetch(href)}
             className={cn(
-              'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 min-h-[44px]',
+              'flex items-center gap-4 rounded-lg px-4 py-3 text-sm font-medium transition-all duration-200 min-h-[48px]',
               isActive
                 ? 'bg-primary text-primary-foreground shadow-button-primary'
                 : 'text-muted-foreground hover:bg-muted hover:text-foreground'
             )}
           >
-            <Icon className="h-4 w-4 shrink-0" />
+            <Icon className="h-[1.125rem] w-[1.125rem] shrink-0" />
             {label}
           </Link>
         );
@@ -123,7 +123,7 @@ export function RoleBasedLayout({ children }: { children: React.ReactNode }) {
   };
 
   const brand = (
-      <div className="flex h-16 items-center gap-3 border-b border-border px-5 shrink-0">
+      <div className="flex min-h-[4.5rem] items-center gap-3 border-b border-border px-5 py-4 shrink-0">
       <Image
         src={beElectricLogo}
         alt="Be Electric"
@@ -134,14 +134,14 @@ export function RoleBasedLayout({ children }: { children: React.ReactNode }) {
   );
 
   const footerBlock = (
-    <div className="border-t border-border bg-muted/30 p-4 shrink-0">
+    <div className="border-t border-border bg-muted/30 p-5 shrink-0">
       <p className="truncate text-xs font-medium text-foreground">{user?.email}</p>
       <p className="truncate text-xs text-muted-foreground capitalize">{user?.role}</p>
       <button
         type="button"
         onClick={() => signOut()}
         className={cn(
-          'mt-3 flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium min-h-[44px]',
+          'mt-4 flex w-full items-center gap-4 rounded-lg px-4 py-3 text-sm font-medium min-h-[48px]',
           'text-muted-foreground hover:bg-muted hover:text-foreground',
           'transition-colors duration-200'
         )}
@@ -157,7 +157,7 @@ export function RoleBasedLayout({ children }: { children: React.ReactNode }) {
       {/* Desktop sidebar: hidden on mobile */}
       <aside className="hidden md:flex w-64 flex-col border-r border-border bg-card shadow-soft">
         {brand}
-        <nav className="flex-1 space-y-0.5 overflow-y-auto p-3">
+        <nav className="flex-1 space-y-2 overflow-y-auto p-4 pt-5">
           <NavLinks nav={nav} pathname={pathname} onPrefetch={handleNavPrefetch} />
         </nav>
         {footerBlock}
@@ -217,7 +217,7 @@ export function RoleBasedLayout({ children }: { children: React.ReactNode }) {
               <X className="h-5 w-5" />
             </button>
           </div>
-          <nav className="flex-1 space-y-0.5 overflow-y-auto p-3">
+          <nav className="flex-1 space-y-2 overflow-y-auto p-4 pt-5">
             <NavLinks
               nav={nav}
               pathname={pathname}

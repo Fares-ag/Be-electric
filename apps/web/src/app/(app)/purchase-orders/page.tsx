@@ -22,6 +22,7 @@ export default function PurchaseOrdersPage() {
 
   const { data: pos, isLoading } = useQuery({
     queryKey: ['purchase-orders'],
+    staleTime: 60 * 1000,
     queryFn: async () => {
       const { data } = await supabase
         .from('purchase_orders')

@@ -129,6 +129,7 @@ export default function WorkOrderDetailPage() {
 
   const { data: wo, isLoading } = useQuery({
     queryKey: ['work-order', id],
+    staleTime: 60 * 1000,
     queryFn: async (): Promise<WorkOrderDetail | null> => {
       const { data } = await supabase
         .from('work_orders')
@@ -158,6 +159,34 @@ export default function WorkOrderDetailPage() {
         })
         .eq('id', id);
       if (error) throw error;
+      if (technicianIds.length > 0) {
+        const ticketNumber = wo?.ticketNumber ?? id;
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (token) {
+          try {
+            const pushRes = await fetch('/api/notifications/push', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                type: 'work_order_assigned',
+                external_user_ids: technicianIds,
+                title: 'New Work Order Assigned',
+                message: `Work order #${ticketNumber} has been assigned to you.`,
+                data: { work_order_id: id, ticket_number: String(ticketNumber) },
+              }),
+            });
+            if (!pushRes.ok) {
+              console.warn('[push] notification failed:', pushRes.status, await pushRes.text());
+            }
+          } catch (e) {
+            console.warn('[push] notification error:', e);
+          }
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['work-order', id] });

@@ -10,12 +10,14 @@ import './globals.css';
 
 const inter = Inter({
   subsets: ['latin'],
+  weight: ['400', '500', '600'],
   variable: '--font-sans',
   display: 'swap',
   preload: true,
 });
 const plusJakarta = Plus_Jakarta_Sans({
   subsets: ['latin'],
+  weight: ['500', '600', '700'],
   variable: '--font-display',
   display: 'swap',
   preload: true,
@@ -90,6 +92,24 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  useEffect(() => {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    if (typeof url !== 'string') return;
+    try {
+      const origin = new URL(url).origin;
+      const link = document.createElement('link');
+      link.rel = 'preconnect';
+      link.href = origin;
+      document.head.appendChild(link);
+      const dns = document.createElement('link');
+      dns.rel = 'dns-prefetch';
+      dns.href = origin;
+      document.head.appendChild(dns);
+    } catch {
+      // ignore invalid URL
+    }
+  }, []);
+
   return (
     <html lang="en" className={`${inter.variable} ${plusJakarta.variable}`}>
       <body className="font-sans">

@@ -9,6 +9,7 @@ import { Wrench, ClipboardList, AlertTriangle, Package } from 'lucide-react';
 export default function DashboardPage() {
   const { data: workOrders } = useQuery({
     queryKey: ['work-orders-summary'],
+    staleTime: 60 * 1000,
     queryFn: async () => {
       const { data } = await supabase
         .from('work_orders')
@@ -20,6 +21,7 @@ export default function DashboardPage() {
 
   const { data: pmTasks } = useQuery({
     queryKey: ['pm-tasks-overdue'],
+    staleTime: 60 * 1000,
     queryFn: async () => {
       const { data } = await supabase
         .from('pm_tasks')
@@ -31,6 +33,7 @@ export default function DashboardPage() {
 
   const { data: inventory } = useQuery({
     queryKey: ['inventory-low-stock'],
+    staleTime: 60 * 1000,
     queryFn: async () => {
       const { data } = await supabase
         .from('inventory_items')

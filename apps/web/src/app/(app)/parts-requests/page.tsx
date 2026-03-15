@@ -50,6 +50,7 @@ export default function PartsRequestsPage() {
 
   const { data: requests, isLoading } = useQuery({
     queryKey: ['parts-requests'],
+    staleTime: 60 * 1000,
     queryFn: async () => {
       const { data } = await supabase
         .from('parts_requests')

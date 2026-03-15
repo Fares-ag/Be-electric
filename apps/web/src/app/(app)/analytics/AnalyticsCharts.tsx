@@ -23,6 +23,20 @@ const RechartsSection = dynamic(
 
 type ChartData = { name: string; value: number }[];
 
-export function AnalyticsCharts({ statusData }: { statusData: ChartData }) {
-  return <RechartsSection statusData={statusData} />;
+export function AnalyticsCharts({
+  statusData,
+  priorityData,
+  pmStatusData,
+}: {
+  statusData: ChartData;
+  priorityData: ChartData;
+  pmStatusData: ChartData;
+}) {
+  return (
+    <RechartsSection
+      statusData={statusData}
+      priorityData={priorityData}
+      pmStatusData={pmStatusData}
+    />
+  );
 }

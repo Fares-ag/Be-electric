@@ -43,6 +43,7 @@ export default function PMTasksPage() {
 
   const { data: pmTasks, isLoading } = useQuery({
     queryKey: ['pm-tasks'],
+    staleTime: 60 * 1000,
     queryFn: async () => {
       const { data } = await supabase
         .from('pm_tasks')
@@ -65,9 +66,11 @@ export default function PMTasksPage() {
   const createMutation = useMutation({
     mutationFn: async (payload: typeof emptyForm) => {
       const freq = FREQUENCIES.find((f) => f.value === payload.frequency) ?? FREQUENCIES[2];
+      const taskId = crypto.randomUUID();
+      const taskName = payload.taskName.trim().slice(0, 50);
       const { error: e } = await supabase.from('pm_tasks').insert({
-        id: crypto.randomUUID(),
-        taskName: payload.taskName.trim().slice(0, 50),
+        id: taskId,
+        taskName,
         assetId: payload.assetId.trim(),
         description: payload.description.trim() || null,
         frequency: payload.frequency,
@@ -80,6 +83,26 @@ export default function PMTasksPage() {
         metadata: user?.id ? { createdById: user.id } : null,
       });
       if (e) throw e;
+      if (payload.assignedTechnicianIds.length > 0) {
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (token) {
+          fetch('/api/notifications/push', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              type: 'pm_task_assigned',
+              external_user_ids: payload.assignedTechnicianIds,
+              title: 'PM task assigned',
+              message: `"${taskName}" has been assigned to you.`,
+              data: { pm_task_id: taskId, task_name: taskName },
+            }),
+          }).catch(() => { /* best-effort */ });
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pm-tasks'] });

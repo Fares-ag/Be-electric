@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { Pagination } from '@/components/Pagination';
 import { SearchFilterBar } from '@/components/SearchFilterBar';
@@ -37,6 +39,8 @@ const emptyForm = {
 
 export default function AssetsPage() {
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
+  const companyIdFromUrl = searchParams.get('companyId');
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Asset | null>(null);
   const [form, setForm] = useState(emptyForm);
@@ -45,6 +49,7 @@ export default function AssetsPage() {
 
   const { data: assets, isLoading } = useQuery({
     queryKey: ['assets'],
+    staleTime: 60 * 1000,
     queryFn: async () => {
       const { data } = await supabase
         .from('assets')
@@ -64,7 +69,10 @@ export default function AssetsPage() {
 
   const [search, setSearch] = useState('');
   const filtered = useMemo(() => {
-    const list = assets ?? [];
+    let list = assets ?? [];
+    if (companyIdFromUrl) {
+      list = list.filter((a) => (a.companyId ?? null) === companyIdFromUrl);
+    }
     if (!search.trim()) return list;
     const q = search.trim().toLowerCase();
     return list.filter(
@@ -74,12 +82,16 @@ export default function AssetsPage() {
         (a.company?.name ?? '').toLowerCase().includes(q) ||
         (a.assetType ?? '').toLowerCase().includes(q)
     );
-  }, [assets, search]);
+  }, [assets, search, companyIdFromUrl]);
+
+  const filteredByCompanyName = companyIdFromUrl
+    ? companies?.find((c) => c.id === companyIdFromUrl)?.name
+    : null;
 
   const { page, setPage, pageSize, setPageSize, paginatedItems, totalItems } =
     usePagination(filtered);
 
-  useEffect(() => setPage(1), [search, setPage]);
+  useEffect(() => setPage(1), [search, companyIdFromUrl, setPage]);
 
   const createMutation = useMutation({
     mutationFn: async (payload: typeof emptyForm) => {
@@ -197,6 +209,13 @@ export default function AssetsPage() {
           <Button onClick={openAdd} className="shrink-0">Add Charger</Button>
         </div>
       </div>
+      {filteredByCompanyName && (
+        <p className="text-sm text-muted-foreground">
+          Showing chargers for <span className="font-medium text-foreground">{filteredByCompanyName}</span>
+          {' · '}
+          <Link href="/assets" className="text-primary hover:underline">Show all</Link>
+        </p>
+      )}
       <Card>
         {isLoading ? (
           <p className="text-[#757575]">Loading...</p>

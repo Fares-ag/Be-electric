@@ -9,6 +9,7 @@ export default function RequestorAnalyticsPage() {
   const user = useAuthStore((s) => s.user);
   const { data: workOrders } = useQuery({
     queryKey: ['requestor-analytics', user?.id],
+    staleTime: 60 * 1000,
     queryFn: async (): Promise<{ status: string }[]> => {
       if (!user) return [];
       const { data } = await supabase

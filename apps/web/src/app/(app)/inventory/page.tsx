@@ -43,6 +43,7 @@ export default function InventoryPage() {
 
   const { data: items, isLoading } = useQuery({
     queryKey: ['inventory'],
+    staleTime: 60 * 1000,
     queryFn: async () => {
       const { data } = await supabase
         .from('inventory_items')

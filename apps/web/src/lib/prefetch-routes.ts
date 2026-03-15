@@ -165,16 +165,28 @@ export async function prefetchRoute(
         break;
       }
       case '/analytics': {
-        await queryClient.prefetchQuery({
-          queryKey: ['analytics-work-orders'],
-          queryFn: async () => {
-            const { data } = await supabase
-              .from('work_orders')
-              .select('status, priority');
-            return data ?? [];
-          },
-          staleTime: 60 * 1000,
-        });
+        await Promise.all([
+          queryClient.prefetchQuery({
+            queryKey: ['analytics-work-orders'],
+            queryFn: async () => {
+              const { data } = await supabase
+                .from('work_orders')
+                .select('id, status, priority, createdAt, completedAt, closedAt');
+              return data ?? [];
+            },
+            staleTime: 60 * 1000,
+          }),
+          queryClient.prefetchQuery({
+            queryKey: ['analytics-pm-tasks'],
+            queryFn: async () => {
+              const { data } = await supabase
+                .from('pm_tasks')
+                .select('id, status, nextDueDate');
+              return data ?? [];
+            },
+            staleTime: 60 * 1000,
+          }),
+        ]);
         break;
       }
       default:

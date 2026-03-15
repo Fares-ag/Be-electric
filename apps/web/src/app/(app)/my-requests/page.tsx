@@ -21,6 +21,7 @@ export default function MyRequestsPage() {
   const queryClient = useQueryClient();
   const { data: workOrders, isLoading } = useQuery({
     queryKey: ['my-work-orders', user?.id],
+    staleTime: 60 * 1000,
     queryFn: async () => {
       if (!user) return [];
       const { data } = await supabase

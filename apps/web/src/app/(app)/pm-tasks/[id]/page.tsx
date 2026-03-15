@@ -32,6 +32,7 @@ export default function PMTaskDetailPage() {
 
   const { data: task, isLoading } = useQuery({
     queryKey: ['pm-task', id],
+    staleTime: 60 * 1000,
     queryFn: async (): Promise<PMTaskDetail | null> => {
       const { data } = await supabase
         .from('pm_tasks')
@@ -55,6 +56,26 @@ export default function PMTaskDetailPage() {
         .update({ assignedTechnicianIds: technicianIds, updatedAt: new Date().toISOString() })
         .eq('id', id);
       if (error) throw error;
+      if (technicianIds.length > 0 && task) {
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (token) {
+          fetch('/api/notifications/push', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              type: 'pm_task_assigned',
+              external_user_ids: technicianIds,
+              title: 'PM task assigned',
+              message: `"${task.taskName}" has been assigned to you.`,
+              data: { pm_task_id: id, task_name: task.taskName },
+            }),
+          }).catch(() => { /* best-effort */ });
+        }
+      }
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['pm-task', id] }),
   });
