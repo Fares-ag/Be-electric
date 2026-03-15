@@ -128,6 +128,30 @@ export async function prefetchRoute(
             },
             staleTime: 60 * 1000,
           }),
+          queryClient.prefetchQuery({
+            queryKey: ['dashboard-recent-activity'],
+            queryFn: async () => {
+              const [woRes, pmRes] = await Promise.all([
+                supabase
+                  .from('work_orders')
+                  .select('id, ticketNumber, status, createdAt, updatedAt, activityHistory')
+                  .order('updatedAt', { ascending: false })
+                  .limit(25),
+                supabase
+                  .from('pm_tasks')
+                  .select('id, taskName, status, lastCompletedDate')
+                  .eq('status', 'completed')
+                  .not('lastCompletedDate', 'is', null)
+                  .order('lastCompletedDate', { ascending: false })
+                  .limit(15),
+              ]);
+              return {
+                workOrders: (woRes.data ?? []) as unknown[],
+                pmTasks: (pmRes.data ?? []) as unknown[],
+              };
+            },
+            staleTime: 60 * 1000,
+          }),
         ]);
         break;
       }

@@ -28,6 +28,7 @@ const queryClient = new QueryClient({
     queries: {
       staleTime: 60 * 1000, // 1 min: avoid refetch on every nav
       gcTime: 5 * 60 * 1000, // 5 min (formerly cacheTime)
+      refetchOnWindowFocus: false, // reduce unnecessary refetches when switching tabs
     },
   },
 });

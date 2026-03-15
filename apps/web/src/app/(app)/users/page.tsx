@@ -60,6 +60,7 @@ export default function UsersPage() {
     refetch,
   } = useQuery({
     queryKey: ['users'],
+    staleTime: 60 * 1000,
     queryFn: async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- get_users_list exists in DB, may not be in generated types
       const { data, error: e } = await (supabase as any).rpc('get_users_list');
@@ -70,6 +71,7 @@ export default function UsersPage() {
 
   const { data: companies } = useQuery({
     queryKey: ['companies'],
+    staleTime: 60 * 1000,
     queryFn: async () => {
       const { data } = await supabase.from('companies').select('id, name').order('name');
       return (data ?? []) as { id: string; name: string }[];

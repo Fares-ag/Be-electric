@@ -55,6 +55,7 @@ export default function PMTasksPage() {
 
   const { data: assets } = useQuery({
     queryKey: ['assets'],
+    staleTime: 60 * 1000,
     queryFn: async () => {
       const { data } = await supabase.from('assets').select('id, name').order('name');
       return (data ?? []) as { id: string; name: string }[];

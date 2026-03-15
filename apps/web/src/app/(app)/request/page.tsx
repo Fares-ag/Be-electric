@@ -39,6 +39,7 @@ export default function RequestMaintenancePage() {
 
   const { data: assets } = useQuery({
     queryKey: ['assets', 'request', isRequestor ? companyId : 'all'],
+    staleTime: 60 * 1000,
     queryFn: async () => {
       if (isRequestor && !companyId) return [];
       let q = supabase.from('assets').select('id, name, location').order('name');
