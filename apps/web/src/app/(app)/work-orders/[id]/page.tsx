@@ -143,6 +143,7 @@ export default function WorkOrderDetailPage() {
   });
 
   const [assignError, setAssignError] = useState<string | null>(null);
+  const [pushWarning, setPushWarning] = useState<string | null>(null);
   const assignedIds = wo?.assignedTechnicianIds ?? [];
   const { users: allUsers } = useUsersMap(!!wo);
   const assignedUsers = allUsers.filter((u) => assignedIds.includes(u.id));
@@ -150,6 +151,7 @@ export default function WorkOrderDetailPage() {
   const updateAssignees = useMutation({
     mutationFn: async (technicianIds: string[]) => {
       setAssignError(null);
+      setPushWarning(null);
       const { error } = await supabase
         .from('work_orders')
         .update({
@@ -163,28 +165,38 @@ export default function WorkOrderDetailPage() {
         const ticketNumber = wo?.ticketNumber ?? id;
         const { data: { session } } = await supabase.auth.getSession();
         const token = session?.access_token;
-        if (token) {
-          try {
-            const pushRes = await fetch('/api/notifications/push', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${token}`,
-              },
-              body: JSON.stringify({
-                type: 'work_order_assigned',
-                external_user_ids: technicianIds,
-                title: 'New Work Order Assigned',
-                message: `Work order #${ticketNumber} has been assigned to you.`,
-                data: { work_order_id: id, ticket_number: String(ticketNumber) },
-              }),
-            });
-            if (!pushRes.ok) {
-              console.warn('[push] notification failed:', pushRes.status, await pushRes.text());
-            }
-          } catch (e) {
-            console.warn('[push] notification error:', e);
+        if (!token) {
+          setPushWarning(
+            'Assignment saved. Push notification was not sent (session unavailable). Sign in again and retry if needed.'
+          );
+          return;
+        }
+        try {
+          const pushRes = await fetch('/api/notifications/push', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              type: 'work_order_assigned',
+              external_user_ids: technicianIds,
+              title: 'New Work Order Assigned',
+              message: `Work order #${ticketNumber} has been assigned to you.`,
+              data: { work_order_id: id, ticket_number: String(ticketNumber) },
+            }),
+          });
+          if (!pushRes.ok) {
+            const data = await pushRes.json().catch(() => ({})) as { error?: string; code?: string; hint?: string };
+            const msg = data.code === 'MISSING_SERVICE_ROLE_KEY'
+              ? 'Assignment saved. Push not sent: add SUPABASE_SERVICE_ROLE_KEY in Vercel → Project → Settings → Environment Variables, then redeploy.'
+              : data.hint
+                ? `Assignment saved. Push failed: ${data.hint}`
+                : data.error ?? `Push failed (${pushRes.status}).`;
+            setPushWarning(msg);
           }
+        } catch (e) {
+          setPushWarning('Assignment saved. Push notification request failed. Check network and try again.');
         }
       }
     },
@@ -566,6 +578,11 @@ export default function WorkOrderDetailPage() {
               {assignError && (
                 <p className="text-sm text-destructive bg-destructive/10 px-2 py-1.5 rounded">
                   {assignError}
+                </p>
+              )}
+              {pushWarning && (
+                <p className="text-sm text-amber-700 dark:text-amber-400 bg-amber-500/10 px-2 py-1.5 rounded border border-amber-500/30">
+                  {pushWarning}
                 </p>
               )}
               {assignedUsers && assignedUsers.length > 0 ? (

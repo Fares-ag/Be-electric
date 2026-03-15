@@ -34,4 +34,14 @@ Notifications are best-effort: if the push service fails, the assign action stil
 - Supabase Edge Function `send-push-notification` deployed and secrets set (`ONE_SIGNAL_APP_ID`, `ONE_SIGNAL_REST_API_KEY`).
 - Flutter technician app configured with OneSignal and `OneSignal.login(userId)` on login so devices are linked to `public.users.id`.
 
+## Production (Vercel)
+
+For push to work in production you must:
+
+1. **Add `SUPABASE_SERVICE_ROLE_KEY`** in Vercel: Project → Settings → Environment Variables. Use the same Supabase project as `NEXT_PUBLIC_SUPABASE_URL`. Get the key from Supabase Dashboard → Project Settings → API → `service_role` (secret).
+2. **Redeploy** after adding the variable so the server can call the Edge Function.
+3. Ensure the **Edge Function is deployed to that same Supabase project** (e.g. `supabase functions deploy send-push-notification`).
+
+If the key is missing, assigning a work order or PM task will still save, but the app will show an amber message under “Assigned technicians” explaining that push was not sent and to add the key in Vercel.
+
 See the main setup doc (e.g. **OneSignal Push Notifications Setup**) for dashboard, Flutter, and Edge Function setup.

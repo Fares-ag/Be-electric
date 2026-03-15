@@ -52,41 +52,66 @@ export async function POST(request: Request) {
     );
   }
 
+  // Edge Functions are invoked with the service role key. In production (Vercel) you must
+  // add SUPABASE_SERVICE_ROLE_KEY in Project Settings → Environment Variables.
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!serviceRoleKey) {
+    console.warn('[push] SUPABASE_SERVICE_ROLE_KEY is not set (e.g. in Vercel env). Push will not work.');
     return NextResponse.json(
-      { error: 'SUPABASE_SERVICE_ROLE_KEY is not set. Add it to your env to call Edge Functions.' },
+      {
+        error: 'SUPABASE_SERVICE_ROLE_KEY is not set. Add it in Vercel → Project → Settings → Environment Variables.',
+        code: 'MISSING_SERVICE_ROLE_KEY',
+      },
       { status: 500 }
     );
   }
   const functionsUrl = `${url.replace(/\/$/, '')}/functions/v1/send-push-notification`;
+  const payload = {
+    type: body.type ?? 'notification',
+    external_user_ids,
+    title,
+    message,
+    data: body.data ?? {},
+  };
+  // Log so you can verify in server logs (Vercel → Deployment → Logs) that the route and Edge Function are called
+  console.log('[push] Calling Edge Function send-push-notification', {
+    type: payload.type,
+    recipientCount: external_user_ids.length,
+    title: payload.title?.slice(0, 50),
+  });
   const res = await fetch(functionsUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${serviceRoleKey}`,
     },
-    body: JSON.stringify({
-      type: body.type ?? 'notification',
-      external_user_ids,
-      title,
-      message,
-      data: body.data ?? {},
-    }),
+    body: JSON.stringify(payload),
   });
   const text = await res.text();
   if (!res.ok) {
+    console.warn('[push] Edge Function returned error', res.status, text);
     const isServerError = res.status >= 500 || res.status === 404;
+    const hint =
+      res.status === 404
+        ? 'Deploy the Edge Function: Supabase Dashboard → Edge Functions → deploy "send-push-notification", and ensure NEXT_PUBLIC_SUPABASE_URL points to that project.'
+        : undefined;
     return NextResponse.json(
       {
         error: `Push service returned ${res.status}: ${text}`,
-        hint:
-          res.status === 404
-            ? 'Edge Function "send-push-notification" not found. Deploy it in Supabase Dashboard → Edge Functions (name must be exactly send-push-notification) and ensure this project matches NEXT_PUBLIC_SUPABASE_URL.'
-            : undefined,
+        code: 'EDGE_FUNCTION_ERROR',
+        hint,
       },
       { status: isServerError ? 502 : 400 }
     );
   }
-  return NextResponse.json({ ok: true });
+  console.log('[push] Edge Function succeeded');
+  return NextResponse.json(
+    { ok: true },
+    {
+      headers: {
+        // So you can confirm in browser Network tab that the route ran and invoked the Edge Function
+        'X-Push-Invoked': 'true',
+      },
+    }
+  );
 }
