@@ -13,18 +13,34 @@ export async function prefetchRoute(
   try {
     switch (path) {
       case '/work-orders': {
-        await queryClient.prefetchQuery({
-          queryKey: ['work-orders', undefined],
-          queryFn: async () => {
-            const { data, error } = await supabase
-              .from('work_orders')
-              .select('id, ticketNumber, problemDescription, status, priority, createdAt, requestorName, requestorId')
-              .order('createdAt', { ascending: false });
-            if (error) throw error;
-            return data ?? [];
-          },
-          staleTime: 60 * 1000,
-        });
+        await Promise.all([
+          queryClient.prefetchQuery({
+            queryKey: ['work-orders', undefined],
+            queryFn: async () => {
+              const { data, error } = await supabase
+                .from('work_orders')
+                .select('id, ticketNumber, problemDescription, status, priority, createdAt, requestorName, requestorId, assignedTechnicianIds')
+                .order('createdAt', { ascending: false });
+              if (error) throw error;
+              return data ?? [];
+            },
+            staleTime: 60 * 1000,
+          }),
+          queryClient.prefetchQuery({
+            queryKey: ['users-list'],
+            queryFn: async () => {
+              const { data, error } = await (supabase as any).rpc('get_users_list');
+              if (error) throw error;
+              return ((data ?? []) as Record<string, unknown>[]).map((u) => ({
+                id: String(u.id),
+                name: String(u.name ?? ''),
+                role: u.role ? String(u.role) : undefined,
+                email: u.email ? String(u.email) : undefined,
+              }));
+            },
+            staleTime: 60 * 1000,
+          }),
+        ]);
         break;
       }
       case '/assets': {

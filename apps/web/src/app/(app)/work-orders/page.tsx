@@ -11,6 +11,7 @@ import { StatusBadge } from '@/components/ui/Badge';
 import { Pagination } from '@/components/Pagination';
 import { SearchFilterBar } from '@/components/SearchFilterBar';
 import { usePagination } from '@/hooks/usePagination';
+import { useUsersMap } from '@/hooks/useUsersMap';
 import { ChevronRight } from 'lucide-react';
 
 export default function WorkOrdersPage() {
@@ -20,10 +21,9 @@ export default function WorkOrdersPage() {
   const { data: workOrders, isLoading, error } = useQuery({
     queryKey: ['work-orders', statusFilter],
     queryFn: async () => {
-      // Select requestorName directly from work_orders (no join needed, avoids permission issues on users table)
       let q = supabase
         .from('work_orders')
-        .select('id, ticketNumber, problemDescription, status, priority, createdAt, requestorName, requestorId')
+        .select('id, ticketNumber, problemDescription, status, priority, createdAt, requestorName, requestorId, assignedTechnicianIds')
         .order('createdAt', { ascending: false });
       if (statusFilter) q = q.eq('status', statusFilter);
       const { data, error: err } = await q;
@@ -31,6 +31,8 @@ export default function WorkOrdersPage() {
       return data ?? [];
     },
   });
+
+  const { usersMap } = useUsersMap();
 
   const [search, setSearch] = useState('');
   const filtered = useMemo(() => {
@@ -44,6 +46,15 @@ export default function WorkOrdersPage() {
         String(wo.requestorName ?? '').toLowerCase().includes(q)
     );
   }, [workOrders, search]);
+
+  function assignedTechnicianNames(wo: Record<string, unknown>): string {
+    const ids = wo.assignedTechnicianIds as string[] | null | undefined;
+    if (!ids?.length) return '—';
+    const names = ids
+      .map((id) => usersMap.get(id)?.name)
+      .filter(Boolean) as string[];
+    return names.length ? names.join(', ') : '—';
+  }
 
   const { page, setPage, pageSize, setPageSize, paginatedItems, totalItems } =
     usePagination(filtered);
@@ -104,6 +115,7 @@ export default function WorkOrdersPage() {
                     <th>Status</th>
                     <th>Priority</th>
                     <th>Requestor</th>
+                    <th>Assigned</th>
                     <th>Created</th>
                     <th className="w-12" />
                   </tr>
@@ -125,6 +137,9 @@ export default function WorkOrdersPage() {
                       </td>
                       <td className="text-sm">
                         {(wo.requestorName as string) ?? '-'}
+                      </td>
+                      <td className="text-sm text-muted-foreground max-w-[180px] truncate" title={assignedTechnicianNames(wo)}>
+                        {assignedTechnicianNames(wo)}
                       </td>
                       <td className="text-sm text-muted-foreground">
                         {new Date(wo.createdAt as string).toLocaleDateString()}
