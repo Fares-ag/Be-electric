@@ -44,16 +44,24 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json().catch(() => ({}));
-  const { email, name, role = 'requestor', companyId = null, department = null } = body as {
+  const { email, name, role = 'requestor', companyId = null, department = null, password } = body as {
     email?: string;
     name?: string;
     role?: string;
     companyId?: string | null;
     department?: string | null;
+    password?: string;
   };
 
   if (!email?.trim()) {
     return NextResponse.json({ error: 'Email is required' }, { status: 400 });
+  }
+
+  if (password?.trim() && password.trim().length < 6) {
+    return NextResponse.json(
+      { error: 'Password must be at least 6 characters' },
+      { status: 400 }
+    );
   }
 
   const supabase = createClient(
@@ -62,12 +70,13 @@ export async function POST(request: Request) {
     { auth: { autoRefreshToken: false, persistSession: false } }
   );
 
-  // Generate a one-time password the admin can share with the user
-  const tempPassword = generateTempPassword();
+  const finalPassword = password?.trim()
+    ? password.trim()
+    : generateTempPassword();
 
   const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
     email: email.trim().toLowerCase(),
-    password: tempPassword,
+    password: finalPassword,
     email_confirm: true,
     user_metadata: { name: (name ?? email).trim(), role: role ?? 'requestor' },
   });
@@ -110,8 +119,10 @@ export async function POST(request: Request) {
   return NextResponse.json({
     id,
     email: authUser.user.email,
-    tempPassword,
-    message: 'User created in Supabase Auth and in the app. Share the temporary password with them so they can sign in and change it.',
+    tempPassword: password?.trim() ? undefined : finalPassword,
+    message: password?.trim()
+      ? 'User created. They can sign in with the password you set.'
+      : 'User created. Share the temporary password with them so they can sign in and change it.',
   });
 }
 

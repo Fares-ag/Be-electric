@@ -34,10 +34,18 @@ export default function RequestMaintenancePage() {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  const isRequestor = user?.role === 'requestor';
+  const companyId = user?.companyId ?? null;
+
   const { data: assets } = useQuery({
-    queryKey: ['assets'],
+    queryKey: ['assets', 'request', isRequestor ? companyId : 'all'],
     queryFn: async () => {
-      const { data } = await supabase.from('assets').select('id, name, location').order('name');
+      if (isRequestor && !companyId) return [];
+      let q = supabase.from('assets').select('id, name, location').order('name');
+      if (isRequestor && companyId) {
+        q = q.eq('companyId', companyId);
+      }
+      const { data } = await q;
       return data ?? [];
     },
   });
@@ -154,6 +162,16 @@ export default function RequestMaintenancePage() {
                   <option key={a.id} value={a.id}>{a.name}</option>
                 ))}
               </select>
+              {isRequestor && !companyId && (
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  No company assigned. Contact your administrator to get access to chargers.
+                </p>
+              )}
+              {isRequestor && companyId && assets?.length === 0 && (
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  No chargers in your company.
+                </p>
+              )}
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-foreground">

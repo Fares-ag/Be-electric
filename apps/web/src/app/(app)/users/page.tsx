@@ -40,6 +40,7 @@ const emptyForm = {
   isActive: true,
   companyId: '',
   department: '',
+  password: '',
 };
 
 export default function UsersPage() {
@@ -50,6 +51,7 @@ export default function UsersPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [createdTempPassword, setCreatedTempPassword] = useState<string | null>(null);
+  const [createdWithCustomPassword, setCreatedWithCustomPassword] = useState(false);
 
   const {
     data: users,
@@ -108,7 +110,8 @@ export default function UsersPage() {
           name: payload.name.trim(),
           role: payload.role,
           companyId: payload.companyId.trim() || null,
-          department: payload.department.trim() || null,
+          department: payload.role === 'requestor' ? null : (payload.department?.trim() || null),
+          password: payload.password?.trim() || undefined,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -122,7 +125,7 @@ export default function UsersPage() {
       if (data?.tempPassword) {
         setCreatedTempPassword(data.tempPassword);
       } else {
-        setModalOpen(false);
+        setCreatedWithCustomPassword(true);
       }
     },
     onError: (err: Error) => {
@@ -132,16 +135,27 @@ export default function UsersPage() {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, ...payload }: UserRow & { companyId?: string; department?: string }) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- RPCs exist in DB, may not be in generated types
-      const { error: e } = await (supabase as any).rpc('update_user', {
-        p_id:         id,
-        p_name:       payload.name.trim(),
-        p_role:       payload.role,
-        p_is_active:  payload.isActive,
-        p_company_id: payload.companyId?.trim() || null,
-        p_department: payload.department?.trim() || null,
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error('Not signed in');
+      const dept = payload.role === 'requestor' ? null : (payload.department?.trim() || null);
+      const res = await fetch('/api/users/update', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          id,
+          name: payload.name.trim(),
+          role: payload.role,
+          isActive: payload.isActive,
+          companyId: payload.companyId?.trim() || null,
+          department: dept,
+        }),
       });
-      if (e) throw e;
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? res.statusText);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
@@ -153,13 +167,30 @@ export default function UsersPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- RPC exists in DB
-      const { error: e } = await (supabase as any).rpc('delete_user_by_id', { p_id: id });
-      if (e) throw e;
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error('Not signed in');
+      const res = await fetch('/api/users/delete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? res.statusText);
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['users'] }),
     onError: (err: Error) => setError(err.message),
   });
+
+  const handleCloseModal = () => {
+    setModalOpen(false);
+    setError(null);
+    setCreatedTempPassword(null);
+    setCreatedWithCustomPassword(false);
+  };
 
   const openAdd = () => {
     setEditing(null);
@@ -197,7 +228,7 @@ export default function UsersPage() {
   };
 
   const handleDelete = (u: UserRow) => {
-    if (window.confirm(`Remove "${u.name}" from the app? This does not delete their Auth account.`)) {
+    if (window.confirm(`Remove "${u.name}"? This will delete them from Supabase Auth and the app.`)) {
       deleteMutation.mutate(u.id);
     }
   };
@@ -284,7 +315,7 @@ export default function UsersPage() {
 
       <Modal
         open={modalOpen}
-        onClose={() => { setModalOpen(false); setError(null); setCreatedTempPassword(null); }}
+        onClose={handleCloseModal}
         title={isAdd ? 'Add User' : 'Edit User'}
       >
         {createdTempPassword ? (
@@ -312,7 +343,18 @@ export default function UsersPage() {
             </div>
             <p className="text-xs text-muted-foreground">They should sign in and change their password after first login.</p>
             <ModalActions>
-              <Button type="button" onClick={() => { setModalOpen(false); setCreatedTempPassword(null); }}>
+              <Button type="button" onClick={handleCloseModal}>
+                Done
+              </Button>
+            </ModalActions>
+          </div>
+        ) : createdWithCustomPassword ? (
+          <div className="space-y-4">
+            <p className="text-sm text-foreground">
+              User created. They can sign in with the password you set.
+            </p>
+            <ModalActions>
+              <Button type="button" onClick={handleCloseModal}>
                 Done
               </Button>
             </ModalActions>
@@ -346,9 +388,22 @@ export default function UsersPage() {
               <p className="text-xs text-muted-foreground mt-1">Email is managed in Auth; change in Supabase Dashboard if needed.</p>
             )}
             {isAdd && (
-              <p className="text-xs text-muted-foreground mt-1">Creates the user in Supabase Auth and in the app. You will get a one-time password to share so they can sign in.</p>
+              <p className="text-xs text-muted-foreground mt-1">Creates the user in Supabase Auth and in the app. Set a password below or leave blank to auto-generate one to share.</p>
             )}
           </div>
+          {isAdd && (
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">Password (optional)</label>
+              <input
+                type="password"
+                autoComplete="new-password"
+                value={form.password}
+                onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                placeholder="Leave blank to auto-generate"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+              />
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-foreground mb-1">Role</label>
             <select
@@ -375,15 +430,17 @@ export default function UsersPage() {
               ))}
             </select>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Department</label>
-            <input
-              type="text"
-              value={form.department}
-              onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))}
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-            />
-          </div>
+          {form.role !== 'requestor' && (
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">Department</label>
+              <input
+                type="text"
+                value={form.department}
+                onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))}
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+              />
+            </div>
+          )}
           <div className="flex items-center gap-2">
             <input
               type="checkbox"
