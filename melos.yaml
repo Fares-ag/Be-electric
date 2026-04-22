@@ -1,0 +1,9 @@
+name: qauto_cmms_monorepo
+
+packages:
+  - packages/**
+  - apps/**
+
+command:
+  bootstrap:
+    runPubGetInParallel: true

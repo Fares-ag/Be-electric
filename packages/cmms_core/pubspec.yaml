@@ -1,0 +1,67 @@
+name: cmms_core
+description: Be Electric CMMS — shared library (models, services, UI) for requestor and technician apps.
+
+publish_to: "none"
+
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  provider: ^6.1.1
+  get_it: ^7.6.0
+  path: ^1.8.3
+  cupertino_icons: ^1.0.2
+  material_design_icons_flutter: ^7.0.7296
+  image_picker: ^1.0.4
+  permission_handler: ^11.0.1
+  cached_network_image: ^3.3.1
+  signature: ^5.3.0
+  intl: ^0.19.0
+  http: ^1.1.0
+  connectivity_plus: ^5.0.1
+  url_launcher: ^6.2.2
+  shared_preferences: ^2.2.2
+  supabase_flutter: ^2.5.6
+  onesignal_flutter: ^5.4.4
+  uuid: ^4.2.1
+  path_provider: ^2.1.1
+  device_info_plus: ^9.1.0
+  package_info_plus: ^4.2.0
+  universal_html: ^2.2.4
+  pdf: ^3.10.7
+  printing: ^5.12.0
+  syncfusion_flutter_pdf: ^26.2.10
+  syncfusion_flutter_xlsio: ^26.2.10
+  fl_chart: ^0.68.0
+  data_table_2: ^2.5.12
+  syncfusion_flutter_charts: ^30.2.6+1
+  pluto_grid: ^8.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/beElectricLogo.png
+    - assets/images/beElectricWhiteLogo.png
+    - assets/images/BeelectricPearlImg.png
+    - assets/images/beelectric-insignia.png
+    - assets/images/SiemensCharger.png
+    - assets/images/KostadCharger.png
+    - assets/images/MaintenanceRequestBg.png
+    - assets/icons/
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/beelectric-insignia.png"
+  remove_alpha_ios: true

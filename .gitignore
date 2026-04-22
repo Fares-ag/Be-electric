@@ -1,0 +1,29 @@
+# Nested clone / legacy app (separate git repo) — not part of this monorepo tree
+/qauto-cmms-main/
+
+# Dart / Flutter
+**/build/
+**/.dart_tool/
+**/.packages
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/*.iml
+
+# Secrets & local config (add real files locally; never commit)
+**/.env
+!**/.env.example
+**/key.properties
+**/android/key.properties
+**/android/google-services.json
+**/ios/Runner/GoogleService-Info.plist
+
+# Release artifacts
+*.apk
+*.aab
+*.ipa
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store

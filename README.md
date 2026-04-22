@@ -33,35 +33,36 @@ Be Electric is a comprehensive maintenance management solution designed for mana
 
 ### Installation
 
-1. Clone the repository
-2. Install dependencies:
+1. Clone the repository.
+2. Open a **shell app** and install dependencies:
    ```bash
+   cd apps/requestor_cmms
    flutter pub get
-   ```
-
-3. Configure Supabase:
-   - Update `lib/config/supabase_config.dart` with your Supabase credentials
-   - Run the SQL migration scripts in your Supabase SQL Editor
-
-4. Run the app:
-   ```bash
    flutter run
    ```
+   For the technician build:
+   ```bash
+   cd apps/technician_cmms
+   flutter pub get
+   flutter run
+   ```
+   Shared code is in `packages/cmms_core` (see **`MONOREPO.md`**).
+
+3. Configure Supabase:
+   - For local dev, defaults in `packages/cmms_core/lib/config/app_config.dart` are used.
+   - For production, use `--dart-define=SUPABASE_URL=...` and `--dart-define=SUPABASE_ANON_KEY=...` (see `qauto-cmms-main/.env.example` and `qauto-cmms-main/docs/PRODUCTION.md` if present).
+   - Schema: Supabase CLI under `qauto-cmms-main/supabase/` — `npx supabase link --project-ref <ref>` then `npx supabase db pull` (see `supabase/migrations/README.md`).
 
 ## Database Setup
 
-1. Run `supabase_migration.sql` to create the initial schema
-2. Run `add_company_support.sql` to add multi-tenant support (if needed)
-3. Run `fix_user_lookup_rls.sql` to fix RLS policies for user lookup
+- **Schema (Supabase):** From the repo, run `npx supabase link --project-ref <your-project-ref>` then `npx supabase db pull`. Migrations live in `qauto-cmms-main/supabase/migrations/` or the project’s `supabase/migrations/` folder.
+- Alternatively, run your SQL migration scripts in the Supabase SQL Editor (e.g. `supabase_migration.sql`, `add_company_support.sql`, `fix_user_lookup_rls.sql`).
 
 ## Project Structure
 
-- `lib/screens/` - Application screens
-- `lib/models/` - Data models
-- `lib/services/` - Business logic and API services
-- `lib/providers/` - State management
-- `lib/widgets/` - Reusable widgets
-- `lib/utils/` - Utility functions and themes
+- `packages/cmms_core/lib/` — screens, models, services, providers, widgets, utils
+- `apps/requestor_cmms/` — requestor-only store build
+- `apps/technician_cmms/` — technician / manager / admin store build
 
 ## License
 
