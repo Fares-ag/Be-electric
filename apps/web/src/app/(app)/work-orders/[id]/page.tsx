@@ -31,37 +31,90 @@ type WorkOrderMetadata = {
   completionPhotoPaths?: string[];
 } & ReopenMetadata;
 
+/** Aligns with Flutter work order model + Supabase work_orders; metadata may hold app-only fields. */
 type WorkOrderDetail = {
   id: string;
   ticketNumber: string;
-  status: string;
-  priority: string;
+  idempotencyKey?: string | null;
   problemDescription: string;
   requestorId: string;
   requestorName?: string | null;
   assetId?: string | null;
-  asset?: { name?: string; location?: string };
+  asset?: { name?: string; location?: string; manufacturer?: string | null; id?: string } | null;
   location?: string | null;
-  createdAt: string;
-  correctiveActions?: string | null;
-  recommendations?: string | null;
-  photoPath?: string | null;
-  completionPhotoPath?: string | null;
-  beforePhotoPath?: string | null;
-  afterPhotoPath?: string | null;
+  companyId?: string | null;
+  company?: { name?: string | null; id?: string } | null;
+  primaryTechnicianId?: string | null;
+  assignedTechnicianId?: string | null;
   assignedTechnicianIds?: string[] | null;
+  assignedAt?: string | null;
+  technicianEffortMinutes?: Record<string, number> | unknown | null;
+  status: string;
+  priority: string;
+  category?: string | null;
+  createdAt: string;
+  updatedAt?: string;
   startedAt?: string | null;
   completedAt?: string | null;
   closedAt?: string | null;
   nextMaintenanceDate?: string | null;
+  notes?: string | null;
+  correctiveActions?: string | null;
+  recommendations?: string | null;
+  technicianNotes?: string | null;
+  photoPath?: string | null;
+  completionPhotoPath?: string | null;
+  beforePhotoPath?: string | null;
+  afterPhotoPath?: string | null;
   requestorSignature?: string | null;
   technicianSignature?: string | null;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  customerEmail?: string | null;
+  customerSignature?: string | null;
   laborCost?: number | null;
   partsCost?: number | null;
   totalCost?: number | null;
+  estimatedCost?: number | null;
+  actualCost?: number | null;
+  laborHours?: number | null;
+  partsUsed?: string[] | null;
+  isPaused?: boolean | null;
+  pausedAt?: string | null;
+  pauseReason?: string | null;
+  resumedAt?: string | null;
+  pauseHistory?: unknown;
+  isOffline?: boolean | null;
+  lastSyncedAt?: string | null;
   activityHistory?: WorkOrderActivityEntry[] | null;
   metadata?: WorkOrderMetadata | null;
 };
+
+function readMetaString(meta: Record<string, unknown> | null | undefined, ...keys: string[]): string | null {
+  if (!meta) return null;
+  for (const k of keys) {
+    const v = meta[k];
+    if (v != null && String(v).trim() !== '') return String(v);
+  }
+  return null;
+}
+
+function formatMaybeIso(value: string | null | undefined): string {
+  if (!value) return '—';
+  const t = Date.parse(value);
+  if (Number.isNaN(t)) return value;
+  return new Date(value).toLocaleString();
+}
+
+function effortMinutesDisplay(value: unknown): string {
+  if (value == null) return '—';
+  if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+    return Object.entries(value as Record<string, number>)
+      .map(([k, m]) => `${k.slice(0, 8)}…: ${m} min`)
+      .join(', ') || '—';
+  }
+  return JSON.stringify(value);
+}
 
 function parsePhotoPaths(value: string | null | undefined): string[] {
   if (!value) return [];
@@ -131,14 +184,71 @@ export default function WorkOrderDetailPage() {
     queryKey: ['work-order', id],
     staleTime: 60 * 1000,
     queryFn: async (): Promise<WorkOrderDetail | null> => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('work_orders')
         .select(
-          'id, ticketNumber, status, priority, problemDescription, requestorId, requestorName, assetId, location, createdAt, correctiveActions, recommendations, photoPath, completionPhotoPath, beforePhotoPath, afterPhotoPath, assignedTechnicianIds, startedAt, completedAt, closedAt, nextMaintenanceDate, requestorSignature, technicianSignature, laborCost, partsCost, totalCost, activityHistory, metadata, asset:assets(name, location)'
+          [
+            'id',
+            'ticketNumber',
+            'idempotencyKey',
+            'status',
+            'priority',
+            'category',
+            'problemDescription',
+            'requestorId',
+            'requestorName',
+            'assetId',
+            'location',
+            'companyId',
+            'primaryTechnicianId',
+            'assignedTechnicianId',
+            'assignedTechnicianIds',
+            'assignedAt',
+            'technicianEffortMinutes',
+            'createdAt',
+            'updatedAt',
+            'startedAt',
+            'completedAt',
+            'closedAt',
+            'nextMaintenanceDate',
+            'notes',
+            'correctiveActions',
+            'recommendations',
+            'technicianNotes',
+            'photoPath',
+            'completionPhotoPath',
+            'beforePhotoPath',
+            'afterPhotoPath',
+            'requestorSignature',
+            'technicianSignature',
+            'customerName',
+            'customerPhone',
+            'customerEmail',
+            'customerSignature',
+            'laborCost',
+            'partsCost',
+            'totalCost',
+            'estimatedCost',
+            'actualCost',
+            'laborHours',
+            'partsUsed',
+            'isPaused',
+            'pausedAt',
+            'pauseReason',
+            'resumedAt',
+            'pauseHistory',
+            'isOffline',
+            'lastSyncedAt',
+            'activityHistory',
+            'metadata',
+            'asset:assets(name,location,manufacturer)',
+            'company:companies(name)',
+          ].join(',')
         )
         .eq('id', id)
         .single();
-      return data as WorkOrderDetail | null;
+      if (error) throw error;
+      return data as unknown as WorkOrderDetail | null;
     },
   });
 
@@ -352,7 +462,14 @@ export default function WorkOrderDetailPage() {
     setReopenError(null);
     reopenMutation.mutate();
   };
-  const requestPhotos = parsePhotoPaths(wo?.photoPath);
+  const requestPhotosExtra: string[] = (() => {
+    const a = rawMeta?.requestPhotoPaths ?? rawMeta?.request_photo_paths;
+    if (Array.isArray(a)) return a.map((x) => String(x));
+    return [];
+  })();
+  const requestPhotos = [
+    ...new Set([...parsePhotoPaths(wo?.photoPath), ...requestPhotosExtra]),
+  ];
   // Flutter stores all completion photo URLs in metadata.completionPhotoPaths; first URL in completionPhotoPath
   const completionPhotos =
     (Array.isArray(wo?.metadata?.completionPhotoPaths) && wo.metadata.completionPhotoPaths.length > 0
@@ -365,6 +482,11 @@ export default function WorkOrderDetailPage() {
     completionPhotos.length > 0 ||
     beforePhotos.length > 0 ||
     afterPhotos.length > 0;
+
+  const primaryUser = wo?.primaryTechnicianId
+    ? (allUsers.find((u) => u.id === wo.primaryTechnicianId) as { name?: string } | undefined)
+    : null;
+  const appCompanyIdFromMeta = readMetaString(rawMeta, 'appCompanyId', 'app_company_id');
 
   if (isLoading || !wo) {
     return (
@@ -408,6 +530,11 @@ export default function WorkOrderDetailPage() {
               </select>
             )}
             <Badge>{wo.priority}</Badge>
+            {wo.category && (
+              <span className="text-xs text-muted-foreground border border-border rounded-md px-2 py-0.5">
+                {wo.category}
+              </span>
+            )}
             {canReopen && (
               <Button
                 type="button"
@@ -539,36 +666,385 @@ export default function WorkOrderDetailPage() {
           </Button>
         </ModalActions>
       </Modal>
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Details</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <dl className="space-y-4 text-sm">
-              <div>
-                <dt className="text-muted-foreground mb-0.5">Description</dt>
-                <dd className="font-medium">{wo.problemDescription}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground mb-0.5">Requestor</dt>
-                <dd>{wo.requestorName ?? wo.requestorId}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground mb-0.5">Charger</dt>
-                <dd>{(wo.asset as { name?: string })?.name ?? wo.assetId ?? '-'}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground mb-0.5">Location</dt>
-                <dd>{wo.location ?? '-'}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground mb-0.5">Created</dt>
-                <dd>{new Date(wo.createdAt).toLocaleString()}</dd>
-              </div>
-            </dl>
-          </CardContent>
-        </Card>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="space-y-4 min-w-0">
+          <Card>
+            <CardHeader>
+              <CardTitle>Identity &amp; request</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <dl className="grid gap-3 text-sm sm:grid-cols-2">
+                <div>
+                  <dt className="text-muted-foreground mb-0.5">ID</dt>
+                  <dd className="font-mono text-xs break-all">{wo.id}</dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground mb-0.5">Ticket</dt>
+                  <dd className="font-medium">{wo.ticketNumber}</dd>
+                </div>
+                {wo.idempotencyKey && (
+                  <div className="sm:col-span-2">
+                    <dt className="text-muted-foreground mb-0.5">Idempotency key</dt>
+                    <dd className="font-mono text-xs break-all">{wo.idempotencyKey}</dd>
+                  </div>
+                )}
+                <div className="sm:col-span-2">
+                  <dt className="text-muted-foreground mb-0.5">Problem</dt>
+                  <dd className="text-foreground whitespace-pre-wrap">{wo.problemDescription}</dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground mb-0.5">Requestor</dt>
+                  <dd>{wo.requestorName ?? '—'}</dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground mb-0.5">Requestor ID</dt>
+                  <dd className="font-mono text-xs break-all">{wo.requestorId}</dd>
+                </div>
+              </dl>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Where / tenant</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <dl className="grid gap-3 text-sm sm:grid-cols-2">
+                <div className="sm:col-span-2">
+                  <dt className="text-muted-foreground mb-0.5">Charger (asset)</dt>
+                  <dd>
+                    {(wo.asset as { name?: string })?.name ?? '—'}
+                    {wo.assetId && (
+                      <span className="text-muted-foreground text-xs ml-1">({String(wo.assetId).slice(0, 8)}…)</span>
+                    )}
+                  </dd>
+                </div>
+                {(wo.asset as { manufacturer?: string | null })?.manufacturer != null && (
+                  <div>
+                    <dt className="text-muted-foreground mb-0.5">Manufacturer</dt>
+                    <dd>{(wo.asset as { manufacturer?: string | null })?.manufacturer}</dd>
+                  </div>
+                )}
+                <div className="sm:col-span-2">
+                  <dt className="text-muted-foreground mb-0.5">Location</dt>
+                  <dd>
+                    {wo.location && wo.location.trim() !== ''
+                      ? wo.location
+                      : (wo.asset as { location?: string | null })?.location ?? '—'}
+                    <span className="block text-xs text-muted-foreground mt-0.5">
+                      Uses free-text when set; otherwise asset location.
+                    </span>
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground mb-0.5">Company</dt>
+                  <dd>{(wo.company as { name?: string } | null | undefined)?.name ?? '—'}</dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground mb-0.5">Company ID</dt>
+                  <dd className="font-mono text-xs break-all">{wo.companyId ?? '—'}</dd>
+                </div>
+                {appCompanyIdFromMeta && (
+                  <div className="sm:col-span-2">
+                    <dt className="text-muted-foreground mb-0.5">appCompanyId (metadata)</dt>
+                    <dd className="font-mono text-xs break-all">{appCompanyIdFromMeta}</dd>
+                  </div>
+                )}
+                {readMetaString(rawMeta, 'appAssetId', 'app_asset_id') && (
+                  <div className="sm:col-span-2">
+                    <dt className="text-muted-foreground mb-0.5">appAssetId (metadata)</dt>
+                    <dd className="font-mono text-xs break-all">
+                      {readMetaString(rawMeta, 'appAssetId', 'app_asset_id')}
+                    </dd>
+                  </div>
+                )}
+              </dl>
+            </CardContent>
+          </Card>
+
+          {Boolean(
+            isAdminOrManager ||
+              wo.assignedAt ||
+              (wo.assignedTechnicianIds && wo.assignedTechnicianIds.length > 0) ||
+              wo.primaryTechnicianId ||
+              wo.technicianEffortMinutes
+          ) && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Assignment &amp; effort</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <dl className="grid gap-3 text-sm sm:grid-cols-2">
+                  <div>
+                    <dt className="text-muted-foreground mb-0.5">Primary technician</dt>
+                    <dd>{primaryUser?.name ?? (wo.primaryTechnicianId ? wo.primaryTechnicianId : '—')}</dd>
+                  </div>
+                  {wo.assignedTechnicianId && (
+                    <div>
+                      <dt className="text-muted-foreground mb-0.5">Legacy assignedTechnicianId</dt>
+                      <dd className="font-mono text-xs">{wo.assignedTechnicianId}</dd>
+                    </div>
+                  )}
+                  <div className="sm:col-span-2">
+                    <dt className="text-muted-foreground mb-0.5">Technician effort (minutes)</dt>
+                    <dd className="text-xs">{effortMinutesDisplay(wo.technicianEffortMinutes)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground mb-0.5">Assigned at</dt>
+                    <dd>{formatMaybeIso(wo.assignedAt)}</dd>
+                  </div>
+                </dl>
+              </CardContent>
+            </Card>
+          )}
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Timeline</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <dl className="grid gap-3 text-sm sm:grid-cols-2">
+                <div>
+                  <dt className="text-muted-foreground mb-0.5">Created</dt>
+                  <dd>{new Date(wo.createdAt).toLocaleString()}</dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground mb-0.5">Updated</dt>
+                  <dd>{wo.updatedAt ? new Date(wo.updatedAt).toLocaleString() : '—'}</dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground mb-0.5">Assigned</dt>
+                  <dd>{formatMaybeIso(wo.assignedAt)}</dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground mb-0.5">Started</dt>
+                  <dd>{formatMaybeIso(wo.startedAt)}</dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground mb-0.5">Completed</dt>
+                  <dd>{formatMaybeIso(wo.completedAt)}</dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground mb-0.5">Closed</dt>
+                  <dd>{formatMaybeIso(wo.closedAt)}</dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground mb-0.5">Next maintenance</dt>
+                  <dd>
+                    {wo.nextMaintenanceDate
+                      ? new Date(wo.nextMaintenanceDate).toLocaleDateString(undefined, { dateStyle: 'medium' })
+                      : '—'}
+                  </dd>
+                </div>
+                {readMetaString(rawMeta, 'firstResponseTime', 'first_response_time') && (
+                  <div>
+                    <dt className="text-muted-foreground mb-0.5">First response (metadata)</dt>
+                    <dd>{readMetaString(rawMeta, 'firstResponseTime', 'first_response_time')}</dd>
+                  </div>
+                )}
+                {readMetaString(rawMeta, 'actualStartTime', 'actual_start_time') && (
+                  <div>
+                    <dt className="text-muted-foreground mb-0.5">Actual start (metadata)</dt>
+                    <dd>{readMetaString(rawMeta, 'actualStartTime', 'actual_start_time')}</dd>
+                  </div>
+                )}
+                {readMetaString(rawMeta, 'actualEndTime', 'actual_end_time') && (
+                  <div>
+                    <dt className="text-muted-foreground mb-0.5">Actual end (metadata)</dt>
+                    <dd>{readMetaString(rawMeta, 'actualEndTime', 'actual_end_time')}</dd>
+                  </div>
+                )}
+                {readMetaString(rawMeta, 'estimatedDuration', 'estimated_duration') && (
+                  <div>
+                    <dt className="text-muted-foreground mb-0.5">Est. duration (metadata)</dt>
+                    <dd>{readMetaString(rawMeta, 'estimatedDuration', 'estimated_duration')}</dd>
+                  </div>
+                )}
+                {readMetaString(rawMeta, 'actualDuration', 'actual_duration') && (
+                  <div>
+                    <dt className="text-muted-foreground mb-0.5">Actual duration (metadata)</dt>
+                    <dd>{readMetaString(rawMeta, 'actualDuration', 'actual_duration')}</dd>
+                  </div>
+                )}
+              </dl>
+            </CardContent>
+          </Card>
+
+          {(wo.notes || wo.technicianNotes) && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Notes</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                {wo.notes && (
+                  <div>
+                    <p className="text-muted-foreground text-xs mb-1">General</p>
+                    <p className="whitespace-pre-wrap">{wo.notes}</p>
+                  </div>
+                )}
+                {wo.technicianNotes && (
+                  <div>
+                    <p className="text-muted-foreground text-xs mb-1">Technician</p>
+                    <p className="whitespace-pre-wrap">{wo.technicianNotes}</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {(readMetaString(rawMeta, 'rootCause', 'root_cause') || readMetaString(rawMeta, 'failureMode', 'failure_mode') || readMetaString(rawMeta, 'severityLevel', 'severity_level') || readMetaString(rawMeta, 'workCategory', 'work_category') || readMetaString(rawMeta, 'isRepeatFailure', 'is_repeat_failure')) && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Root cause &amp; analytics (metadata)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <dl className="grid gap-2 text-sm sm:grid-cols-2">
+                  {readMetaString(rawMeta, 'rootCause', 'root_cause') && (
+                    <>
+                      <dt className="text-muted-foreground col-span-2">Root cause</dt>
+                      <dd className="col-span-2 mb-1">{readMetaString(rawMeta, 'rootCause', 'root_cause')}</dd>
+                    </>
+                  )}
+                  {readMetaString(rawMeta, 'failureMode', 'failure_mode') && (
+                    <><dt className="text-muted-foreground">Failure mode</dt><dd>{readMetaString(rawMeta, 'failureMode', 'failure_mode')}</dd></>
+                  )}
+                  {readMetaString(rawMeta, 'severityLevel', 'severity_level') && (
+                    <><dt className="text-muted-foreground">Severity</dt><dd>{readMetaString(rawMeta, 'severityLevel', 'severity_level')}</dd></>
+                  )}
+                  {readMetaString(rawMeta, 'workCategory', 'work_category') && (
+                    <><dt className="text-muted-foreground">Work category</dt><dd>{readMetaString(rawMeta, 'workCategory', 'work_category')}</dd></>
+                  )}
+                  {readMetaString(rawMeta, 'isRepeatFailure', 'is_repeat_failure') && (
+                    <><dt className="text-muted-foreground">Repeat failure</dt><dd>{readMetaString(rawMeta, 'isRepeatFailure', 'is_repeat_failure')}</dd></>
+                  )}
+                </dl>
+              </CardContent>
+            </Card>
+          )}
+
+          {(!isRequestor && (wo.laborCost != null || wo.partsCost != null || wo.totalCost != null || wo.estimatedCost != null || wo.actualCost != null || wo.laborHours != null || (wo.partsUsed && wo.partsUsed.length > 0))) && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Cost &amp; parts</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <dl className="grid gap-3 text-sm sm:grid-cols-2">
+                  {wo.estimatedCost != null && (
+                    <><dt className="text-muted-foreground">Estimated cost</dt><dd>{formatCurrency(wo.estimatedCost)}</dd></>
+                  )}
+                  {wo.actualCost != null && (
+                    <><dt className="text-muted-foreground">Actual cost</dt><dd>{formatCurrency(wo.actualCost)}</dd></>
+                  )}
+                  {wo.laborCost != null && (
+                    <><dt className="text-muted-foreground">Labor cost</dt><dd>{formatCurrency(wo.laborCost)}</dd></>
+                  )}
+                  {wo.partsCost != null && (
+                    <><dt className="text-muted-foreground">Parts cost</dt><dd>{formatCurrency(wo.partsCost)}</dd></>
+                  )}
+                  {wo.totalCost != null && (
+                    <><dt className="text-muted-foreground">Total</dt><dd className="font-semibold">{formatCurrency(wo.totalCost)}</dd></>
+                  )}
+                  {wo.laborHours != null && (
+                    <><dt className="text-muted-foreground">Labor hours</dt><dd>{wo.laborHours}</dd></>
+                  )}
+                  {wo.partsUsed && wo.partsUsed.length > 0 && (
+                    <div className="sm:col-span-2">
+                      <dt className="text-muted-foreground mb-1">Parts used</dt>
+                      <dd className="text-xs">
+                        {wo.partsUsed.map((p) => (typeof p === 'string' ? p : String(p))).join(', ')}
+                      </dd>
+                    </div>
+                  )}
+                </dl>
+              </CardContent>
+            </Card>
+          )}
+
+          {(wo.customerName || wo.customerPhone || wo.customerEmail || wo.customerSignature) && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Customer</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <dl className="grid gap-2 text-sm sm:grid-cols-2">
+                  {wo.customerName && (
+                    <><dt className="text-muted-foreground">Name</dt><dd>{wo.customerName}</dd></>
+                  )}
+                  {wo.customerPhone && (
+                    <><dt className="text-muted-foreground">Phone</dt><dd>{wo.customerPhone}</dd></>
+                  )}
+                  {wo.customerEmail && (
+                    <><dt className="text-muted-foreground">Email</dt><dd>{wo.customerEmail}</dd></>
+                  )}
+                </dl>
+                {wo.customerSignature && (
+                  <div className="mt-3">
+                    <p className="text-xs text-muted-foreground mb-1">Customer signature</p>
+                    <SignatureImage value={wo.customerSignature} alt="Customer signature" />
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {Boolean(wo.isPaused || wo.pausedAt || wo.pauseReason || wo.resumedAt || wo.pauseHistory) && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Pause / resume</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <dl className="grid gap-2 text-sm sm:grid-cols-2">
+                  <div>
+                    <dt className="text-muted-foreground">Paused</dt>
+                    <dd>{wo.isPaused ? 'Yes' : 'No'}</dd>
+                  </div>
+                  {wo.pausedAt && <><dt className="text-muted-foreground">Paused at</dt><dd>{formatMaybeIso(wo.pausedAt)}</dd></>}
+                  {wo.pauseReason && (
+                    <div className="sm:col-span-2">
+                      <dt className="text-muted-foreground">Reason</dt>
+                      <dd className="whitespace-pre-wrap">{wo.pauseReason}</dd>
+                    </div>
+                  )}
+                  {wo.resumedAt && <><dt className="text-muted-foreground">Resumed at</dt><dd>{formatMaybeIso(wo.resumedAt)}</dd></>}
+                  {wo.pauseHistory != null && String(wo.pauseHistory) !== '' && (
+                    <div className="sm:col-span-2">
+                      <dt className="text-muted-foreground mb-1">Pause history</dt>
+                      <dd>
+                        <pre className="text-xs bg-muted/50 p-2 rounded overflow-x-auto max-h-32">
+                          {JSON.stringify(wo.pauseHistory, null, 0)}
+                        </pre>
+                      </dd>
+                    </div>
+                  )}
+                </dl>
+              </CardContent>
+            </Card>
+          )}
+
+          {(wo.isOffline != null || wo.lastSyncedAt) && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Sync / offline</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <dl className="grid gap-2 text-sm sm:grid-cols-2">
+                  {wo.isOffline != null && (
+                    <div>
+                      <dt className="text-muted-foreground">Offline</dt>
+                      <dd>{wo.isOffline ? 'Yes' : 'No'}</dd>
+                    </div>
+                  )}
+                  {wo.lastSyncedAt && (
+                    <div>
+                      <dt className="text-muted-foreground">Last synced</dt>
+                      <dd>{formatMaybeIso(wo.lastSyncedAt)}</dd>
+                    </div>
+                  )}
+                </dl>
+              </CardContent>
+            </Card>
+          )}
+        </div>
         {isAdminOrManager && (
           <Card>
             <CardHeader>
@@ -774,61 +1250,6 @@ export default function WorkOrderDetailPage() {
                 </div>
               </div>
             )}
-          </CardContent>
-        </Card>
-      )}
-
-      {((wo.startedAt || wo.closedAt || wo.completedAt || wo.nextMaintenanceDate) ||
-        (!isRequestor && (wo.laborCost != null || wo.partsCost != null || wo.totalCost != null))) && (
-        <Card className="mt-4">
-          <CardHeader>
-            <CardTitle>Completion summary</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <dl className="grid gap-3 text-sm sm:grid-cols-2">
-              {wo.startedAt && (
-                <>
-                  <dt className="text-muted-foreground">Started</dt>
-                  <dd className="font-medium">{new Date(wo.startedAt).toLocaleString()}</dd>
-                </>
-              )}
-              {(wo.completedAt || wo.closedAt) && (
-                <>
-                  <dt className="text-muted-foreground">Completed</dt>
-                  <dd className="font-medium">
-                    {new Date(wo.completedAt || wo.closedAt!).toLocaleString()}
-                  </dd>
-                </>
-              )}
-              {wo.nextMaintenanceDate && (
-                <>
-                  <dt className="text-muted-foreground">Next maintenance</dt>
-                  <dd className="font-medium">
-                    {new Date(wo.nextMaintenanceDate).toLocaleDateString(undefined, {
-                      dateStyle: 'medium',
-                    })}
-                  </dd>
-                </>
-              )}
-              {!isRequestor && wo.laborCost != null && (
-                <>
-                  <dt className="text-muted-foreground">Labor cost</dt>
-                  <dd className="font-medium">{formatCurrency(wo.laborCost)}</dd>
-                </>
-              )}
-              {!isRequestor && wo.partsCost != null && (
-                <>
-                  <dt className="text-muted-foreground">Parts cost</dt>
-                  <dd className="font-medium">{formatCurrency(wo.partsCost)}</dd>
-                </>
-              )}
-              {!isRequestor && wo.totalCost != null && (
-                <>
-                  <dt className="text-muted-foreground">Total cost</dt>
-                  <dd className="font-semibold">{formatCurrency(wo.totalCost)}</dd>
-                </>
-              )}
-            </dl>
           </CardContent>
         </Card>
       )}
