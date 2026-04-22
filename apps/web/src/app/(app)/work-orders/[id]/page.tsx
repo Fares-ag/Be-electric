@@ -470,13 +470,31 @@ export default function WorkOrderDetailPage() {
   const requestPhotos = [
     ...new Set([...parsePhotoPaths(wo?.photoPath), ...requestPhotosExtra]),
   ];
-  // Flutter stores all completion photo URLs in metadata.completionPhotoPaths; first URL in completionPhotoPath
-  const completionPhotos =
-    (Array.isArray(wo?.metadata?.completionPhotoPaths) && wo.metadata.completionPhotoPaths.length > 0
-      ? wo.metadata.completionPhotoPaths
-      : parsePhotoPaths(wo?.completionPhotoPath)) as string[];
-  const beforePhotos = parsePhotoPaths(wo?.beforePhotoPath);
-  const afterPhotos = parsePhotoPaths(wo?.afterPhotoPath);
+  // Flutter may store additional URLs in metadata.*PhotoPaths; merge with column values so admin sees all
+  const completionPhotosExtra: string[] = (() => {
+    const a = rawMeta?.completionPhotoPaths ?? rawMeta?.completion_photo_paths;
+    if (Array.isArray(a)) return a.map((x) => String(x));
+    return [];
+  })();
+  const completionPhotos = [
+    ...new Set([...parsePhotoPaths(wo?.completionPhotoPath), ...completionPhotosExtra]),
+  ] as string[];
+  const beforePhotosExtra: string[] = (() => {
+    const a = rawMeta?.beforePhotoPaths ?? rawMeta?.before_photo_paths;
+    if (Array.isArray(a)) return a.map((x) => String(x));
+    return [];
+  })();
+  const beforePhotos = [
+    ...new Set([...parsePhotoPaths(wo?.beforePhotoPath), ...beforePhotosExtra]),
+  ];
+  const afterPhotosExtra: string[] = (() => {
+    const a = rawMeta?.afterPhotoPaths ?? rawMeta?.after_photo_paths;
+    if (Array.isArray(a)) return a.map((x) => String(x));
+    return [];
+  })();
+  const afterPhotos = [
+    ...new Set([...parsePhotoPaths(wo?.afterPhotoPath), ...afterPhotosExtra]),
+  ];
   const hasAnyPhotos =
     requestPhotos.length > 0 ||
     completionPhotos.length > 0 ||
