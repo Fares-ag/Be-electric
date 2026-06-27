@@ -1,6 +1,8 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import type { ReactNode } from 'react';
 import { LEGAL_URLS } from '@/lib/legal-urls';
+import beElectricLogo from '@/app/(app)/assets/beElectricLogo.png';
 
 type Block =
   | { type: 'title'; text: string }
@@ -133,8 +135,13 @@ export function LegalDocumentPage({ content }: { content: string }) {
     <div className="min-h-screen bg-[rgb(var(--background))]">
       <header className="border-b border-border bg-card/80 backdrop-blur-sm">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
-          <Link href="/login" className="text-sm font-semibold text-primary hover:text-primary-hover">
-            Be Electric
+          <Link href="/login" className="flex items-center gap-2 hover:opacity-90">
+            <Image
+              src={beElectricLogo}
+              alt="Be Electric"
+              className="h-8 w-auto object-contain sm:h-9"
+              priority
+            />
           </Link>
           <nav className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
             <Link href={LEGAL_URLS.privacy} className="hover:text-foreground">
