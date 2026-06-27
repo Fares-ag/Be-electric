@@ -2,7 +2,9 @@
 
 import { useState } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { useAuthStore } from '@/stores/auth-store';
+import { LEGAL_SUPPORT_EMAIL, LEGAL_URLS } from '@/lib/legal-urls';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
 import { Mail, Lock, AlertCircle } from 'lucide-react';
@@ -126,8 +128,30 @@ export default function LoginPage() {
         </div>
 
         <p className="mt-6 text-center text-xs text-muted-foreground">
-          Forgot your password? Contact your administrator.
+          Forgot your password? Contact your administrator or{' '}
+          <a
+            href={`mailto:${LEGAL_SUPPORT_EMAIL}`}
+            className="text-primary underline underline-offset-2 hover:text-primary-hover"
+          >
+            {LEGAL_SUPPORT_EMAIL}
+          </a>
+          .
         </p>
+
+        <nav className="mt-8 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
+          <Link href={LEGAL_URLS.privacy} className="hover:text-foreground">
+            Privacy Policy
+          </Link>
+          <Link href={LEGAL_URLS.terms} className="hover:text-foreground">
+            Terms of Service
+          </Link>
+          <Link href={LEGAL_URLS.support} className="hover:text-foreground">
+            Support
+          </Link>
+          <Link href={LEGAL_URLS.accountDeletion} className="hover:text-foreground">
+            Account Deletion
+          </Link>
+        </nav>
       </div>
     </div>
   );

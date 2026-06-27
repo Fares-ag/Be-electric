@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/auth-store';
 import { useRealtimeSubscriptions } from '@/hooks/useRealtime';
+import { isPublicLegalPath } from '@/lib/legal-urls';
 import { Inter, Plus_Jakarta_Sans } from 'next/font/google';
 import './globals.css';
 
@@ -56,6 +57,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const isLogin = pathname === '/login';
+  const isPublicPage = isLogin || isPublicLegalPath(pathname);
 
   useEffect(() => {
     init();
@@ -63,7 +65,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (loading) return;
-    if (!user && !isLogin) {
+    if (!user && !isPublicPage) {
       router.replace('/login');
       return;
     }
@@ -71,9 +73,9 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
       const isAdmin = user.role === 'admin' || user.role === 'manager';
       router.replace(isAdmin ? '/dashboard' : '/my-requests');
     }
-  }, [user, loading, isLogin, router]);
+  }, [user, loading, isLogin, isPublicPage, router]);
 
-  if (loading) {
+  if (loading && !isPublicLegalPath(pathname)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-3">
@@ -83,8 +85,9 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
       </div>
     );
   }
-  if (!user && !isLogin) return null;
+  if (!user && !isPublicPage) return null;
   if (user && isLogin) return null;
+  if (isPublicLegalPath(pathname)) return <>{children}</>;
   return <DeferredRealtime>{children}</DeferredRealtime>;
 }
 
