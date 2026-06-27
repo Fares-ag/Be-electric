@@ -12,7 +12,7 @@ import '../../utils/app_theme.dart';
 import '../auth/login_screen.dart';
 import '../pm_tasks/pm_task_detail_screen.dart';
 import '../work_orders/work_order_detail_screen.dart';
-import 'asset_selection_screen.dart';
+import 'requestor_main_screen.dart';
 
 class RequestorDashboardScreen extends StatefulWidget {
   const RequestorDashboardScreen({super.key});
@@ -28,17 +28,46 @@ class _RequestorDashboardScreenState extends State<RequestorDashboardScreen>
   final EnhancedNotificationService _notificationService =
       EnhancedNotificationService();
 
+  final ScrollController _requestsScrollController = ScrollController();
+  final ScrollController _historyScrollController = ScrollController();
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
     _loadRequestorData();
+    _requestsScrollController.addListener(_onRequestsScroll);
+    _historyScrollController.addListener(_onHistoryScroll);
   }
 
   @override
   void dispose() {
     _tabController.dispose();
+    _requestsScrollController
+      ..removeListener(_onRequestsScroll)
+      ..dispose();
+    _historyScrollController
+      ..removeListener(_onHistoryScroll)
+      ..dispose();
     super.dispose();
+  }
+
+  void _onRequestsScroll() {
+    if (!_requestsScrollController.hasClients) return;
+    final pos = _requestsScrollController.position;
+    if (pos.pixels >= pos.maxScrollExtent - 300) {
+      Provider.of<UnifiedDataProvider>(context, listen: false)
+          .loadMoreWorkOrders();
+    }
+  }
+
+  void _onHistoryScroll() {
+    if (!_historyScrollController.hasClients) return;
+    final pos = _historyScrollController.position;
+    if (pos.pixels >= pos.maxScrollExtent - 300) {
+      Provider.of<UnifiedDataProvider>(context, listen: false)
+          .loadMoreWorkOrders();
+    }
   }
 
   Future<void> _loadRequestorData() async {
@@ -203,11 +232,14 @@ class _RequestorDashboardScreenState extends State<RequestorDashboardScreen>
           return RefreshIndicator(
             onRefresh: _loadRequestorData,
             child: ListView.builder(
+              controller: _requestsScrollController,
               padding: const EdgeInsets.all(AppTheme.spacingM),
-              itemCount: myWorkOrders.length,
+              itemCount: myWorkOrders.length + 1,
               itemBuilder: (context, index) {
-                final workOrder = myWorkOrders[index];
-                return _buildWorkOrderCard(workOrder);
+                if (index == myWorkOrders.length) {
+                  return _buildLoadMoreFooter(unifiedProvider);
+                }
+                return _buildWorkOrderCard(myWorkOrders[index]);
               },
             ),
           );
@@ -224,19 +256,20 @@ class _RequestorDashboardScreenState extends State<RequestorDashboardScreen>
 
           final myWorkOrders = unifiedProvider.workOrders
               .where((wo) => wo.requestorId == currentUser.id)
-              .toList();
-
-          // Sort by creation date (newest first)
-          myWorkOrders.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+              .toList()
+            ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
           return RefreshIndicator(
             onRefresh: _loadRequestorData,
             child: ListView.builder(
+              controller: _historyScrollController,
               padding: const EdgeInsets.all(AppTheme.spacingM),
-              itemCount: myWorkOrders.length,
+              itemCount: myWorkOrders.length + 1,
               itemBuilder: (context, index) {
-                final workOrder = myWorkOrders[index];
-                return _buildWorkOrderCard(workOrder);
+                if (index == myWorkOrders.length) {
+                  return _buildLoadMoreFooter(unifiedProvider);
+                }
+                return _buildWorkOrderCard(myWorkOrders[index]);
               },
             ),
           );
@@ -666,6 +699,27 @@ class _RequestorDashboardScreenState extends State<RequestorDashboardScreen>
         ),
       );
 
+  Widget _buildLoadMoreFooter(UnifiedDataProvider provider) {
+    if (provider.isLoadingMoreWorkOrders) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 20),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (!provider.hasMoreWorkOrders) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Center(
+          child: Text(
+            'All requests loaded',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+          ),
+        ),
+      );
+    }
+    return const SizedBox.shrink();
+  }
+
   String _getStatusText(WorkOrderStatus status) {
     switch (status) {
       case WorkOrderStatus.open:
@@ -770,7 +824,7 @@ class _RequestorDashboardScreenState extends State<RequestorDashboardScreen>
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => const AssetSelectionScreen(),
+        builder: (context) => const RequestorMainScreen(),
       ),
     );
     // Refresh data after returning

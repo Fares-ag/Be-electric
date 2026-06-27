@@ -5,6 +5,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import 'package:uuid/uuid.dart';
 
 import '../models/asset.dart';
@@ -13,30 +14,46 @@ import '../models/pm_task.dart';
 import '../models/user.dart';
 import '../models/work_order.dart';
 import '../models/workflow_models.dart';
+import '../services/realtime_supabase_service.dart';
 import '../services/supabase_database_service.dart';
 import '../services/supabase_storage_service.dart';
 import '../services/unified_data_service.dart';
 import '../utils/performance_optimizer.dart';
+import '../utils/stream_subscription_cancel.dart';
 
 class UnifiedDataProvider with ChangeNotifier {
   // Constructor - Auto-initialize on creation
   UnifiedDataProvider() {
     debugPrint('🚀 UnifiedDataProvider: Constructor called, initializing...');
+    _watchAuthState();
     initialize();
   }
   final UnifiedDataService _dataService = UnifiedDataService.instance;
   bool _isDisposed = false;
 
   // Stream subscriptions for real-time updates
-  StreamSubscription<List<WorkOrder>>? _workOrdersSubscription;
+  // Note: work orders now use a channel (not a stream) — see _startRealtimeListeners.
   StreamSubscription<List<PMTask>>? _pmTasksSubscription;
   StreamSubscription<List<Asset>>? _assetsSubscription;
   StreamSubscription<List<User>>? _usersSubscription;
   StreamSubscription<List<InventoryItem>>? _inventorySubscription;
   StreamSubscription<List<Workflow>>? _workflowsSubscription;
 
+  // Auth subscription so we re-load data exactly once a user signs in (and
+  // skip the wasted RLS-rejected fetches when no session is present yet).
+  StreamSubscription<sb.AuthState>? _authSubscription;
+
   // Real-time data cache
   List<WorkOrder> _realtimeWorkOrders = [];
+
+  // ── Pagination state for work orders ───────────────────────────────────────
+  static const int _woPageSize = 30;
+  int _woNextPage = 1;          // page 0 loaded during initialize()
+  bool _hasMoreWorkOrders = true;
+  bool _isLoadingMoreWorkOrders = false;
+
+  bool get hasMoreWorkOrders => _hasMoreWorkOrders;
+  bool get isLoadingMoreWorkOrders => _isLoadingMoreWorkOrders;
   List<PMTask> _realtimePMTasks = [];
   List<Asset> _realtimeAssets = [];
   List<User> _realtimeUsers = [];
@@ -249,7 +266,7 @@ class UnifiedDataProvider with ChangeNotifier {
       await _dataService.initialize();
 
       // Start listening to real-time Supabase streams
-      _startRealtimeListeners();
+      await _startRealtimeListeners();
 
       notifyListeners();
       debugPrint(
@@ -260,62 +277,88 @@ class UnifiedDataProvider with ChangeNotifier {
     }
   }
 
+  /// Cancel active realtime stream subscriptions before re-subscribing.
+  Future<void> _cancelRealtimeStreamSubscriptions() async {
+    RealtimeSupabaseService.instance.stopListeningToWorkOrderChanges();
+    await cancelStreamSubscriptions([
+      _pmTasksSubscription,
+      _assetsSubscription,
+      _usersSubscription,
+      _inventorySubscription,
+      _workflowsSubscription,
+    ]);
+    _pmTasksSubscription = null;
+    _assetsSubscription = null;
+    _usersSubscription = null;
+    _inventorySubscription = null;
+    _workflowsSubscription = null;
+  }
+
   /// Start listening to real-time Supabase streams
-  void _startRealtimeListeners() {
+  Future<void> _startRealtimeListeners() async {
+    if (_isDisposed) return;
+
+    await _cancelRealtimeStreamSubscriptions();
+    if (_isDisposed) return;
+
     debugPrint(
       '🔥 UnifiedDataProvider: Starting real-time Supabase listeners...',
     );
 
-    // Work Orders Stream
-    _workOrdersSubscription = _dataService.workOrdersStream.listen(
-      (workOrders) {
-        final missingUsers = <String>{};
-        final missingAssets = <String>{};
-        final deduped = _dedupeWorkOrders(workOrders);
-        final populated = _populateWorkOrderReferences(
-          deduped,
-          missingUserIds: missingUsers,
-          missingAssetIds: missingAssets,
-        );
+    // Work Orders: channel-based incremental events (INSERT/UPDATE/DELETE only).
+    // The initial data comes from the paged load during initialize().
+    // This replaces the old .stream() subscription that re-delivered ALL rows.
+    RealtimeSupabaseService.instance.listenToWorkOrderChanges(
+      (event) {
+        if (_isDisposed) return;
 
-        // Merge with existing real-time work orders to preserve locally created ones
-        // that might not be in Supabase yet
-        final merged = <String, WorkOrder>{};
-        for (final wo in _realtimeWorkOrders) {
-          merged[wo.id] = wo;
-        }
-        for (final wo in populated) {
-          // Keep the newer version if it exists
-          final existing = merged[wo.id];
-          if (existing == null ||
-              wo.updatedAt.isAfter(existing.updatedAt) ||
-              (wo.updatedAt == existing.updatedAt &&
-                  wo.createdAt.isAfter(existing.createdAt))) {
-            merged[wo.id] = wo;
-          }
+        switch (event.type) {
+          case WorkOrderChangeType.delete:
+            if (event.deletedId != null) {
+              _realtimeWorkOrders.removeWhere(
+                (wo) => wo.id == event.deletedId,
+              );
+            }
+
+          case WorkOrderChangeType.insert:
+          case WorkOrderChangeType.update:
+            final wo = event.workOrder;
+            if (wo == null) return;
+
+            final missingUsers = <String>{};
+            final missingAssets = <String>{};
+            final populated = _populateWorkOrderReferences(
+              [wo],
+              missingUserIds: missingUsers,
+              missingAssetIds: missingAssets,
+            );
+            final updated = populated.isNotEmpty ? populated.first : wo;
+
+            final idx = _realtimeWorkOrders.indexWhere(
+              (x) => x.id == updated.id,
+            );
+            if (idx != -1) {
+              _realtimeWorkOrders[idx] = updated;
+            } else {
+              // New insert — prepend so it appears at the top of the list.
+              _realtimeWorkOrders.insert(0, updated);
+            }
+
+            if (missingUsers.isNotEmpty || missingAssets.isNotEmpty) {
+              unawaited(
+                _recoverMissingReferences(
+                  userIds: missingUsers,
+                  assetIds: missingAssets,
+                ),
+              );
+            }
         }
 
-        _realtimeWorkOrders = merged.values.toList();
         _dataService.syncRealtimeWorkOrders(_realtimeWorkOrders);
-        if (!_isDisposed) {
-          ChangeNotifierBatcher.batchNotify(
-            () => notifyListeners(),
-            batchKey: this,
-          );
-        }
-        // Removed verbose real-time update logging
-
-        if (missingUsers.isNotEmpty || missingAssets.isNotEmpty) {
-          unawaited(
-            _recoverMissingReferences(
-              userIds: missingUsers,
-              assetIds: missingAssets,
-            ),
-          );
-        }
-      },
-      onError: (error) {
-        debugPrint('❌ Work orders stream error: $error');
+        ChangeNotifierBatcher.batchNotify(
+          () => notifyListeners(),
+          batchKey: this,
+        );
       },
     );
 
@@ -448,14 +491,39 @@ class UnifiedDataProvider with ChangeNotifier {
   void dispose() {
     _isDisposed = true;
     ChangeNotifierBatcher.cancel(this);
-    _workOrdersSubscription?.cancel();
-    _pmTasksSubscription?.cancel();
-    _assetsSubscription?.cancel();
-    _usersSubscription?.cancel();
-    _inventorySubscription?.cancel();
-    _workflowsSubscription?.cancel();
+    unawaited(_cancelRealtimeStreamSubscriptions());
+    _authSubscription?.cancel();
+    _authSubscription = null;
     debugPrint('🔥 UnifiedDataProvider: All real-time listeners disposed');
     super.dispose();
+  }
+
+  /// Re-run data load when the Supabase session transitions to signed-in.
+  /// Without this, the pre-auth `initialize()` is a no-op (good) but no one
+  /// would re-load after the user logs in.
+  void _watchAuthState() {
+    try {
+      _authSubscription = sb.Supabase.instance.client.auth.onAuthStateChange
+          .listen((event) {
+        switch (event.event) {
+          case sb.AuthChangeEvent.signedIn:
+          case sb.AuthChangeEvent.tokenRefreshed:
+          case sb.AuthChangeEvent.userUpdated:
+            // Trigger a load if we haven't loaded data for this user yet.
+            unawaited(initialize());
+            break;
+          case sb.AuthChangeEvent.signedOut:
+          case sb.AuthChangeEvent.userDeleted:
+            _dataService.resetInitialization();
+            _resetWorkOrderPagination();
+            break;
+          default:
+            break;
+        }
+      });
+    } catch (e) {
+      debugPrint('⚠️ UnifiedDataProvider: auth listener setup failed: $e');
+    }
   }
 
   /// Safe notifyListeners that checks if disposed
@@ -466,9 +534,10 @@ class UnifiedDataProvider with ChangeNotifier {
     }
   }
 
-  /// Refresh all data
+  /// Refresh all data (resets pagination to page 0).
   Future<void> refreshAll() async {
     try {
+      _resetWorkOrderPagination();
       await _dataService.refreshAll();
       notifyListeners();
     } catch (e) {
@@ -881,6 +950,57 @@ class UnifiedDataProvider with ChangeNotifier {
       debugPrint('UnifiedDataProvider: Error updating work order: $e');
       rethrow;
     }
+  }
+
+  /// Update only the in-memory cache with a fresh server version (no DB write).
+  /// Use this to keep the list consistent after a detail-screen server fetch.
+  void updateCachedWorkOrder(WorkOrder workOrder) {
+    final index = _realtimeWorkOrders.indexWhere((wo) => wo.id == workOrder.id);
+    if (index != -1) {
+      _realtimeWorkOrders[index] = workOrder;
+    } else {
+      _realtimeWorkOrders.add(workOrder);
+    }
+    notifyListeners();
+  }
+
+  /// Load the next page of work orders from Supabase and append to the cache.
+  /// No-ops if already loading or if there are no more pages.
+  Future<void> loadMoreWorkOrders() async {
+    if (_isLoadingMoreWorkOrders || !_hasMoreWorkOrders || _isDisposed) return;
+
+    _isLoadingMoreWorkOrders = true;
+
+    try {
+      final fetched = await _dataService.appendWorkOrderPage(
+        _woNextPage,
+        pageSize: _woPageSize,
+      );
+
+      if (fetched < _woPageSize) {
+        // Server returned fewer rows than the page size → last page reached.
+        _hasMoreWorkOrders = false;
+      }
+
+      _woNextPage++;
+
+      // Refresh references for newly added rows and guard against any
+      // duplicate ids/ticket numbers across pages.
+      _realtimeWorkOrders =
+          _dedupeWorkOrders(_populateWorkOrderReferences(_realtimeWorkOrders));
+    } catch (e) {
+      debugPrint('UnifiedDataProvider: loadMoreWorkOrders error: $e');
+    } finally {
+      _isLoadingMoreWorkOrders = false;
+      if (!_isDisposed) notifyListeners();
+    }
+  }
+
+  /// Reset pagination so the next initialize() re-fetches from page 0.
+  void _resetWorkOrderPagination() {
+    _woNextPage = 1;
+    _hasMoreWorkOrders = true;
+    _isLoadingMoreWorkOrders = false;
   }
 
   /// Delete work order

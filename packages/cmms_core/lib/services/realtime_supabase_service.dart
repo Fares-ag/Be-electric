@@ -15,6 +15,20 @@ import '../models/work_order.dart';
 import '../models/workflow_models.dart';
 import 'supabase_database_service.dart';
 
+/// Describes a single incremental change to a work order row.
+enum WorkOrderChangeType { insert, update, delete }
+
+class WorkOrderChangeEvent {
+  const WorkOrderChangeEvent({
+    required this.type,
+    this.workOrder,
+    this.deletedId,
+  });
+  final WorkOrderChangeType type;
+  final WorkOrder? workOrder;  // populated for insert/update
+  final String? deletedId;     // populated for delete
+}
+
 class RealtimeSupabaseService {
   RealtimeSupabaseService._();
   static RealtimeSupabaseService? _instance;
@@ -26,6 +40,9 @@ class RealtimeSupabaseService {
 
   // Stream controllers for managing subscriptions
   final Map<String, StreamSubscription<dynamic>> _subscriptions = {};
+
+  // Channel-based real-time subscription for work orders
+  RealtimeChannel? _workOrdersChannel;
 
   /// Initialize the service
   Future<void> initialize() async {
@@ -44,7 +61,72 @@ class RealtimeSupabaseService {
       subscription.cancel();
     }
     _subscriptions.clear();
+    _workOrdersChannel?.unsubscribe();
+    _workOrdersChannel = null;
     debugPrint('RealtimeSupabase: All subscriptions cancelled');
+  }
+
+  // ============================================================================
+  // WORK ORDERS - CHANNEL-BASED INCREMENTAL CHANGE EVENTS
+  // ============================================================================
+
+  /// Subscribe to incremental INSERT/UPDATE/DELETE events on the work_orders
+  /// table.  Only the changed row is delivered — not the full table —
+  /// making this much cheaper than .stream() at scale.
+  ///
+  /// Call [stopListeningToWorkOrderChanges] to unsubscribe.
+  void listenToWorkOrderChanges(void Function(WorkOrderChangeEvent) onEvent) {
+    _workOrdersChannel?.unsubscribe();
+
+    _workOrdersChannel = _client
+        .channel('work_orders_changes')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'work_orders',
+          callback: (PostgresChangePayload payload) {
+            try {
+              if (payload.eventType == PostgresChangeEvent.delete) {
+                final id = payload.oldRecord['id'] as String?;
+                if (id != null && id.isNotEmpty) {
+                  onEvent(WorkOrderChangeEvent(
+                    type: WorkOrderChangeType.delete,
+                    deletedId: id,
+                  ));
+                }
+                return;
+              }
+
+              final raw = Map<String, dynamic>.from(payload.newRecord);
+              if (raw.isEmpty) return;
+              final data = _dbService.convertFromSupabaseMap(raw);
+              data['id'] = raw['id'] ?? '';
+              final wo = WorkOrder.fromMap(data);
+
+              onEvent(WorkOrderChangeEvent(
+                type: payload.eventType == PostgresChangeEvent.insert
+                    ? WorkOrderChangeType.insert
+                    : WorkOrderChangeType.update,
+                workOrder: wo,
+              ));
+            } catch (e) {
+              debugPrint('⚠️ WorkOrderChangeEvent parse error: $e');
+            }
+          },
+        )
+        .subscribe((status, [error]) {
+      if (error != null) {
+        debugPrint('❌ work_orders channel error: $error');
+      } else {
+        debugPrint('✅ work_orders channel status: $status');
+      }
+    });
+  }
+
+  void stopListeningToWorkOrderChanges() {
+    _workOrdersChannel?.unsubscribe();
+    _workOrdersChannel = null;
+    debugPrint('RealtimeSupabase: work_orders channel unsubscribed');
   }
 
   // ============================================================================

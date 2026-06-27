@@ -9,6 +9,8 @@ import '../../models/user.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/supabase_database_service.dart';
 import '../../utils/app_theme.dart';
+import '../../config/app_config.dart';
+import '../../utils/legal_links.dart';
 import '../../utils/requestor_home_navigation.dart';
 import '../../widgets/custom_app_bar.dart';
 import '../../widgets/requestor_more_menu.dart';
@@ -165,6 +167,57 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       'Last sign-in',
                       _formatUserDate(user.lastLoginAt!),
                     ),
+                ],
+              ),
+              const SizedBox(height: AppTheme.spacingM),
+              _InfoCard(
+                title: 'Legal & account',
+                children: [
+                  if (AppConfig.privacyPolicyUrl.isNotEmpty)
+                    ListTile(
+                      leading: const Icon(Icons.privacy_tip_outlined),
+                      title: const Text('Privacy Policy'),
+                      trailing: const Icon(Icons.open_in_new, size: 18),
+                      onTap: () => launchLegalUrl(
+                        context,
+                        AppConfig.privacyPolicyUrl,
+                      ),
+                    ),
+                  if (AppConfig.termsOfServiceUrl.isNotEmpty)
+                    ListTile(
+                      leading: const Icon(Icons.description_outlined),
+                      title: const Text('Terms of Service'),
+                      trailing: const Icon(Icons.open_in_new, size: 18),
+                      onTap: () => launchLegalUrl(
+                        context,
+                        AppConfig.termsOfServiceUrl,
+                      ),
+                    ),
+                  if (AppConfig.supportUrl.isNotEmpty)
+                    ListTile(
+                      leading: const Icon(Icons.help_outline),
+                      title: const Text('Help & support'),
+                      trailing: const Icon(Icons.open_in_new, size: 18),
+                      onTap: () => launchLegalUrl(
+                        context,
+                        AppConfig.supportUrl,
+                      ),
+                    ),
+                  ListTile(
+                    leading: const Icon(
+                      Icons.delete_outline,
+                      color: AppTheme.accentRed,
+                    ),
+                    title: const Text('Request account deletion'),
+                    subtitle: const Text(
+                      'Contact support to delete your account and data',
+                    ),
+                    onTap: () => showAccountDeletionRequestDialog(
+                      context,
+                      userEmail: user.email,
+                      userName: user.name,
+                    ),
+                  ),
                 ],
               ),
             ],

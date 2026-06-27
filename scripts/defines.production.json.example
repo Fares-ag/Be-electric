@@ -1,5 +1,8 @@
 {
-  "ONE_SIGNAL_APP_ID": "paste-your-onesignal-app-id-here",
   "SUPABASE_URL": "https://your-project.supabase.co",
-  "SUPABASE_ANON_KEY": "your-supabase-anon-key"
+  "SUPABASE_ANON_KEY": "your-supabase-anon-key",
+  "PRIVACY_POLICY_URL": "https://your-domain.com/privacy",
+  "TERMS_OF_SERVICE_URL": "https://your-domain.com/terms",
+  "SUPPORT_URL": "https://your-domain.com/support",
+  "SUPPORT_EMAIL": "support@your-domain.com"
 }

@@ -68,24 +68,38 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
             final notifications = snapshot.data!;
 
             if (notifications.isEmpty) {
-              return const Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.notifications_none,
-                      size: 80,
-                      color: AppTheme.secondaryTextColor,
-                    ),
-                    SizedBox(height: AppTheme.spacingL),
-                    Text(
-                      'No notifications',
-                      style: TextStyle(
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(AppTheme.spacingL),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.notifications_none,
+                        size: 80,
                         color: AppTheme.secondaryTextColor,
-                        fontSize: 18,
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: AppTheme.spacingL),
+                      Text(
+                        'No notifications yet',
+                        style: TextStyle(
+                          color: AppTheme.secondaryTextColor,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: AppTheme.spacingS),
+                      Text(
+                        'Updates about your maintenance requests will appear here '
+                        'when your request status changes.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: AppTheme.secondaryTextColor,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               );
             }

@@ -1,8 +1,7 @@
-# Release builds with OneSignal (and optional Supabase) dart-defines.
+# Release builds with optional Supabase dart-defines.
 # From repo root:
-#   $env:ONE_SIGNAL_APP_ID = "your-uuid"
 #   .\scripts\build_production.ps1 -Target requestor
-# Or copy defines.production.json.example to defines.production.json (gitignored) and use -FromFile
+# Or copy defines.production.json.example to defines.production.json (gitignored).
 
 param(
     [ValidateSet("requestor", "technician", "both")]
@@ -22,11 +21,7 @@ function Get-DefineArgList {
         Write-Host "Using --dart-define-from-file: $DefinesFile" -ForegroundColor Cyan
         return @("--dart-define-from-file=$DefinesFile")
     }
-    if ([string]::IsNullOrWhiteSpace($env:ONE_SIGNAL_APP_ID)) {
-        Write-Host "ERROR: Set ONE_SIGNAL_APP_ID, or create scripts\defines.production.json (see defines.production.json.example)" -ForegroundColor Red
-        exit 1
-    }
-    $out = @("--dart-define=ONE_SIGNAL_APP_ID=$($env:ONE_SIGNAL_APP_ID)")
+    $out = @()
     if (-not [string]::IsNullOrWhiteSpace($env:SUPABASE_URL)) {
         $out += "--dart-define=SUPABASE_URL=$($env:SUPABASE_URL)"
     }
@@ -47,7 +42,12 @@ function Invoke-FlutterRelease {
     Push-Location $appPath
     try {
         if ($Format -eq "ipa") {
-            $cmd = @("build", "ipa", "--release") + $defineArgList
+            $exportPlist = Join-Path $appPath "ios/ExportOptions.plist"
+            $exportOpts = @()
+            if (Test-Path $exportPlist) {
+                $exportOpts = @("--export-options-plist=ios/ExportOptions.plist")
+            }
+            $cmd = @("build", "ipa", "--release") + $defineArgList + $exportOpts
         } else {
             $cmd = @("build", $Format, "--release") + $defineArgList
         }

@@ -1,6 +1,4 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import '../auth/login_screen.dart';
 import '../../utils/cmms_package_assets.dart';
 
 class RequestorSplashScreen extends StatefulWidget {
@@ -60,47 +58,13 @@ class _RequestorSplashScreenState extends State<RequestorSplashScreen>
             Future.delayed(const Duration(milliseconds: 500), () {
               if (mounted) {
                 setState(() => _currentScreen = 3);
-                Future.delayed(const Duration(milliseconds: 1000), () {
-                  if (mounted) {
-                    _navigateToMain();
-                  }
-                });
+                // AuthWrapper owns navigation after splash — no push here.
               }
             });
           }
         });
       }
     });
-  }
-
-  void _navigateToMain() {
-    if (mounted) {
-      try {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => const LoginScreen(),
-          ),
-        );
-      } catch (e) {
-        debugPrint('Navigation error: $e');
-        // If navigation fails, try again after a short delay
-        Future.delayed(const Duration(milliseconds: 500), () {
-          if (mounted) {
-            try {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const LoginScreen(),
-                ),
-              );
-            } catch (e2) {
-              debugPrint('Retry navigation error: $e2');
-            }
-          }
-        });
-      }
-    }
   }
 
   Widget _buildLogo() {

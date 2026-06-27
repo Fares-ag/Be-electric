@@ -167,18 +167,29 @@ class SupabaseDatabaseService {
           !data.containsKey('previousStatus')) {
         data['previousStatus'] = metadata['previousStatus'];
       }
-      // Extract problem photo URLs (requestor images) from metadata for display
-      if (metadata.containsKey('photoPaths') &&
-          !data.containsKey('photoPaths')) {
-        final paths = metadata['photoPaths'];
-        data['photoPaths'] = paths is List ? List<String>.from(paths) : paths;
+      // Extract problem photo URLs (requestor images) from metadata for display.
+      // Use value check (not just containsKey) so a null/empty Supabase column
+      // does not block restoration from the metadata JSONB blob.
+      if (metadata.containsKey('photoPaths')) {
+        final existing = data['photoPaths'];
+        final hasExisting =
+            existing is List && (existing).isNotEmpty;
+        if (!hasExisting) {
+          final paths = metadata['photoPaths'];
+          data['photoPaths'] =
+              paths is List ? List<String>.from(paths) : paths;
+        }
       }
-      // Extract completion photo URLs (multiple) from metadata for display
-      if (metadata.containsKey('completionPhotoPaths') &&
-          !data.containsKey('completionPhotoPaths')) {
-        final paths = metadata['completionPhotoPaths'];
-        data['completionPhotoPaths'] =
-            paths is List ? List<String>.from(paths) : paths;
+      // Extract completion photo URLs (multiple) from metadata for display.
+      if (metadata.containsKey('completionPhotoPaths')) {
+        final existing = data['completionPhotoPaths'];
+        final hasExisting =
+            existing is List && (existing).isNotEmpty;
+        if (!hasExisting) {
+          final paths = metadata['completionPhotoPaths'];
+          data['completionPhotoPaths'] =
+              paths is List ? List<String>.from(paths) : paths;
+        }
       }
     }
   }
@@ -215,6 +226,45 @@ class SupabaseDatabaseService {
     _extractReopenFieldsFromMetadata(dataMap);
 
     return dataMap;
+  }
+
+  /// Persists full problem + completion photo URL lists in [metadata] so reads
+  /// (and clients that only set the legacy single columns) always round-trip.
+  void _mergeWorkOrderPhotoMetadataIntoRow(Map<String, dynamic> data) {
+    final existingMeta =
+        (data['metadata'] as Map<String, dynamic>?) != null
+            ? Map<String, dynamic>.from(data['metadata'] as Map)
+            : <String, dynamic>{};
+
+    final problemList = data['photoPaths'] as List<dynamic>?;
+    final problemSingle = data['photoPath'] as String?;
+    final effectiveProblem = <String>[];
+    if (problemList != null && problemList.isNotEmpty) {
+      effectiveProblem.addAll(problemList.map((e) => e.toString()));
+    } else if (problemSingle != null && problemSingle.isNotEmpty) {
+      effectiveProblem.add(problemSingle);
+    }
+    if (effectiveProblem.isNotEmpty) {
+      existingMeta['photoPaths'] = effectiveProblem;
+    }
+
+    final completionList = data['completionPhotoPaths'] as List<dynamic>?;
+    final completionSingle = data['completionPhotoPath'] as String?;
+    final effectiveCompletion = <String>[];
+    if (completionList != null && completionList.isNotEmpty) {
+      effectiveCompletion.addAll(completionList.map((e) => e.toString()));
+    } else if (completionSingle != null && completionSingle.isNotEmpty) {
+      effectiveCompletion.add(completionSingle);
+    }
+    if (effectiveCompletion.isNotEmpty) {
+      existingMeta['completionPhotoPaths'] = effectiveCompletion;
+    }
+
+    if (existingMeta.isNotEmpty) {
+      data['metadata'] = existingMeta;
+    }
+    data.remove('photoPaths');
+    data.remove('completionPhotoPaths');
   }
 
   bool _isIso8601Date(String value) {
@@ -294,32 +344,17 @@ class SupabaseDatabaseService {
       data.remove('severityLevel');
       data.remove('isRepeatFailure');
       data.remove('workCategory');
-      // Store photoPaths in metadata (schema has only photoPath); keep first in photoPath
-      final photoPathsList = data['photoPaths'] as List<dynamic>?;
-      if (photoPathsList != null && photoPathsList.isNotEmpty) {
-        final existingMeta =
-            data['metadata'] as Map<String, dynamic>? ?? <String, dynamic>{};
-        data['metadata'] = <String, dynamic>{
-          ...existingMeta,
-          'photoPaths': photoPathsList.map((e) => e.toString()).toList(),
-        };
-      }
-      data.remove('photoPaths');
-      // Store completionPhotoPaths in metadata (schema has only completionPhotoPath)
-      final completionPathsList =
-          data['completionPhotoPaths'] as List<dynamic>?;
-      if (completionPathsList != null && completionPathsList.isNotEmpty) {
-        final existingMeta =
-            data['metadata'] as Map<String, dynamic>? ?? <String, dynamic>{};
-        data['metadata'] = <String, dynamic>{
-          ...existingMeta,
-          'completionPhotoPaths':
-              completionPathsList.map((e) => e.toString()).toList(),
-        };
-      }
-      data.remove('completionPhotoPaths');
+      _mergeWorkOrderPhotoMetadataIntoRow(data);
 
       _moveNonUuidWorkOrderFksToMetadata(data);
+
+      // Log what photo data we're sending so we can diagnose storage issues.
+      final metaForLog = data['metadata'] as Map<String, dynamic>?;
+      final photosInMeta = metaForLog?['photoPaths'];
+      debugPrint(
+        '📸 createWorkOrder: photoPath=${data['photoPath']}, '
+        'photoPaths in metadata=$photosInMeta',
+      );
 
       // Use SECURITY DEFINER RPC so work order insert succeeds without
       // authenticated needing SELECT on public.users (FK checks run as definer).
@@ -327,6 +362,25 @@ class SupabaseDatabaseService {
       final returnedId = result != null ? result.toString() : id;
 
       debugPrint('Supabase: Work order upserted with ID: $returnedId');
+
+      // Belt-and-suspenders: if there are photos in metadata, persist them via
+      // a direct UPDATE so they are saved even if the RPC ignores the metadata
+      // field.  This UPDATE runs with the authenticated user's session.
+      if (photosInMeta is List && photosInMeta.isNotEmpty) {
+        try {
+          final savedId = returnedId.isNotEmpty ? returnedId : id;
+          await _client.from('work_orders').update({
+            'metadata': metaForLog,
+          }).eq('id', savedId);
+          debugPrint(
+            '📸 Photo metadata patched directly on row $savedId: $photosInMeta',
+          );
+        } catch (e) {
+          // Non-fatal: the RPC may have already saved metadata correctly.
+          debugPrint('⚠️ Could not patch photo metadata (non-fatal): $e');
+        }
+      }
+
       return returnedId;
     } on Exception catch (e) {
       debugPrint('Supabase: Error creating work order: $e');
@@ -504,30 +558,7 @@ class SupabaseDatabaseService {
       data.remove('severityLevel');
       data.remove('isRepeatFailure');
       data.remove('workCategory');
-      // Store photoPaths in metadata (schema has only photoPath)
-      final photoPathsList = data['photoPaths'] as List<dynamic>?;
-      if (photoPathsList != null && photoPathsList.isNotEmpty) {
-        final existingMeta =
-            data['metadata'] as Map<String, dynamic>? ?? <String, dynamic>{};
-        data['metadata'] = <String, dynamic>{
-          ...existingMeta,
-          'photoPaths': photoPathsList.map((e) => e.toString()).toList(),
-        };
-      }
-      data.remove('photoPaths');
-      // Store completionPhotoPaths in metadata (schema has only completionPhotoPath)
-      final completionPathsList =
-          data['completionPhotoPaths'] as List<dynamic>?;
-      if (completionPathsList != null && completionPathsList.isNotEmpty) {
-        final existingMeta =
-            data['metadata'] as Map<String, dynamic>? ?? <String, dynamic>{};
-        data['metadata'] = <String, dynamic>{
-          ...existingMeta,
-          'completionPhotoPaths':
-              completionPathsList.map((e) => e.toString()).toList(),
-        };
-      }
-      data.remove('completionPhotoPaths');
+      _mergeWorkOrderPhotoMetadataIntoRow(data);
 
       _moveNonUuidWorkOrderFksToMetadata(data);
 
@@ -593,17 +624,28 @@ class SupabaseDatabaseService {
     }
   }
 
-  /// Get all work orders
-  Future<List<WorkOrder>> getAllWorkOrders() async {
+  /// Get all work orders (kept for backward-compatibility; prefer [getWorkOrdersPage]).
+  Future<List<WorkOrder>> getAllWorkOrders() => getWorkOrdersPage(page: 0, pageSize: 1000);
+
+  /// Get a single page of work orders ordered by newest first.
+  /// [page] is zero-based; returns at most [pageSize] items.
+  Future<List<WorkOrder>> getWorkOrdersPage({
+    int page = 0,
+    int pageSize = 30,
+  }) async {
     try {
       if (!_isAuthenticated) throw Exception('User not authenticated');
 
-      debugPrint('Supabase: Getting all work orders');
+      final from = page * pageSize;
+      final to = from + pageSize - 1;
+
+      debugPrint('Supabase: Getting work orders page $page (rows $from–$to)');
 
       final response = await _client
           .from('work_orders')
           .select()
-          .order('createdAt', ascending: false);
+          .order('createdAt', ascending: false)
+          .range(from, to);
 
       final workOrders = (response as List).map((doc) {
         final data = convertFromSupabaseMap(Map<String, dynamic>.from(doc));
@@ -620,10 +662,11 @@ class SupabaseDatabaseService {
         return workOrder;
       }).toList();
 
-      debugPrint('Supabase: Retrieved ${workOrders.length} work orders');
+      debugPrint('Supabase: Retrieved ${workOrders.length} work orders '
+          '(page $page, pageSize $pageSize)');
       return workOrders;
     } on Exception catch (e) {
-      debugPrint('Supabase: Error getting work orders: $e');
+      debugPrint('Supabase: Error getting work orders page $page: $e');
       return [];
     }
   }

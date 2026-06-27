@@ -1,8 +1,10 @@
 // Supabase Authentication Service
 // Handles user authentication with Supabase Auth
 
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/user.dart' as app_user;
+import '../utils/auth_login_policy.dart';
 
 class SupabaseAuthService {
   SupabaseAuthService._();
@@ -13,11 +15,11 @@ class SupabaseAuthService {
   /// Initialize Supabase Auth Service
   Future<void> initialize() async {
     try {
-      print('🔐 Supabase Auth: Initializing...');
+      debugPrint('🔐 Supabase Auth: Initializing...');
       // Supabase is initialized in main.dart
-      print('🔐 Supabase Auth: Initialized successfully');
+      debugPrint('🔐 Supabase Auth: Initialized successfully');
     } catch (e) {
-      print('❌ Supabase Auth: Initialization error: $e');
+      debugPrint('❌ Supabase Auth: Initialization error: $e');
     }
   }
 
@@ -47,8 +49,13 @@ class SupabaseAuthService {
             userMetadata?['full_name'] ?? 
             (supabaseUser.email?.split('@').first ?? 'Unknown User'),
       email: supabaseUser.email ?? '',
-      role: userMetadata?['role'] ?? appMetadata?['role'] ?? _getUserRoleFromEmail(supabaseUser.email ?? ''),
-      department: userMetadata?['department'] ?? appMetadata?['department'] ?? _getUserDepartmentFromEmail(supabaseUser.email ?? ''),
+      role: resolveAuthProfileRole(
+        userMetadataRole: userMetadata?['role'] as String?,
+        appMetadataRole: appMetadata?['role'] as String?,
+      ),
+      department: userMetadata?['department'] as String? ??
+          appMetadata?['department'] as String? ??
+          'Maintenance',
       createdAt: DateTime.parse(supabaseUser.createdAt),
       lastLoginAt: supabaseUser.lastSignInAt != null 
           ? DateTime.parse(supabaseUser.lastSignInAt!) 
@@ -62,7 +69,7 @@ class SupabaseAuthService {
     required String password,
   }) async {
     try {
-      print('🔐 Supabase Auth: Signing in with email: $email');
+      debugPrint('🔐 Supabase Auth: Signing in with email: $email');
 
       final response = await _client.auth.signInWithPassword(
         email: email,
@@ -70,13 +77,13 @@ class SupabaseAuthService {
       );
 
       if (response.user != null) {
-        print('🔐 Supabase Auth: Sign in successful');
+        debugPrint('🔐 Supabase Auth: Sign in successful');
         return await getCurrentAppUser();
       }
 
       return null;
     } catch (e) {
-      print('❌ Supabase Auth: Sign in error: $e');
+      debugPrint('❌ Supabase Auth: Sign in error: $e');
       throw Exception('Sign in failed: $e');
     }
   }
@@ -91,7 +98,7 @@ class SupabaseAuthService {
     String? phoneNumber,
   }) async {
     try {
-      print('🔐 Supabase Auth: Creating account for: $email');
+      debugPrint('🔐 Supabase Auth: Creating account for: $email');
 
       final response = await _client.auth.signUp(
         email: email,
@@ -105,13 +112,13 @@ class SupabaseAuthService {
       );
 
       if (response.user != null) {
-        print('🔐 Supabase Auth: Account created successfully');
+        debugPrint('🔐 Supabase Auth: Account created successfully');
         return await getCurrentAppUser();
       }
 
       return null;
     } catch (e) {
-      print('❌ Supabase Auth: Sign up error: $e');
+      debugPrint('❌ Supabase Auth: Sign up error: $e');
       throw Exception('Sign up failed: $e');
     }
   }
@@ -119,11 +126,11 @@ class SupabaseAuthService {
   /// Sign out
   Future<void> signOut() async {
     try {
-      print('🔐 Supabase Auth: Signing out');
+      debugPrint('🔐 Supabase Auth: Signing out');
       await _client.auth.signOut();
-      print('🔐 Supabase Auth: Sign out successful');
+      debugPrint('🔐 Supabase Auth: Sign out successful');
     } catch (e) {
-      print('❌ Supabase Auth: Sign out error: $e');
+      debugPrint('❌ Supabase Auth: Sign out error: $e');
       throw Exception('Sign out failed: $e');
     }
   }
@@ -131,11 +138,11 @@ class SupabaseAuthService {
   /// Reset password
   Future<void> resetPassword(String email) async {
     try {
-      print('🔐 Supabase Auth: Sending password reset to: $email');
+      debugPrint('🔐 Supabase Auth: Sending password reset to: $email');
       await _client.auth.resetPasswordForEmail(email);
-      print('🔐 Supabase Auth: Password reset email sent');
+      debugPrint('🔐 Supabase Auth: Password reset email sent');
     } catch (e) {
-      print('❌ Supabase Auth: Password reset error: $e');
+      debugPrint('❌ Supabase Auth: Password reset error: $e');
       throw Exception('Password reset failed: $e');
     }
   }
@@ -163,28 +170,11 @@ class SupabaseAuthService {
         );
       }
 
-      print('🔐 Supabase Auth: Profile updated successfully');
+      debugPrint('🔐 Supabase Auth: Profile updated successfully');
     } catch (e) {
-      print('❌ Supabase Auth: Profile update error: $e');
+      debugPrint('❌ Supabase Auth: Profile update error: $e');
       throw Exception('Profile update failed: $e');
     }
-  }
-
-  /// Get user role from email
-  String _getUserRoleFromEmail(String email) {
-    final emailLower = email.toLowerCase();
-    if (emailLower.contains('admin')) return 'admin';
-    if (emailLower.contains('manager')) return 'manager';
-    if (emailLower.contains('technician')) return 'technician';
-    return 'requestor';
-  }
-
-  /// Get user department from email
-  String _getUserDepartmentFromEmail(String email) {
-    final emailLower = email.toLowerCase();
-    if (emailLower.contains('admin')) return 'Administration';
-    if (emailLower.contains('manager')) return 'Management';
-    return 'Maintenance';
   }
 
   /// Check if user is signed in
@@ -199,7 +189,7 @@ class SupabaseAuthService {
       final session = _client.auth.currentSession;
       return session?.accessToken;
     } catch (e) {
-      print('❌ Supabase Auth: Error getting ID token: $e');
+      debugPrint('❌ Supabase Auth: Error getting ID token: $e');
       return null;
     }
   }
@@ -208,21 +198,21 @@ class SupabaseAuthService {
   Future<void> refreshToken() async {
     try {
       await _client.auth.refreshSession();
-      print('🔐 Supabase Auth: Token refreshed');
+      debugPrint('🔐 Supabase Auth: Token refreshed');
     } catch (e) {
-      print('❌ Supabase Auth: Error refreshing token: $e');
+      debugPrint('❌ Supabase Auth: Error refreshing token: $e');
     }
   }
 
   /// Sign in anonymously (not supported in Supabase, returns null)
   Future<app_user.User?> signInAnonymously() async {
     try {
-      print('🔐 Supabase Auth: Anonymous sign in not supported in Supabase');
+      debugPrint('🔐 Supabase Auth: Anonymous sign in not supported in Supabase');
       // Supabase doesn't support anonymous auth by default
       // You would need to create a guest user or use a different approach
       return null;
     } catch (e) {
-      print('❌ Supabase Auth: Anonymous sign in error: $e');
+      debugPrint('❌ Supabase Auth: Anonymous sign in error: $e');
       throw Exception('Anonymous sign in not supported');
     }
   }
@@ -236,7 +226,7 @@ class SupabaseAuthService {
       }
       return false;
     } catch (e) {
-      print('❌ Supabase Auth: Authentication check failed: $e');
+      debugPrint('❌ Supabase Auth: Authentication check failed: $e');
       return false;
     }
   }

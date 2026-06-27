@@ -10,6 +10,7 @@ import '../../services/supabase_storage_service.dart';
 import '../../utils/app_theme.dart';
 import '../../utils/requestor_home_navigation.dart';
 import '../../utils/responsive_layout.dart';
+import '../../widgets/authenticated_image.dart';
 import '../../widgets/custom_app_bar.dart';
 import '../../widgets/requestor_more_menu.dart';
 
@@ -31,10 +32,11 @@ class _EditRequestScreenState extends State<EditRequestScreen> {
   WorkOrderPriority _selectedPriority = WorkOrderPriority.medium;
   RepairCategory _selectedCategory = RepairCategory.reactive;
 
-  // Photo upload
+  // Photos: keep existing URLs editable + new captures/uploads
   final ImagePicker _picker = ImagePicker();
-  XFile? _selectedPhoto;
   final SupabaseStorageService _storageService = SupabaseStorageService();
+  late List<String> _existingProblemPhotoUrls;
+  final List<XFile> _newLocalPhotos = [];
 
   @override
   void initState() {
@@ -42,6 +44,13 @@ class _EditRequestScreenState extends State<EditRequestScreen> {
     _problemDescriptionController.text = widget.workOrder.problemDescription;
     _selectedPriority = widget.workOrder.priority;
     _selectedCategory = widget.workOrder.category ?? RepairCategory.reactive;
+    _existingProblemPhotoUrls = widget.workOrder.photoPaths != null &&
+            widget.workOrder.photoPaths!.isNotEmpty
+        ? List<String>.from(widget.workOrder.photoPaths!)
+        : (widget.workOrder.photoPath != null &&
+                widget.workOrder.photoPath!.isNotEmpty
+            ? [widget.workOrder.photoPath!]
+            : <String>[]);
   }
 
   @override
@@ -60,7 +69,7 @@ class _EditRequestScreenState extends State<EditRequestScreen> {
 
       if (photo != null && mounted) {
         setState(() {
-          _selectedPhoto = photo;
+          _newLocalPhotos.add(photo);
         });
       }
     } catch (e) {
@@ -75,8 +84,20 @@ class _EditRequestScreenState extends State<EditRequestScreen> {
     }
   }
 
-  Future<void> _pickPhotoFromGallery() async {
+  Future<void> _pickPhotosFromGallery() async {
     try {
+      final List<XFile>? photos = await _picker.pickMultiImage(
+        imageQuality: 85,
+        maxWidth: 1920,
+      );
+
+      if (photos != null && photos.isNotEmpty && mounted) {
+        setState(() {
+          _newLocalPhotos.addAll(photos);
+        });
+        return;
+      }
+
       final XFile? photo = await _picker.pickImage(
         source: ImageSource.gallery,
         imageQuality: 85,
@@ -85,14 +106,14 @@ class _EditRequestScreenState extends State<EditRequestScreen> {
 
       if (photo != null && mounted) {
         setState(() {
-          _selectedPhoto = photo;
+          _newLocalPhotos.add(photo);
         });
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error picking photo: $e'),
+            content: Text('Error picking photos: $e'),
             backgroundColor: AppTheme.accentRed,
           ),
         );
@@ -100,12 +121,16 @@ class _EditRequestScreenState extends State<EditRequestScreen> {
     }
   }
 
-  Future<void> _removePhoto() async {
-    if (mounted) {
-      setState(() {
-        _selectedPhoto = null;
-      });
-    }
+  void _removeExistingUrl(int index) {
+    setState(() {
+      _existingProblemPhotoUrls.removeAt(index);
+    });
+  }
+
+  void _removeNewLocal(int index) {
+    setState(() {
+      _newLocalPhotos.removeAt(index);
+    });
   }
 
   Future<void> _saveChanges() async {
@@ -135,23 +160,23 @@ class _EditRequestScreenState extends State<EditRequestScreen> {
       final unifiedProvider =
           Provider.of<UnifiedDataProvider>(context, listen: false);
 
-      // Upload photo if selected
-      String? photoUrl = widget.workOrder.photoPath;
-      if (_selectedPhoto != null) {
+      final photoUrls = List<String>.from(_existingProblemPhotoUrls);
+      for (var i = 0; i < _newLocalPhotos.length; i++) {
         try {
-          photoUrl = await _storageService.uploadFile(
-            file: _selectedPhoto!,
-            fileName: 'request_${widget.workOrder.id}_${DateTime.now().millisecondsSinceEpoch}.jpg',
+          final url = await _storageService.uploadFile(
+            file: _newLocalPhotos[i],
+            fileName:
+                'request_${widget.workOrder.id}_${DateTime.now().millisecondsSinceEpoch}_$i.jpg',
             folder: 'work_orders/request_photos',
           );
-          if (photoUrl == null) {
-            throw Exception('Failed to upload photo');
+          if (url != null && url.isNotEmpty) {
+            photoUrls.add(url);
           }
         } catch (e) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('Error uploading photo: $e'),
+                content: Text('Error uploading a photo: $e'),
                 backgroundColor: AppTheme.accentRed,
               ),
             );
@@ -167,7 +192,8 @@ class _EditRequestScreenState extends State<EditRequestScreen> {
         problemDescription: _problemDescriptionController.text.trim(),
         priority: _selectedPriority,
         category: _selectedCategory,
-        photoPath: photoUrl,
+        photoPath: photoUrls.isNotEmpty ? photoUrls.first : null,
+        photoPaths: photoUrls,
         updatedAt: DateTime.now(),
       );
 
@@ -482,94 +508,147 @@ class _EditRequestScreenState extends State<EditRequestScreen> {
                 size: 20,
               ),
               const SizedBox(width: AppTheme.spacingS),
-              Text(
-                'Photo (Optional)',
-                style: AppTheme.heading2.copyWith(
-                  color: AppTheme.darkTextColor,
+              Expanded(
+                child: Text(
+                  'Photos (optional)',
+                  style: AppTheme.heading2.copyWith(
+                    color: AppTheme.darkTextColor,
+                  ),
                 ),
               ),
             ],
           ),
           const SizedBox(height: AppTheme.spacingS),
-          if (widget.workOrder.photoPath != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: AppTheme.spacingS),
-              child: Text(
-                'Current photo will be replaced if you upload a new one',
-                style: AppTheme.smallText.copyWith(
-                  color: AppTheme.secondaryTextColor,
-                ),
+          Text(
+            'Add multiple photos of the issue. Tap the camera again or use '
+            'the gallery to select several images at once.',
+            style: AppTheme.smallText.copyWith(
+              color: AppTheme.secondaryTextColor,
+            ),
+          ),
+          const SizedBox(height: AppTheme.spacingM),
+          if (_existingProblemPhotoUrls.isNotEmpty ||
+              _newLocalPhotos.isNotEmpty) ...[
+            SizedBox(
+              height: 108,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: [
+                  ...List.generate(_existingProblemPhotoUrls.length, (index) {
+                    final url = _existingProblemPhotoUrls[index];
+                    return Padding(
+                      padding: const EdgeInsets.only(right: AppTheme.spacingS),
+                      child: Stack(
+                        alignment: Alignment.topRight,
+                        children: [
+                          ClipRRect(
+                            borderRadius:
+                                BorderRadius.circular(AppTheme.radiusS),
+                            child: AuthenticatedImage(
+                              imageUrl: url,
+                              width: 100,
+                              height: 100,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => _removeExistingUrl(index),
+                            icon: const Icon(Icons.close, size: 18),
+                            style: IconButton.styleFrom(
+                              backgroundColor: Colors.black54,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.all(4),
+                              minimumSize: const Size(28, 28),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                  ...List.generate(_newLocalPhotos.length, (index) {
+                    final f = _newLocalPhotos[index];
+                    return Padding(
+                      padding: const EdgeInsets.only(right: AppTheme.spacingS),
+                      child: Stack(
+                        alignment: Alignment.topRight,
+                        children: [
+                          ClipRRect(
+                            borderRadius:
+                                BorderRadius.circular(AppTheme.radiusS),
+                            child: FutureBuilder<Uint8List>(
+                              future: f.readAsBytes(),
+                              builder: (context, snap) {
+                                if (snap.hasData) {
+                                  return Image.memory(
+                                    snap.data!,
+                                    width: 100,
+                                    height: 100,
+                                    fit: BoxFit.cover,
+                                  );
+                                }
+                                return Container(
+                                  width: 100,
+                                  height: 100,
+                                  color: Colors.grey[300],
+                                  child: const Center(
+                                    child: SizedBox(
+                                      width: 24,
+                                      height: 24,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => _removeNewLocal(index),
+                            icon: const Icon(Icons.close, size: 18),
+                            style: IconButton.styleFrom(
+                              backgroundColor: Colors.black54,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.all(4),
+                              minimumSize: const Size(28, 28),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
               ),
             ),
-          const SizedBox(height: AppTheme.spacingM),
-          if (_selectedPhoto != null)
-            Stack(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(AppTheme.radiusS),
-                  child: FutureBuilder<Uint8List>(
-                    future: _selectedPhoto!.readAsBytes(),
-                    builder: (context, snapshot) {
-                      if (snapshot.hasData) {
-                        return Image.memory(
-                          snapshot.data!,
-                          height: 200,
-                          width: double.infinity,
-                          fit: BoxFit.cover,
-                        );
-                      }
-                      return Container(
-                        height: 200,
-                        width: double.infinity,
-                        color: Colors.grey[300],
-                        child: const Center(
-                          child: CircularProgressIndicator(),
-                        ),
-                      );
-                    },
+            const SizedBox(height: AppTheme.spacingM),
+          ],
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _capturePhoto,
+                  icon: const Icon(Icons.camera_alt),
+                  label: const Text('Add photo'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.accentBlue,
+                    side: const BorderSide(color: AppTheme.accentBlue),
                   ),
                 ),
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white),
-                    onPressed: _removePhoto,
-                    style: IconButton.styleFrom(
-                      backgroundColor: Colors.black54,
-                    ),
+              ),
+              const SizedBox(width: AppTheme.spacingS),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _pickPhotosFromGallery,
+                  icon: const Icon(Icons.photo_library),
+                  label: const Text('Gallery (multi)'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.accentBlue,
+                    side: const BorderSide(color: AppTheme.accentBlue),
                   ),
                 ),
-              ],
-            )
-          else
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _capturePhoto,
-                    icon: const Icon(Icons.camera_alt),
-                    label: const Text('Take Photo'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppTheme.accentBlue,
-                      side: const BorderSide(color: AppTheme.accentBlue),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: AppTheme.spacingS),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _pickPhotoFromGallery,
-                    icon: const Icon(Icons.photo_library),
-                    label: const Text('Choose from Gallery'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppTheme.accentBlue,
-                      side: const BorderSide(color: AppTheme.accentBlue),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
+          ),
         ],
       ),
     );

@@ -147,6 +147,35 @@ class _RequestorNotificationSettingsScreenState
     );
   }
 
+  Widget _buildChannelAvailabilityBanner() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppTheme.spacingM),
+      padding: const EdgeInsets.all(AppTheme.spacingM),
+      decoration: BoxDecoration(
+        color: Colors.amber.shade50,
+        borderRadius: BorderRadius.circular(AppTheme.radiusM),
+        border: Border.all(color: Colors.amber.shade200),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.info_outline, color: Colors.amber.shade800, size: 20),
+          const SizedBox(width: AppTheme.spacingS),
+          Expanded(
+            child: Text(
+              'In-app notifications are available in this version. '
+              'Push, email, and SMS delivery will be enabled in a future update.',
+              style: AppTheme.bodyText.copyWith(
+                fontSize: 13,
+                color: AppTheme.darkTextColor,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildDesktopLayout(BuildContext context) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -155,38 +184,27 @@ class _RequestorNotificationSettingsScreenState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              _buildChannelAvailabilityBanner(),
               _buildSection(
                 title: 'Notification Channels',
                 children: [
                   _buildSwitchTile(
                     title: 'Push Notifications',
-                    subtitle: 'Receive push notifications on your device',
+                    subtitle: 'Coming soon — not available in this version',
                     value: _enablePushNotifications,
-                    onChanged: (value) {
-                      setState(() {
-                        _enablePushNotifications = value;
-                      });
-                    },
+                    onChanged: null,
                   ),
                   _buildSwitchTile(
                     title: 'Email Notifications',
-                    subtitle: 'Receive notifications via email',
+                    subtitle: 'Coming soon — not available in this version',
                     value: _enableEmailNotifications,
-                    onChanged: (value) {
-                      setState(() {
-                        _enableEmailNotifications = value;
-                      });
-                    },
+                    onChanged: null,
                   ),
                   _buildSwitchTile(
                     title: 'SMS Notifications',
-                    subtitle: 'Receive notifications via SMS (for critical updates)',
+                    subtitle: 'Coming soon — not available in this version',
                     value: _enableSMSNotifications,
-                    onChanged: (value) {
-                      setState(() {
-                        _enableSMSNotifications = value;
-                      });
-                    },
+                    onChanged: null,
                   ),
                 ],
               ),
@@ -281,39 +299,28 @@ class _RequestorNotificationSettingsScreenState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+                    _buildChannelAvailabilityBanner(),
                     // Notification Channels
                     _buildSection(
                       title: 'Notification Channels',
                       children: [
                         _buildSwitchTile(
                           title: 'Push Notifications',
-                          subtitle: 'Receive push notifications on your device',
+                          subtitle: 'Coming soon — not available in this version',
                           value: _enablePushNotifications,
-                          onChanged: (value) {
-                            setState(() {
-                              _enablePushNotifications = value;
-                            });
-                          },
+                          onChanged: null,
                         ),
                         _buildSwitchTile(
                           title: 'Email Notifications',
-                          subtitle: 'Receive notifications via email',
+                          subtitle: 'Coming soon — not available in this version',
                           value: _enableEmailNotifications,
-                          onChanged: (value) {
-                            setState(() {
-                              _enableEmailNotifications = value;
-                            });
-                          },
+                          onChanged: null,
                         ),
                         _buildSwitchTile(
                           title: 'SMS Notifications',
-                          subtitle: 'Receive notifications via SMS (for critical updates)',
+                          subtitle: 'Coming soon — not available in this version',
                           value: _enableSMSNotifications,
-                          onChanged: (value) {
-                            setState(() {
-                              _enableSMSNotifications = value;
-                            });
-                          },
+                          onChanged: null,
                         ),
                       ],
                     ),
@@ -529,7 +536,7 @@ class _RequestorNotificationSettingsScreenState
     required String title,
     required String subtitle,
     required bool value,
-    required ValueChanged<bool> onChanged,
+    ValueChanged<bool>? onChanged,
   }) =>
       SwitchListTile(
         title: Text(title),

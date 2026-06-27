@@ -11,6 +11,9 @@ import '../../services/supabase_storage_service.dart';
 import '../../utils/app_theme.dart';
 import '../../utils/cmms_package_assets.dart';
 import '../../utils/responsive_layout.dart';
+import '../../utils/requestor_category_mapper.dart';
+import '../../utils/requestor_work_order_asset.dart';
+import '../../utils/review_photo_upload_decision.dart';
 import '../../widgets/custom_app_bar.dart';
 import '../../widgets/requestor_more_menu.dart';
 import 'submission_success_screen.dart';
@@ -81,6 +84,7 @@ class _ReviewMaintenanceRequestScreenState
 
       // Upload photos if any
       List<String> photoUrls = [];
+      int photoFailCount = 0;
       for (var photo in widget.selectedPhotos) {
         try {
           final photoUrl = await _storageService.uploadFile(
@@ -91,11 +95,47 @@ class _ReviewMaintenanceRequestScreenState
           );
           if (photoUrl != null) {
             photoUrls.add(photoUrl);
+          } else {
+            photoFailCount++;
+            debugPrint('⚠️ Photo upload returned null (auth or bucket issue)');
           }
         } catch (e) {
-          // Continue with other photos even if one fails
+          photoFailCount++;
           debugPrint('Error uploading photo: $e');
         }
+      }
+
+      final uploadDecision = evaluateReviewPhotoUpload(
+        selectedPhotoCount: widget.selectedPhotos.length,
+        uploadedCount: photoUrls.length,
+        failCount: photoFailCount,
+      );
+
+      if (!uploadDecision.shouldCreateWorkOrder) {
+        if (mounted) {
+          Navigator.pop(context);
+          await showDialog<void>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Photos not uploaded'),
+              content: Text(uploadDecision.failureMessage!),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _submitRequest();
+                  },
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+          );
+        }
+        return;
       }
 
       // Create work order using UnifiedDataProvider
@@ -111,20 +151,42 @@ Charger ID: ${widget.chargerId.isNotEmpty ? widget.chargerId.toUpperCase() : 'N/
 Category Issue: ${widget.category.isNotEmpty ? widget.category : 'N/A'}
 ''';
 
-      // Use location instead of assetId for charger-based requests
-      // since the placeholder asset doesn't exist in the database
-      final isPlaceholderAsset =
-          widget.asset.id == 'siemens' || widget.asset.id == 'kostad';
+      final assetSubmission =
+          resolveRequestorWorkOrderAssetSubmission(widget.asset);
+      if (assetSubmission == null) {
+        if (mounted) {
+          Navigator.pop(context);
+          await showDialog<void>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Charger required'),
+              content: const Text(
+                'This request must be linked to a registered charger. '
+                'Go back and select a charger from the list.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+        }
+        return;
+      }
+
+      final submissionFields = mapRequestorCategoryIssue(widget.category);
 
       await unifiedProvider.createWorkOrder(
         problemDescription:
             widget.problemDescription, // Just the problem description
         requestorId: user.id,
-        assetId: isPlaceholderAsset ? null : widget.asset.id,
-        asset: isPlaceholderAsset ? null : widget.asset,
-        location: isPlaceholderAsset ? '${widget.chargerType} Charger' : null,
-        priority: WorkOrderPriority.medium,
-        category: RepairCategory.reactive,
+        assetId: assetSubmission.assetId,
+        asset: assetSubmission.asset,
+        location: null,
+        priority: submissionFields.priority,
+        category: submissionFields.category,
         photoPaths:
             photoUrls.isNotEmpty ? photoUrls : null, // Pass all photo URLs
         customerName: widget.name.isNotEmpty ? widget.name : null,
@@ -137,6 +199,17 @@ Category Issue: ${widget.category.isNotEmpty ? widget.category : 'N/A'}
       if (mounted) {
         // Pop loading screen
         Navigator.pop(context);
+
+        if (uploadDecision.partialSuccessMessage != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(uploadDecision.partialSuccessMessage!),
+              backgroundColor: Colors.orange.shade700,
+              duration: const Duration(seconds: 6),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
 
         // Navigate to success screen
         Navigator.pushReplacement(

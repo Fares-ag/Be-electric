@@ -8,12 +8,12 @@ import '../../providers/auth_provider.dart';
 import '../../providers/unified_data_provider.dart';
 import '../../utils/app_theme.dart';
 import '../../utils/requestor_home_navigation.dart';
+import '../../utils/requestor_status_loading.dart';
 import '../../utils/responsive_layout.dart';
 import '../../widgets/custom_app_bar.dart';
 import '../../widgets/reopen_work_order_dialog.dart';
 import '../../widgets/requestor_more_menu.dart';
 import '../work_orders/work_order_detail_screen.dart';
-import 'asset_selection_screen.dart';
 import 'edit_request_screen.dart';
 
 class RequestorStatusScreen extends StatefulWidget {
@@ -44,13 +44,44 @@ class _RequestorStatusScreenState extends State<RequestorStatusScreen>
     super.dispose();
   }
 
+  Future<void> _onRefresh() async {
+    await Provider.of<UnifiedDataProvider>(context, listen: false).refreshAll();
+  }
+
+  Widget _buildRefreshableBody({required Widget child}) {
+    return RefreshIndicator(
+      onRefresh: _onRefresh,
+      color: const Color(0xFF002911),
+      child: LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: child,
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
 
-    return Selector<UnifiedDataProvider, List<WorkOrder>>(
-      selector: (_, provider) => provider.workOrders,
-      builder: (context, allWorkOrders, child) {
+    return Selector<
+        UnifiedDataProvider,
+        ({List<WorkOrder> workOrders, bool isWorkOrdersLoading})>(
+      selector: (_, provider) => (
+        workOrders: provider.workOrders,
+        isWorkOrdersLoading: provider.isWorkOrdersLoading,
+      ),
+      builder: (context, data, child) {
+        final allWorkOrders = data.workOrders;
+        final showInitialLoading = shouldShowRequestorStatusInitialLoading(
+          isWorkOrdersLoading: data.isWorkOrdersLoading,
+          requestCount: allWorkOrders.length,
+        );
+
         // Get user's work orders in real-time!
         final myRequests = user != null
             ? (allWorkOrders.where((wo) => wo.requestorId == user.id).toList()
@@ -178,8 +209,14 @@ class _RequestorStatusScreenState extends State<RequestorStatusScreen>
                 child: TabBarView(
                   controller: _tabController,
                   children: [
-                    _buildActiveRequestsTab(myRequests),
-                    _buildHistoryTab(myRequests),
+                    _buildActiveRequestsTab(
+                      myRequests,
+                      showInitialLoading: showInitialLoading,
+                    ),
+                    _buildHistoryTab(
+                      myRequests,
+                      showInitialLoading: showInitialLoading,
+                    ),
                   ],
                 ),
               ),
@@ -190,14 +227,7 @@ class _RequestorStatusScreenState extends State<RequestorStatusScreen>
               bottom: 4 + MediaQuery.viewPaddingOf(context).bottom * 0.5,
             ),
             child: FloatingActionButton.extended(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const AssetSelectionScreen(),
-                  ),
-                );
-              },
+              onPressed: () => navigateToRequestorMain(context),
               icon: const Icon(Icons.add),
               label: const Text('New Request'),
               backgroundColor: const Color(0xFF002911),
@@ -237,7 +267,16 @@ class _RequestorStatusScreenState extends State<RequestorStatusScreen>
     }).toList();
   }
 
-  Widget _buildActiveRequestsTab(List<WorkOrder> myRequests) {
+  Widget _buildActiveRequestsTab(
+    List<WorkOrder> myRequests, {
+    required bool showInitialLoading,
+  }) {
+    if (showInitialLoading) {
+      return _buildRefreshableBody(
+        child: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
     var activeRequests = myRequests
         .where(
           (request) =>
@@ -253,34 +292,43 @@ class _RequestorStatusScreenState extends State<RequestorStatusScreen>
     activeRequests = _filterRequests(activeRequests);
 
     if (activeRequests.isEmpty) {
-      return _buildEmptyState(
-        icon: Icons.check_circle_outline,
-        title: 'No Active Requests',
-        message: 'You have no pending maintenance requests.',
-        actionText: 'Create New Request',
-        onAction: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const AssetSelectionScreen(),
-            ),
-          );
-          // No need to reload - Consumer auto-updates!
-        },
+      return _buildRefreshableBody(
+        child: _buildEmptyState(
+          icon: Icons.check_circle_outline,
+          title: 'No Active Requests',
+          message: 'You have no pending maintenance requests.',
+          actionText: 'Create New Request',
+          onAction: () => navigateToRequestorMain(context),
+          includeScrollView: false,
+        ),
       );
     }
 
-    return ListView.builder(
-      padding: _listOuterPadding(context),
-      itemCount: activeRequests.length,
-      itemBuilder: (context, index) {
-        final request = activeRequests[index];
-        return _buildRequestCard(context, request);
-      },
+    return RefreshIndicator(
+      onRefresh: _onRefresh,
+      color: const Color(0xFF002911),
+      child: ListView.builder(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: _listOuterPadding(context),
+        itemCount: activeRequests.length,
+        itemBuilder: (context, index) {
+          final request = activeRequests[index];
+          return _buildRequestCard(context, request);
+        },
+      ),
     );
   }
 
-  Widget _buildHistoryTab(List<WorkOrder> myRequests) {
+  Widget _buildHistoryTab(
+    List<WorkOrder> myRequests, {
+    required bool showInitialLoading,
+  }) {
+    if (showInitialLoading) {
+      return _buildRefreshableBody(
+        child: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
     // Show all past requests: completed, closed, and cancelled (but not reopened - those go to Active)
     var pastRequests = myRequests
         .where(
@@ -297,30 +345,30 @@ class _RequestorStatusScreenState extends State<RequestorStatusScreen>
     pastRequests = _filterRequests(pastRequests);
 
     if (pastRequests.isEmpty) {
-      return _buildEmptyState(
-        icon: Icons.history,
-        title: 'No Request History',
-        message: 'You have no past maintenance requests.',
-        actionText: 'Create New Request',
-        onAction: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const AssetSelectionScreen(),
-            ),
-          );
-          // No need to reload - Consumer auto-updates!
-        },
+      return _buildRefreshableBody(
+        child: _buildEmptyState(
+          icon: Icons.history,
+          title: 'No Request History',
+          message: 'You have no past maintenance requests.',
+          actionText: 'Create New Request',
+          onAction: () => navigateToRequestorMain(context),
+          includeScrollView: false,
+        ),
       );
     }
 
-    return ListView.builder(
-      padding: _listOuterPadding(context),
-      itemCount: pastRequests.length,
-      itemBuilder: (context, index) {
-        final request = pastRequests[index];
-        return _buildRequestCard(context, request);
-      },
+    return RefreshIndicator(
+      onRefresh: _onRefresh,
+      color: const Color(0xFF002911),
+      child: ListView.builder(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: _listOuterPadding(context),
+        itemCount: pastRequests.length,
+        itemBuilder: (context, index) {
+          final request = pastRequests[index];
+          return _buildRequestCard(context, request);
+        },
+      ),
     );
   }
 
@@ -701,8 +749,51 @@ class _RequestorStatusScreenState extends State<RequestorStatusScreen>
     required String message,
     required String actionText,
     required VoidCallback onAction,
+    bool includeScrollView = true,
   }) {
     final hPad = ResponsiveLayout.getResponsivePadding(context).left;
+    final content = Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(
+          icon,
+          size: 64,
+          color: AppTheme.secondaryTextColor,
+        ),
+        const SizedBox(height: AppTheme.spacingL),
+        Text(
+          title,
+          style: AppTheme.heading2.copyWith(
+            color: AppTheme.secondaryTextColor,
+            fontSize: 20,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: AppTheme.spacingM),
+        Text(
+          message,
+          style: AppTheme.bodyText.copyWith(
+            color: AppTheme.secondaryTextColor,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: AppTheme.spacingL),
+        ElevatedButton.icon(
+          onPressed: onAction,
+          icon: const Icon(Icons.add),
+          label: Text(actionText),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTheme.accentBlue,
+            foregroundColor: Colors.white,
+          ),
+        ),
+      ],
+    );
+
+    if (!includeScrollView) {
+      return Center(child: content);
+    }
+
     return Center(
       child: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(
@@ -711,43 +802,7 @@ class _RequestorStatusScreenState extends State<RequestorStatusScreen>
           hPad,
           AppTheme.spacingXL,
         ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              size: 64,
-              color: AppTheme.secondaryTextColor,
-            ),
-            const SizedBox(height: AppTheme.spacingL),
-            Text(
-              title,
-              style: AppTheme.heading2.copyWith(
-                color: AppTheme.secondaryTextColor,
-                fontSize: 20,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: AppTheme.spacingM),
-            Text(
-              message,
-              style: AppTheme.bodyText.copyWith(
-                color: AppTheme.secondaryTextColor,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: AppTheme.spacingL),
-            ElevatedButton.icon(
-              onPressed: onAction,
-              icon: const Icon(Icons.add),
-              label: Text(actionText),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.accentBlue,
-                foregroundColor: Colors.white,
-              ),
-            ),
-          ],
-        ),
+        child: content,
       ),
     );
   }

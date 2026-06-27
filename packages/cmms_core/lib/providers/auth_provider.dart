@@ -3,9 +3,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/app_config.dart';
 import '../models/user.dart';
-import '../services/onesignal_push_service.dart';
 import '../services/supabase_auth_service.dart';
 import '../services/supabase_database_service.dart';
+import '../utils/auth_login_policy.dart';
 
 class AuthProvider with ChangeNotifier {
   User? _currentUser;
@@ -31,38 +31,50 @@ class AuthProvider with ChangeNotifier {
       if (supabaseAuthService.isSignedIn) {
         final supabaseUser = await supabaseAuthService.getCurrentAppUser();
         if (supabaseUser != null) {
-          // Get user from Supabase
           final dbUser = await SupabaseDatabaseService.instance
               .getUserByEmail(supabaseUser.email);
-          _currentUser = dbUser ?? supabaseUser;
-          _isAuthenticated = true;
-          await OneSignalPushService().login(_currentUser!.id);
-          notifyListeners();
-          return;
+          if (isSessionAuthorized(hasDatabaseUser: dbUser != null)) {
+            _currentUser = dbUser;
+            _isAuthenticated = true;
+            notifyListeners();
+            return;
+          }
+
+          debugPrint(
+            '⚠️ Supabase session active but no public.users row for '
+            '${supabaseUser.email}. Clearing session.',
+          );
+          await supabaseAuthService.signOut();
         }
       }
 
-      // Fallback to local storage check
-      final prefs = await SharedPreferences.getInstance();
-      final userId = prefs.getString('current_user_id');
+      // Fallback: restore from local prefs only in debug/demo builds.
+      // Release builds require a valid Supabase Auth session (RLS-safe).
+      if (!kReleaseMode) {
+        final prefs = await SharedPreferences.getInstance();
+        final userId = prefs.getString('current_user_id');
 
-      if (userId != null) {
-        // Load latest user from Supabase to get up-to-date role
-        final storedUser =
-            await SupabaseDatabaseService.instance.getUserById(userId);
-        if (storedUser != null) {
-          _currentUser = storedUser;
-          _isAuthenticated = true;
-          await OneSignalPushService().login(storedUser.id);
-          debugPrint(
-            '🔄 Session restored - User: ${storedUser.name}, Role: ${storedUser.role}',
-          );
-        } else {
-          debugPrint(
-            '⚠️ User ID $userId not found in Supabase, clearing session',
-          );
-          await prefs.remove('current_user_id');
+        if (userId != null) {
+          final storedUser =
+              await SupabaseDatabaseService.instance.getUserById(userId);
+          if (storedUser != null) {
+            _currentUser = storedUser;
+            _isAuthenticated = true;
+            debugPrint(
+              '🔄 Session restored (debug) - User: ${storedUser.name}, '
+              'Role: ${storedUser.role}',
+            );
+          } else {
+            debugPrint(
+              '⚠️ User ID $userId not found in Supabase, clearing session',
+            );
+            await prefs.remove('current_user_id');
+          }
         }
+      } else {
+        // Clear stale prefs if Supabase session expired in release.
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('current_user_id');
       }
     } catch (e) {
       debugPrint('Error checking auth status: $e');
@@ -101,46 +113,28 @@ class AuthProvider with ChangeNotifier {
           debugPrint('🔑 Login: Supabase UID: ${supabaseUser.id}');
           debugPrint('🔑 Login: Supabase User: ${dbUser?.name} (ID: ${dbUser?.id})');
 
-          // If user doesn't exist in Supabase DB, try fallbacks
           if (dbUser == null) {
-            // Fallback 1: auth metadata already has role/name set
-            // (covers: public.users inaccessible, or row not yet created)
-            final authMeta = SupabaseAuthService.instance.currentSupabaseUser?.userMetadata;
-            final hasExplicitRole = authMeta?['role'] != null;
-            if (hasExplicitRole) {
+            if (!shouldAutoCreateUserOnLogin(
+              autoCreateUsersOnLogin: AppConfig.autoCreateUsersOnLogin,
+            )) {
               debugPrint(
-                '✅ Login: Using auth metadata user '
-                '(role: ${authMeta!['role']}, name: ${authMeta['name']})',
+                '⚠️ User authenticated in Supabase Auth but not found in users table. '
+                'User must be created by an admin before they can log in.',
               );
-              dbUser = supabaseUser;
-            } else {
-              // Fallback 2: check whether public.users is simply empty (bootstrap)
-              final allUsers = await SupabaseDatabaseService.instance.getAllUsers();
-              final isFirstUser = allUsers.isEmpty;
-
-              if (AppConfig.autoCreateUsersOnLogin || isFirstUser) {
-                if (isFirstUser) {
-                  debugPrint('🌱 First user detected - creating admin user for bootstrap');
-                  final bootstrapUser = supabaseUser.copyWith(role: 'admin');
-                  final readableId = await SupabaseDatabaseService.instance.createUser(bootstrapUser);
-                  dbUser = await SupabaseDatabaseService.instance.getUserById(readableId);
-                  debugPrint('✅ Created first admin user: ${dbUser?.name} (ID: ${dbUser?.id})');
-                } else {
-                  debugPrint('⚠️ User not found in Supabase, creating...');
-                  final readableId = await SupabaseDatabaseService.instance.createUser(supabaseUser);
-                  dbUser = await SupabaseDatabaseService.instance.getUserById(readableId);
-                  debugPrint('✅ Created user in Supabase: ${dbUser?.name} (ID: ${dbUser?.id})');
-                }
-              } else {
-                debugPrint(
-                  '⚠️ User authenticated in Supabase Auth but not found in users table. '
-                  'Auto-creation is disabled. User must be created by an admin before they can log in.',
-                );
-                _isLoading = false;
-                notifyListeners();
-                return false;
-              }
+              _isLoading = false;
+              notifyListeners();
+              return false;
             }
+
+            debugPrint('⚠️ User not found in Supabase, creating requestor row...');
+            final newUser = supabaseUser.copyWith(role: kAutoCreatedUserRole);
+            final readableId =
+                await SupabaseDatabaseService.instance.createUser(newUser);
+            dbUser =
+                await SupabaseDatabaseService.instance.getUserById(readableId);
+            debugPrint(
+              '✅ Created user in Supabase: ${dbUser?.name} (ID: ${dbUser?.id})',
+            );
           }
 
           _currentUser = dbUser;
@@ -151,7 +145,6 @@ class AuthProvider with ChangeNotifier {
             return false;
           }
           _isAuthenticated = true;
-          await OneSignalPushService().login(_currentUser!.id);
 
           debugPrint('🔑 Login: Using user ID: ${_currentUser!.id}');
 
@@ -191,7 +184,6 @@ class AuthProvider with ChangeNotifier {
         }
 
         _isAuthenticated = true;
-        await OneSignalPushService().login(_currentUser!.id);
 
         // Save user session
         final prefs = await SharedPreferences.getInstance();
@@ -214,7 +206,6 @@ class AuthProvider with ChangeNotifier {
           if (user != null) {
             _currentUser = user;
             _isAuthenticated = true;
-            await OneSignalPushService().login(_currentUser!.id);
 
             // Save user session
             final prefs = await SharedPreferences.getInstance();
@@ -301,11 +292,6 @@ class AuthProvider with ChangeNotifier {
     // Do not set [isLoading] or [isRestoringSession] here. AuthWrapper treats those
     // as "block entire app with a spinner", which makes logout look stuck if
     // sign-out is slow or hangs.
-    try {
-      await OneSignalPushService().logout();
-    } catch (e) {
-      debugPrint('OneSignal logout: $e');
-    }
     try {
       await SupabaseAuthService.instance
           .signOut()

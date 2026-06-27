@@ -5,7 +5,6 @@ import '../providers/auth_provider.dart';
 import '../screens/auth/login_screen.dart';
 import '../screens/profile/user_profile_screen.dart';
 import '../screens/requestor/requestor_analytics_screen.dart';
-import '../screens/requestor/requestor_notification_settings_screen.dart';
 import '../utils/app_theme.dart';
 import 'notification_badge.dart';
 import 'notification_list_screen.dart' deferred as notif_list;
@@ -87,20 +86,6 @@ void showRequestorMoreMenu(
                   context,
                   MaterialPageRoute(
                     builder: (context) => const RequestorAnalyticsScreen(),
-                  ),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.notifications_active),
-              title: const Text('Notification Settings'),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) =>
-                        const RequestorNotificationSettingsScreen(),
                   ),
                 );
               },

@@ -1,8 +1,10 @@
-/// Production-only configuration. For production builds, set FCM, analytics,
-/// and support/legal URLs (via env or build-time config) before release.
+import 'app_config.dart';
+
+/// Production-only configuration. Legal and support values come from [AppConfig]
+/// (--dart-define at build time). Do not hardcode placeholder URLs here.
 class ProductionConfig {
   // App Configuration
-  static const String appName = 'CMMS Mobile App';
+  static const String appName = 'Be Electric Requestor';
   static const String appVersion = '1.0.0';
   static const String appBuildNumber = '1';
 
@@ -10,19 +12,19 @@ class ProductionConfig {
   static const String databaseName = 'cmms_production.db';
   static const int databaseVersion = 1;
 
-  // Push Notifications — set FCM server key for production (e.g. from env)
-  static const bool enablePushNotifications = true;
-  static const String fcmServerKey = ''; // REQUIRED for prod: set FCM server key
+  // Push notifications are not used in v1 (no APNs / FCM).
+  static const bool enablePushNotifications = false;
+  static const String fcmServerKey = '';
 
   // Security
-  static const bool enableBiometricAuth = true;
+  static const bool enableBiometricAuth = false;
   static const bool enableAutoLogout = true;
   static const int autoLogoutMinutes = 30;
 
-  // Logging — set analytics key for production; wire ErrorHandlingService.crashReportingCallback
-  static const bool enableCrashReporting = true;
-  static const bool enableAnalytics = true;
-  static const String analyticsKey = ''; // REQUIRED for prod: set analytics key
+  // Crash/analytics SDKs are not wired in v1.
+  static const bool enableCrashReporting = false;
+  static const bool enableAnalytics = false;
+  static const String analyticsKey = '';
 
   // Feature Flags
   static const bool enableQRScanner = true;
@@ -40,22 +42,22 @@ class ProductionConfig {
   static const int maxCacheSizeMB = 100;
   static const bool enableImageCompression = true;
 
-  // Support — replace with real URLs/contacts for production
-  static const String supportEmail = 'support@cmms.com';
-  static const String supportPhone = '+1-555-CMMS';
-  static const String supportWebsite = 'https://support.cmms.com';
-
-  // Legal — replace with real policy URLs for production
-  static const String privacyPolicyUrl = 'https://cmms.com/privacy';
-  static const String termsOfServiceUrl = 'https://cmms.com/terms';
+  // Support & legal — from AppConfig / dart-define
+  static String get supportEmail => AppConfig.supportEmail;
+  static const String supportPhone = '';
+  static String get supportWebsite => AppConfig.supportUrl;
+  static String get privacyPolicyUrl => AppConfig.privacyPolicyUrl;
+  static String get termsOfServiceUrl => AppConfig.termsOfServiceUrl;
 
   // Environment
   static const String environment = 'production';
   static const bool isDebugMode = false;
 
-  // Validation
-  static bool get isConfigured => appName.isNotEmpty &&
-        appVersion.isNotEmpty;
+  static bool get isConfigured =>
+      appName.isNotEmpty &&
+      appVersion.isNotEmpty &&
+      AppConfig.hasValidLegalConfig &&
+      AppConfig.hasValidSupabaseConfig;
 
   static Map<String, dynamic> toMap() => {
       'appName': appName,
@@ -64,13 +66,11 @@ class ProductionConfig {
       'databaseName': databaseName,
       'databaseVersion': databaseVersion,
       'enablePushNotifications': enablePushNotifications,
-      'fcmServerKey': fcmServerKey,
       'enableBiometricAuth': enableBiometricAuth,
       'enableAutoLogout': enableAutoLogout,
       'autoLogoutMinutes': autoLogoutMinutes,
       'enableCrashReporting': enableCrashReporting,
       'enableAnalytics': enableAnalytics,
-      'analyticsKey': analyticsKey,
       'enableQRScanner': enableQRScanner,
       'enableCameraCapture': enableCameraCapture,
       'enableOfflineMode': enableOfflineMode,
@@ -82,7 +82,6 @@ class ProductionConfig {
       'maxCacheSizeMB': maxCacheSizeMB,
       'enableImageCompression': enableImageCompression,
       'supportEmail': supportEmail,
-      'supportPhone': supportPhone,
       'supportWebsite': supportWebsite,
       'privacyPolicyUrl': privacyPolicyUrl,
       'termsOfServiceUrl': termsOfServiceUrl,

@@ -47,11 +47,75 @@ class _WorkOrderDetailScreenState extends State<WorkOrderDetailScreen> {
     _currentWorkOrder = widget.workOrder;
     _initializeServices();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _refreshWorkOrderFromProvider();
-        _loadCompanyName();
-      }
+      if (!mounted) return;
+      _hydrateWorkOrderFromServerThenProvider();
     });
+  }
+
+  /// Supabase row is authoritative for photo URLs (metadata + columns). The
+  /// in-memory realtime cache can briefly miss `metadata` merges.
+  Future<void> _hydrateWorkOrderFromServerThenProvider() async {
+    try {
+      final fresh = await SupabaseDatabaseService.instance
+          .getWorkOrder(_currentWorkOrder.id);
+      if (!mounted) return;
+
+      if (fresh != null) {
+        debugPrint(
+          '📸 Detail hydrate: photoPath=${fresh.photoPath}, '
+          'photoPaths=${fresh.photoPaths}, count=${fresh.photoPaths?.length ?? 0}',
+        );
+        final unifiedProvider =
+            Provider.of<UnifiedDataProvider>(context, listen: false);
+        WorkOrder merged = fresh;
+        if (fresh.asset == null &&
+            fresh.assetId != null &&
+            fresh.assetId!.isNotEmpty) {
+          try {
+            final asset = unifiedProvider.assets.firstWhere(
+              (a) => a.id == fresh.assetId,
+            );
+            merged = merged.copyWith(asset: asset);
+          } catch (_) {
+            debugPrint(
+              '⚠️ Asset ${fresh.assetId} not found when hydrating work order',
+            );
+          }
+        }
+        try {
+          final u = unifiedProvider.users.firstWhere(
+            (x) => x.id == fresh.requestorId,
+          );
+          merged = merged.copyWith(requestor: u);
+        } catch (_) {}
+
+        if (mounted) {
+          setState(() {
+            _currentWorkOrder = merged;
+          });
+          // Push the server-fresh version into the provider so the list and
+          // dashboard are immediately consistent (no stale status badge).
+          unifiedProvider.updateCachedWorkOrder(merged);
+        }
+      }
+    } catch (e, st) {
+      debugPrint('WorkOrderDetail: hydrate from server failed: $e\n$st');
+    }
+
+    if (mounted) {
+      _refreshWorkOrderFromProvider();
+      _loadCompanyName();
+    }
+  }
+
+  List<String> _problemPhotoPathsList(WorkOrder wo) {
+    if (wo.photoPaths != null && wo.photoPaths!.isNotEmpty) {
+      return List<String>.from(wo.photoPaths!);
+    }
+    if (wo.photoPath != null && wo.photoPath!.isNotEmpty) {
+      return [wo.photoPath!];
+    }
+    return [];
   }
 
   Future<void> _loadCompanyName() async {
@@ -93,48 +157,62 @@ class _WorkOrderDetailScreenState extends State<WorkOrderDetailScreen> {
   void _refreshWorkOrderFromProvider() {
     final unifiedProvider =
         Provider.of<UnifiedDataProvider>(context, listen: false);
-    final latestWorkOrder = unifiedProvider.workOrders.firstWhere(
+    final cached = unifiedProvider.workOrders.firstWhere(
       (wo) => wo.id == _currentWorkOrder.id,
       orElse: () => _currentWorkOrder,
     );
 
-    // Debug: Check completion photo path
-    if (latestWorkOrder.isCompleted) {
+    if (cached.isCompleted) {
       debugPrint(
-          '📸 Work Order ${latestWorkOrder.id} completion photo path: ${latestWorkOrder.completionPhotoPath}');
-      debugPrint('📸 Before photo: ${latestWorkOrder.beforePhotoPath}');
-      debugPrint('📸 After photo: ${latestWorkOrder.afterPhotoPath}');
+        '📸 Work Order ${cached.id} completion photo path: ${cached.completionPhotoPath}',
+      );
+      debugPrint('📸 Before photo: ${cached.beforePhotoPath}');
+      debugPrint('📸 After photo: ${cached.afterPhotoPath}');
     }
 
-    // If asset is not populated but assetId exists, try to find it in assets
-    if (latestWorkOrder.asset == null &&
-        latestWorkOrder.assetId != null &&
-        latestWorkOrder.assetId!.isNotEmpty) {
+    // Prefer populated asset from local cache without swapping in a stale WO.
+    if (_currentWorkOrder.asset == null &&
+        _currentWorkOrder.assetId != null &&
+        _currentWorkOrder.assetId!.isNotEmpty) {
       try {
         final asset = unifiedProvider.assets.firstWhere(
-          (a) => a.id == latestWorkOrder.assetId,
+          (a) => a.id == _currentWorkOrder.assetId,
         );
-        final updatedWorkOrder = latestWorkOrder.copyWith(asset: asset);
         if (mounted) {
           setState(() {
-            _currentWorkOrder = updatedWorkOrder;
+            _currentWorkOrder = _currentWorkOrder.copyWith(asset: asset);
           });
-          return;
         }
       } catch (e) {
-        // Asset not found in provider's assets - will show as is
         debugPrint(
-            '⚠️ Asset ${latestWorkOrder.assetId} not found in provider assets');
+          '⚠️ Asset ${_currentWorkOrder.assetId} not found in provider assets',
+        );
       }
     }
 
-    if (latestWorkOrder != _currentWorkOrder && mounted) {
+    // Same for requestor display name
+    if (_currentWorkOrder.requestor == null) {
+      try {
+        final u = unifiedProvider.users.firstWhere(
+          (x) => x.id == _currentWorkOrder.requestorId,
+        );
+        if (mounted) {
+          setState(() {
+            _currentWorkOrder = _currentWorkOrder.copyWith(requestor: u);
+          });
+        }
+      } catch (_) {}
+    }
+
+    // Only replace the whole work order if cache is strictly newer (realtime).
+    if (cached != _currentWorkOrder &&
+        mounted &&
+        cached.updatedAt.isAfter(_currentWorkOrder.updatedAt)) {
       setState(() {
-        _currentWorkOrder = latestWorkOrder;
+        _currentWorkOrder = cached;
       });
-      // Reload company name if companyId changed
-      if (latestWorkOrder.companyId != null &&
-          latestWorkOrder.companyId != widget.workOrder.companyId) {
+      if (cached.companyId != null &&
+          cached.companyId != widget.workOrder.companyId) {
         _loadCompanyName();
       }
     }
@@ -472,84 +550,118 @@ class _WorkOrderDetailScreenState extends State<WorkOrderDetailScreen> {
           ],
         ),
         body: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Status and Priority Card
+              // Status and Priority Card — coloured left-border hero
               Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Coloured accent bar
+                        Container(
+                          width: 6,
+                          color: AppTheme.getStatusColor(
+                            _currentWorkOrder.status.name,
+                          ),
+                        ),
+                        Expanded(
+                          child: Padding(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
+                              horizontal: 16,
+                              vertical: 14,
                             ),
-                            decoration: AppTheme.getStatusContainerDecoration(
-                              AppTheme.getStatusColor(
-                                _currentWorkOrder.status.name,
-                              ),
-                            ),
-                            child: Text(
-                              _currentWorkOrder.status.name.toUpperCase(),
-                              style: TextStyle(
-                                color: AppTheme.getStatusColor(
-                                  _currentWorkOrder.status.name,
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  decoration: AppTheme.getStatusContainerDecoration(
+                                    AppTheme.getStatusColor(
+                                      _currentWorkOrder.status.name,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    _currentWorkOrder.status.name.toUpperCase(),
+                                    style: TextStyle(
+                                      color: AppTheme.getStatusColor(
+                                        _currentWorkOrder.status.name,
+                                      ),
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
                                 ),
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                              ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  decoration: AppTheme.getStatusContainerDecoration(
+                                    AppTheme.getPriorityColor(
+                                      _currentWorkOrder.priority.name,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    _currentWorkOrder.priority.name.toUpperCase(),
+                                    style: TextStyle(
+                                      color: AppTheme.getPriorityColor(
+                                        _currentWorkOrder.priority.name,
+                                      ),
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
-                            ),
-                            decoration: AppTheme.getStatusContainerDecoration(
-                              AppTheme.getPriorityColor(
-                                _currentWorkOrder.priority.name,
-                              ),
-                            ),
-                            child: Text(
-                              _currentWorkOrder.priority.name.toUpperCase(),
-                              style: TextStyle(
-                                color: AppTheme.getPriorityColor(
-                                  _currentWorkOrder.priority.name,
-                                ),
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
 
               // Work Order Information
               Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 child: Padding(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(20),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
+                          const Icon(
+                            Icons.assignment_outlined,
+                            size: 20,
+                            color: AppTheme.primaryColor,
+                          ),
+                          const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               'Work Order Information',
                               style: AppTheme.titleStyle.copyWith(
                                 color: AppTheme.primaryColor,
+                                fontSize: 16,
                               ),
                             ),
                           ),
@@ -655,13 +767,17 @@ class _WorkOrderDetailScreenState extends State<WorkOrderDetailScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
 
               // Completion Log (if completed)
               if (_currentWorkOrder.isCompleted) ...[
                 Card(
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   child: Padding(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(20),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -670,20 +786,20 @@ class _WorkOrderDetailScreenState extends State<WorkOrderDetailScreen> {
                             const Icon(
                               Icons.check_circle,
                               color: AppTheme.successColor,
-                              size: 24,
+                              size: 22,
                             ),
                             const SizedBox(width: 8),
                             Text(
                               'Completion Log',
                               style: AppTheme.titleStyle.copyWith(
                                 color: AppTheme.primaryColor,
+                                fontSize: 16,
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 16),
-                        const Divider(),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 4),
+                        const Divider(height: 24),
 
                         // Timeline Section
                         _buildCompletionSection(
@@ -907,13 +1023,15 @@ class _WorkOrderDetailScreenState extends State<WorkOrderDetailScreen> {
                           ),
                         ],
 
-                        // Images Section
-                        // In the completion log we only want to show photos
-                        // related to the completion itself (before/after/completion),
-                        // not the original problem photo which is already shown
-                        // in the Work Order Information section above.
+                        // Photos: repeat problem/request shots here next to
+                        // technician completion media so requestors see both
+                        // without scrolling back to the top.
                         Builder(
                           builder: (context) {
+                            final problemPaths =
+                                _problemPhotoPathsList(_currentWorkOrder);
+                            final hasProblemPhotos = problemPaths.isNotEmpty;
+
                             final hasBefore =
                                 _currentWorkOrder.beforePhotoPath != null &&
                                     _currentWorkOrder
@@ -932,45 +1050,58 @@ class _WorkOrderDetailScreenState extends State<WorkOrderDetailScreen> {
                                         : <String>[]);
                             final hasCompletion = completionPaths.isNotEmpty;
 
-                            if (hasBefore || hasAfter || hasCompletion) {
-                              return Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const SizedBox(height: 16),
-                                  const Divider(),
-                                  const SizedBox(height: 16),
-                                  Text(
-                                    'Images',
-                                    style: AppTheme.titleStyle.copyWith(
-                                      color: AppTheme.primaryColor,
-                                      fontSize: 18,
-                                    ),
+                            final showTechnicianMedia =
+                                hasBefore || hasAfter || hasCompletion;
+
+                            if (!hasProblemPhotos && !showTechnicianMedia) {
+                              return const SizedBox.shrink();
+                            }
+
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const SizedBox(height: 16),
+                                const Divider(),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'Photos',
+                                  style: AppTheme.titleStyle.copyWith(
+                                    color: AppTheme.primaryColor,
+                                    fontSize: 18,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                if (hasProblemPhotos) ...[
+                                  _buildMultiplePhotosSection(
+                                    'Problem / photos you submitted',
+                                    problemPaths,
                                   ),
                                   const SizedBox(height: 16),
+                                ],
+                                if (showTechnicianMedia) ...[
                                   if (hasBefore) ...[
                                     _buildPhotoSection(
-                                      'Before Work Photo',
+                                      'Before work (technician)',
                                       _currentWorkOrder.beforePhotoPath!,
                                     ),
                                     const SizedBox(height: 16),
                                   ],
                                   if (hasAfter) ...[
                                     _buildPhotoSection(
-                                      'After Work Photo',
+                                      'After work (technician)',
                                       _currentWorkOrder.afterPhotoPath!,
                                     ),
                                     const SizedBox(height: 16),
                                   ],
                                   if (hasCompletion) ...[
                                     _buildMultiplePhotosSection(
-                                      'Completion Photos',
+                                      'Completion (technician)',
                                       completionPaths,
                                     ),
                                   ],
                                 ],
-                              );
-                            }
-                            return const SizedBox.shrink();
+                              ],
+                            );
                           },
                         ),
 
@@ -1038,16 +1169,31 @@ class _WorkOrderDetailScreenState extends State<WorkOrderDetailScreen> {
               if (!_currentWorkOrder.isCompleted &&
                   !_currentWorkOrder.isClosed) ...[
                 Card(
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   child: Padding(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(20),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Actions',
-                          style: AppTheme.titleStyle.copyWith(
-                            color: AppTheme.primaryColor,
-                          ),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.bolt_outlined,
+                              size: 20,
+                              color: AppTheme.primaryColor,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Actions',
+                              style: AppTheme.titleStyle.copyWith(
+                                color: AppTheme.primaryColor,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 16),
 
@@ -1296,10 +1442,14 @@ class _WorkOrderDetailScreenState extends State<WorkOrderDetailScreen> {
               ],
 
               // Activity History Section
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
               Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 child: Padding(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(20),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1315,6 +1465,7 @@ class _WorkOrderDetailScreenState extends State<WorkOrderDetailScreen> {
                             'Activity History',
                             style: AppTheme.titleStyle.copyWith(
                               color: AppTheme.primaryColor,
+                              fontSize: 16,
                             ),
                           ),
                         ],
@@ -1366,24 +1517,26 @@ class _WorkOrderDetailScreenState extends State<WorkOrderDetailScreen> {
       );
 
   Widget _buildInfoRow(String label, String value) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Row(
+        padding: const EdgeInsets.only(bottom: 14),
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(
-              width: 120,
-              child: Text(
-                '$label:',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey,
-                ),
+            Text(
+              label.toUpperCase(),
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: Colors.grey.shade500,
+                letterSpacing: 0.8,
               ),
             ),
-            Expanded(
-              child: Text(
-                value,
-                style: const TextStyle(fontWeight: FontWeight.w500),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF1A1A2E),
               ),
             ),
           ],
@@ -1433,15 +1586,28 @@ class _WorkOrderDetailScreenState extends State<WorkOrderDetailScreen> {
   Widget _buildCompletionSection(String title, List<Widget> children) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: AppTheme.primaryColor,
-            ),
+          Row(
+            children: [
+              Container(
+                width: 3,
+                height: 18,
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryColor,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.primaryColor,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           ...children,
         ],
       );
@@ -1868,25 +2034,33 @@ class _WorkOrderDetailScreenState extends State<WorkOrderDetailScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          title,
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: Colors.grey,
+          title.toUpperCase(),
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            color: Colors.grey.shade500,
+            letterSpacing: 0.8,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         GestureDetector(
           onTap: () => _showFullScreenImage(photoPath),
           child: Container(
             height: 200,
             width: double.infinity,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.grey.shade300),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade200),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.06),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(12),
               child: isUrl
                   ? AuthenticatedImage(
                       imageUrl: photoPath,
@@ -1950,24 +2124,33 @@ class _WorkOrderDetailScreenState extends State<WorkOrderDetailScreen> {
         Row(
           children: [
             Text(
-              title,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey,
+              title.toUpperCase(),
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: Colors.grey.shade500,
+                letterSpacing: 0.8,
               ),
             ),
-            const SizedBox(width: 8),
-            Text(
-              '(${photoPaths.length})',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey.shade600,
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                '${photoPaths.length}',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.primaryColor,
+                ),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         SizedBox(
           height: 200,
           child: ListView.builder(
@@ -1980,17 +2163,24 @@ class _WorkOrderDetailScreenState extends State<WorkOrderDetailScreen> {
 
               return Container(
                 margin: EdgeInsets.only(
-                    right: index < photoPaths.length - 1 ? 12 : 0),
+                    right: index < photoPaths.length - 1 ? 10 : 0),
                 width: 200,
                 child: GestureDetector(
                   onTap: () => _showFullScreenImage(photoPath),
                   child: Container(
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey.shade200),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.06),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
                     ),
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(12),
                       child: isUrl
                           ? AuthenticatedImage(
                               imageUrl: photoPath,

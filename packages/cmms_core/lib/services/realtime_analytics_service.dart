@@ -60,6 +60,10 @@ class RealtimeAnalyticsService {
   Stream<CostAnalysis> get maintenanceCostsStream =>
       _maintenanceCostsController.stream;
 
+  /// Marks streams that have already failed once so we don't keep printing
+  /// identical errors and re-subscribing for tables that aren't provisioned.
+  final Set<String> _disabledStreams = <String>{};
+
   Future<void> initialize() async {
     try {
       _subscribeKPIs();
@@ -73,6 +77,22 @@ class RealtimeAnalyticsService {
     } on Exception catch (e) {
       debugPrint('RealtimeAnalyticsService: init error: $e');
     }
+  }
+
+  /// Cancels a stream after its first error so the app doesn't log the same
+  /// "table not found" / "permission denied" message indefinitely.
+  void _disableStream({
+    required String name,
+    required Object error,
+    required void Function() cancel,
+  }) {
+    if (_disabledStreams.add(name)) {
+      debugPrint(
+        'RealtimeAnalyticsService: $name stream error: $error '
+        '(disabling further retries)',
+      );
+    }
+    cancel();
   }
 
   /// Triggers Supabase Functions to recalculate a metric document if stale/missing.
@@ -114,7 +134,14 @@ class RealtimeAnalyticsService {
         }
       },
       onError: (error) {
-        debugPrint('RealtimeAnalyticsService: KPI stream error: $error');
+        _disableStream(
+          name: 'KPI',
+          error: error,
+          cancel: () {
+            _kpiSubscription?.cancel();
+            _kpiSubscription = null;
+          },
+        );
       },
     );
   }
@@ -138,7 +165,14 @@ class RealtimeAnalyticsService {
         }
       },
       onError: (error) {
-        debugPrint('RealtimeAnalyticsService: WO summary stream error: $error');
+        _disableStream(
+          name: 'WO summary',
+          error: error,
+          cancel: () {
+            _workOrdersSummarySubscription?.cancel();
+            _workOrdersSummarySubscription = null;
+          },
+        );
       },
     );
   }
@@ -173,7 +207,14 @@ class RealtimeAnalyticsService {
         }
       },
       onError: (error) {
-        debugPrint('RealtimeAnalyticsService: WO trends stream error: $error');
+        _disableStream(
+          name: 'WO trends',
+          error: error,
+          cancel: () {
+            _workOrdersTrendsSubscription?.cancel();
+            _workOrdersTrendsSubscription = null;
+          },
+        );
       },
     );
   }
@@ -198,7 +239,14 @@ class RealtimeAnalyticsService {
         }
       },
       onError: (error) {
-        debugPrint('RealtimeAnalyticsService: Asset performance stream error: $error');
+        _disableStream(
+          name: 'Asset performance',
+          error: error,
+          cancel: () {
+            _assetPerformanceSubscription?.cancel();
+            _assetPerformanceSubscription = null;
+          },
+        );
       },
     );
   }
@@ -222,7 +270,14 @@ class RealtimeAnalyticsService {
         }
       },
       onError: (error) {
-        debugPrint('RealtimeAnalyticsService: PM compliance stream error: $error');
+        _disableStream(
+          name: 'PM compliance',
+          error: error,
+          cancel: () {
+            _pmComplianceSubscription?.cancel();
+            _pmComplianceSubscription = null;
+          },
+        );
       },
     );
   }
@@ -247,7 +302,14 @@ class RealtimeAnalyticsService {
         }
       },
       onError: (error) {
-        debugPrint('RealtimeAnalyticsService: Tech performance stream error: $error');
+        _disableStream(
+          name: 'Tech performance',
+          error: error,
+          cancel: () {
+            _techPerformanceSubscription?.cancel();
+            _techPerformanceSubscription = null;
+          },
+        );
       },
     );
   }
@@ -272,7 +334,14 @@ class RealtimeAnalyticsService {
         }
       },
       onError: (error) {
-        debugPrint('RealtimeAnalyticsService: Maintenance costs stream error: $error');
+        _disableStream(
+          name: 'Maintenance costs',
+          error: error,
+          cancel: () {
+            _maintenanceCostsSubscription?.cancel();
+            _maintenanceCostsSubscription = null;
+          },
+        );
       },
     );
   }

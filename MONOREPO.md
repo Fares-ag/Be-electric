@@ -49,4 +49,4 @@ Each app has its own `applicationId` / bundle id (`com.beelectric.cmms.requestor
 - **Requestor app:** only the `requestor` role is allowed; other roles see a sign-out message.
 - **Technician app:** `technician`, `manager`, and `admin` get the same flows as before; `requestor` is directed to the requestor app.
 
-Configuration (Supabase, OneSignal) still comes from `cmms_core`’s `AppConfig` and `--dart-define=...` flags.
+Configuration (Supabase) still comes from `cmms_core`’s `AppConfig` and `--dart-define=...` flags.

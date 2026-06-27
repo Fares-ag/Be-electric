@@ -3,9 +3,11 @@ import 'package:provider/provider.dart';
 
 import '../../app/cmms_app_mode_scope.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/supabase_auth_service.dart';
 import '../../utils/cmms_package_assets.dart';
 import '../../utils/app_theme.dart';
 import '../../utils/responsive_layout.dart';
+import '../../widgets/legal_footer.dart';
 import '../../widgets/role_based_navigation.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -26,6 +28,86 @@ class _LoginScreenState extends State<LoginScreen> {
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  Future<void> _forgotPassword() async {
+    final emailController = TextEditingController(
+      text: _emailController.text.trim(),
+    );
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reset Password'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Enter your email address. We will send a link to reset your password. '
+              'Open the link in your email to set a new password (completed on the web).',
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: emailController,
+              keyboardType: TextInputType.emailAddress,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Email',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Send Reset Link'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    final email = emailController.text.trim();
+
+    if (email.isEmpty || !email.contains('@')) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a valid email address.'),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
+      return;
+    }
+
+    try {
+      await SupabaseAuthService.instance.resetPassword(email);
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'If an account exists for this email, a reset link was sent. '
+            'Open the link in your email to set a new password.',
+          ),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 6),
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Could not send reset link: $e'),
+          backgroundColor: AppTheme.errorColor,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    }
   }
 
   Future<void> _login() async {
@@ -246,11 +328,32 @@ class _LoginScreenState extends State<LoginScreen> {
                       return null;
                     },
                   ),
+                    const SizedBox(height: AppTheme.spacingS),
+
+                    // Forgot password
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: _forgotPassword,
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.white70,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 0,
+                          ),
+                        ),
+                        child: const Text(
+                          'Forgot password?',
+                          style: TextStyle(fontSize: 13),
+                        ),
+                      ),
+                    ),
+
                     SizedBox(height: ResponsiveLayout.getResponsiveSpacing(
                       context,
-                      mobile: AppTheme.spacingXL,
-                      tablet: AppTheme.spacingXL * 1.2,
-                      desktop: AppTheme.spacingXL * 1.5,
+                      mobile: AppTheme.spacingM,
+                      tablet: AppTheme.spacingM * 1.2,
+                      desktop: AppTheme.spacingM * 1.5,
                     )),
 
                     // Login Button
@@ -302,6 +405,8 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                       ),
                     ),
+                    SizedBox(height: isDesktop ? 24 : 16),
+                    const LegalFooter(),
                     SizedBox(height: isDesktop ? 40 : 20),
                   ],
                 ),

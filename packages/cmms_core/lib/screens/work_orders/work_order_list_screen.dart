@@ -53,14 +53,36 @@ class _WorkOrderListScreenState extends State<WorkOrderListScreen> {
   // Company name cache
   final Map<String, String> _companyNameCache = {};
 
+  // Infinite scroll
+  final ScrollController _scrollController = ScrollController();
+
   @override
   void initState() {
     super.initState();
-    // Initialize filters from deep-link parameters
     _selectedStatusFilter = widget.initialStatusFilter;
     _selectedPriorityFilter = widget.initialPriorityFilter;
-    // Data is loaded from UnifiedDataProvider automatically via real-time listeners
     debugPrint('📋 Work Order List: Data loaded from unified provider');
+
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController
+      ..removeListener(_onScroll)
+      ..dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final pos = _scrollController.position;
+    // Trigger load when within 300 px of the bottom.
+    if (pos.pixels >= pos.maxScrollExtent - 300) {
+      final provider =
+          Provider.of<UnifiedDataProvider>(context, listen: false);
+      provider.loadMoreWorkOrders();
+    }
   }
 
   @override
@@ -1213,6 +1235,30 @@ class _WorkOrderListScreenState extends State<WorkOrderListScreen> {
     }
   }
 
+  Widget _buildLoadMoreFooter(UnifiedDataProvider provider) {
+    if (provider.isLoadingMoreWorkOrders) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 20),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (!provider.hasMoreWorkOrders) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Center(
+          child: Text(
+            'All work orders loaded',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey.shade500,
+            ),
+          ),
+        ),
+      );
+    }
+    return const SizedBox.shrink();
+  }
+
   Widget _buildWorkOrderList(
       List<WorkOrder> workOrders, UnifiedDataProvider unifiedProvider) {
     final isDesktop = ResponsiveLayout.isDesktop(context);
@@ -1224,48 +1270,64 @@ class _WorkOrderListScreenState extends State<WorkOrderListScreen> {
     final listBottom = padding.bottom + kBottomNavHeight + bottomSafe;
 
     if (isDesktop || isTablet) {
-      // Use grid layout for desktop/tablet
+      // Use CustomScrollView so we can append the footer slivers.
       final columns = isDesktop ? 2 : 1;
       return Center(
         child: ConstrainedBox(
           constraints: BoxConstraints(maxWidth: maxWidth),
-          child: GridView.builder(
-            padding: EdgeInsets.only(
-              left: padding.left,
-              right: padding.right,
-              top: padding.top,
-              bottom: listBottom,
-            ),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: columns,
-              crossAxisSpacing: padding.horizontal / 2,
-              mainAxisSpacing: padding.vertical / 2,
-              childAspectRatio: 1.1,
-            ),
-            itemCount: workOrders.length,
-            itemBuilder: (context, index) {
-              final workOrder = workOrders[index];
-              return _buildWorkOrderCard(
-                workOrder,
-                context,
-                unifiedProvider,
-              );
-            },
+          child: CustomScrollView(
+            controller: _scrollController,
+            slivers: [
+              SliverPadding(
+                padding: EdgeInsets.only(
+                  left: padding.left,
+                  right: padding.right,
+                  top: padding.top,
+                ),
+                sliver: SliverGrid(
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: columns,
+                    crossAxisSpacing: padding.horizontal / 2,
+                    mainAxisSpacing: padding.vertical / 2,
+                    childAspectRatio: 1.1,
+                  ),
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) => _buildWorkOrderCard(
+                      workOrders[index],
+                      context,
+                      unifiedProvider,
+                    ),
+                    childCount: workOrders.length,
+                  ),
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.only(bottom: listBottom),
+                  child: _buildLoadMoreFooter(unifiedProvider),
+                ),
+              ),
+            ],
           ),
         ),
       );
     }
 
-    // Mobile: use list view with full horizontal padding for professional look
+    // Mobile: list view with infinite-scroll footer
     return ListView.builder(
+      controller: _scrollController,
       padding: EdgeInsets.only(
         left: padding.left,
         right: padding.right,
         top: padding.top,
         bottom: listBottom,
       ),
-      itemCount: workOrders.length,
+      // +1 for the footer item
+      itemCount: workOrders.length + 1,
       itemBuilder: (context, index) {
+        if (index == workOrders.length) {
+          return _buildLoadMoreFooter(unifiedProvider);
+        }
         final workOrder = workOrders[index];
         return _buildWorkOrderCard(
           workOrder,

@@ -8,6 +8,7 @@ import '../../services/supabase_database_service.dart';
 import '../../utils/app_theme.dart';
 import '../../utils/charger_asset_filter.dart';
 import '../../utils/cmms_package_assets.dart';
+import '../../utils/requestor_work_order_asset.dart';
 import '../../utils/responsive_layout.dart';
 import '../../widgets/custom_app_bar.dart';
 import '../../widgets/requestor_more_menu.dart';
@@ -46,6 +47,7 @@ class _CreateMaintenanceRequestScreenState
   Asset? _selectedChargerAsset;
   List<Asset> _companyChargers = [];
   bool _isLoadingChargers = false;
+  bool _chargersLoadAttempted = false;
 
   // Photo upload
   final ImagePicker _picker = ImagePicker();
@@ -842,12 +844,21 @@ class _CreateMaintenanceRequestScreenState
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'PHOTO',
+          'PHOTOS (optional)',
           style: AppTheme.smallText.copyWith(
             color: AppTheme.secondaryTextColor,
             fontWeight: FontWeight.w600,
             fontSize: isDesktop ? 13 : 12,
             letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Add as many as you need — use the camera more than once, or '
+          'open the gallery to select multiple images in one step.',
+          style: AppTheme.smallText.copyWith(
+            color: AppTheme.secondaryTextColor,
+            fontSize: isDesktop ? 12 : 11,
           ),
         ),
         SizedBox(height: isDesktop ? 10 : AppTheme.spacingS),
@@ -925,7 +936,7 @@ class _CreateMaintenanceRequestScreenState
                 onPressed: _capturePhoto,
                 icon: Icon(Icons.camera_alt, size: isDesktop ? 20 : 18),
                 label: Text(
-                  'Take Photo',
+                  'Take photo',
                   style: TextStyle(fontSize: isDesktop ? 14 : 13),
                 ),
                 style: ElevatedButton.styleFrom(
@@ -953,7 +964,7 @@ class _CreateMaintenanceRequestScreenState
                 onPressed: _pickPhotoFromGallery,
                 icon: Icon(Icons.photo_library, size: isDesktop ? 20 : 18),
                 label: Text(
-                  'From Gallery',
+                  'Gallery (multi)',
                   style: TextStyle(fontSize: isDesktop ? 14 : 13),
                 ),
                 style: ElevatedButton.styleFrom(
@@ -995,7 +1006,10 @@ class _CreateMaintenanceRequestScreenState
 
       if (companyId == null) {
         if (mounted) {
-          setState(() => _isLoadingChargers = false);
+          setState(() {
+            _isLoadingChargers = false;
+            _chargersLoadAttempted = true;
+          });
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('No company assigned to your account'),
@@ -1027,12 +1041,17 @@ class _CreateMaintenanceRequestScreenState
         setState(() {
           _companyChargers = chargers;
           _isLoadingChargers = false;
+          _chargersLoadAttempted = true;
+          if (chargers.length == 1) {
+            _selectedChargerAsset = chargers.first;
+          }
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
           _isLoadingChargers = false;
+          _chargersLoadAttempted = true;
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1309,13 +1328,18 @@ class _CreateMaintenanceRequestScreenState
       return;
     }
 
-    // Validate charger selection if we have chargers loaded
-    if (widget.chargerType != null &&
-        _companyChargers.isNotEmpty &&
-        _selectedChargerAsset == null) {
+    final reviewAsset = _selectedChargerAsset ?? widget.asset;
+    final assetValidationError = validateRequestorReviewAsset(
+      asset: reviewAsset,
+      isChargerTypeFlow: widget.chargerType != null,
+      isLoadingChargers: _isLoadingChargers,
+      chargersLoadAttempted: _chargersLoadAttempted,
+      companyChargerCount: _companyChargers.length,
+    );
+    if (assetValidationError != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select a charger'),
+        SnackBar(
+          content: Text(assetValidationError),
           backgroundColor: AppTheme.accentRed,
         ),
       );
@@ -1343,8 +1367,7 @@ class _CreateMaintenanceRequestScreenState
         context,
         MaterialPageRoute(
           builder: (context) => ReviewMaintenanceRequestScreen(
-            asset: _selectedChargerAsset ??
-                widget.asset, // Use selected charger asset if available
+            asset: reviewAsset,
             name: _nameController.text.trim(),
             chargerId: chargerId,
             department: '', // Department field removed

@@ -50,28 +50,65 @@ class AppConfig {
 
   /// Supabase project URL
   /// Set via: flutter run --dart-define=SUPABASE_URL=your_url
-  static String get supabaseUrl => const String.fromEnvironment(
-        'SUPABASE_URL',
-        defaultValue: 'https://sdhqjyjeczrbnvukrmny.supabase.co',
-      );
+  /// Release builds must pass SUPABASE_URL via --dart-define (no baked-in default).
+  static String get supabaseUrl {
+    const fromEnv = String.fromEnvironment('SUPABASE_URL');
+    if (fromEnv.isNotEmpty) return fromEnv;
+    if (isDebugMode) {
+      return 'https://sdhqjyjeczrbnvukrmny.supabase.co';
+    }
+    return '';
+  }
 
   /// Supabase anon (publishable) key for client-side auth
   /// Set via: flutter run --dart-define=SUPABASE_ANON_KEY=your_key
-  /// For production, pass from CI/secrets; never commit production keys.
-  static String get supabaseAnonKey => const String.fromEnvironment(
-        'SUPABASE_ANON_KEY',
-        defaultValue: 'sb_publishable_jymzllhRW_CVJH6pY3qleA_7GRd1ETA',
-      );
+  /// Release builds must pass SUPABASE_ANON_KEY via --dart-define.
+  static String get supabaseAnonKey {
+    const fromEnv = String.fromEnvironment('SUPABASE_ANON_KEY');
+    if (fromEnv.isNotEmpty) return fromEnv;
+    if (isDebugMode) {
+      return 'sb_publishable_jymzllhRW_CVJH6pY3qleA_7GRd1ETA';
+    }
+    return '';
+  }
 
-  /// OneSignal App ID for push notifications.
-  /// Set via: flutter run --dart-define=ONE_SIGNAL_APP_ID=your_app_id
-  /// If empty, push notifications are disabled.
-  static String get oneSignalAppId => const String.fromEnvironment(
-        'ONE_SIGNAL_APP_ID',
-        defaultValue: '',
-      );
+  /// True when required Supabase credentials are present.
+  static bool get hasValidSupabaseConfig =>
+      supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty;
 
-  static bool get oneSignalEnabled => oneSignalAppId.isNotEmpty;
+  /// Public privacy policy URL (required for App Store).
+  /// --dart-define=PRIVACY_POLICY_URL=https://your-domain.com/privacy
+  static String get privacyPolicyUrl {
+    const fromEnv = String.fromEnvironment('PRIVACY_POLICY_URL');
+    return fromEnv.trim();
+  }
+
+  /// Terms of service URL (optional in-app link).
+  /// --dart-define=TERMS_OF_SERVICE_URL=https://your-domain.com/terms
+  static String get termsOfServiceUrl {
+    const fromEnv = String.fromEnvironment('TERMS_OF_SERVICE_URL');
+    return fromEnv.trim();
+  }
+
+  /// Public support / help page URL for App Store Connect.
+  /// --dart-define=SUPPORT_URL=https://your-domain.com/support
+  static String get supportUrl {
+    const fromEnv = String.fromEnvironment('SUPPORT_URL');
+    return fromEnv.trim();
+  }
+
+  /// Support email for account help and deletion requests.
+  /// --dart-define=SUPPORT_EMAIL=support@your-domain.com
+  static String get supportEmail {
+    const fromEnv = String.fromEnvironment('SUPPORT_EMAIL');
+    return fromEnv.trim();
+  }
+
+  /// True when legal/support URLs needed for store compliance are set.
+  static bool get hasValidLegalConfig =>
+      privacyPolicyUrl.isNotEmpty &&
+      supportEmail.isNotEmpty &&
+      supportUrl.isNotEmpty;
 
   /// Maximum file upload size (in MB)
   static int get maxFileUploadSizeMB =>
@@ -197,9 +234,6 @@ class AppConfig {
     print('Session Timeout: $sessionTimeoutMinutes min');
     print('Sync Interval: $syncIntervalSeconds sec');
     print('Max Upload Size: $maxFileUploadSizeMB MB');
-    print(
-      'OneSignal push: ${oneSignalEnabled ? "enabled" : "disabled (set ONE_SIGNAL_APP_ID at build time)"}',
-    );
     if (isDemoMode) {
       print('Demo Users Available: ${demoUsers.length}');
     }

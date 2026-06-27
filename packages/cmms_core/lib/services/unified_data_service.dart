@@ -2,13 +2,12 @@
 // This service ensures data consistency across all screens and providers
 
 import 'dart:async';
-import 'dart:convert';
 
-import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
+// Hide gotrue's `User` so it doesn't shadow our own `models/user.dart` `User`.
+import 'package:supabase_flutter/supabase_flutter.dart' hide User;
 import 'package:uuid/uuid.dart';
 
-import '../config/app_config.dart';
-import '../config/supabase_config.dart';
 import '../models/asset.dart';
 import '../models/inventory_item.dart';
 import '../models/pm_task.dart';
@@ -45,6 +44,13 @@ class UnifiedDataService {
   bool _isHealingWorkOrders = false;
   final Set<String> _pendingUserFetches = <String>{};
   final Set<String> _pendingAssetFetches = <String>{};
+
+  // Single-flight + per-user init guard so duplicate initialize() callers (bootstrap,
+  // ComprehensiveCMMSService, UnifiedDataProvider, post-login refresh) don't trigger
+  // multiple parallel full data loads. Pre-auth callers no-op so we don't burn round
+  // trips that RLS would reject anyway.
+  Future<void>? _initInFlight;
+  String? _initializedForUserId;
 
   // Getters
   List<WorkOrder> get workOrders => _workOrders;
@@ -90,7 +96,7 @@ class UnifiedDataService {
     String? missingWorkOrderId,
   }) async {
     if (_isHealingWorkOrders) {
-      print(
+      debugPrint(
         '⏳ UnifiedDataService: Auto-heal already running; skipping duplicate request',
       );
       return;
@@ -101,12 +107,12 @@ class UnifiedDataService {
       final reason = missingWorkOrderId != null
           ? ' (missing $missingWorkOrderId)'
           : '';
-      print('🩺 UnifiedDataService: Auto-healing work orders$reason...');
+      debugPrint('🩺 UnifiedDataService: Auto-healing work orders$reason...');
 
       final remoteOrders =
           await SupabaseDatabaseService.instance.getAllWorkOrders();
       if (remoteOrders.isEmpty) {
-        print('⚠️ UnifiedDataService: Supabase returned 0 work orders');
+        debugPrint('⚠️ UnifiedDataService: Supabase returned 0 work orders');
         return;
       }
 
@@ -121,11 +127,11 @@ class UnifiedDataService {
       // No local DB persistence - Supabase is the source of truth
 
       _populateReferences();
-      print(
+      debugPrint(
         '✅ UnifiedDataService: Auto-heal refreshed ${remoteOrders.length} work orders from Supabase',
       );
     } catch (e) {
-      print('❌ UnifiedDataService: Auto-heal failed: $e');
+      debugPrint('❌ UnifiedDataService: Auto-heal failed: $e');
     } finally {
       _isHealingWorkOrders = false;
     }
@@ -207,15 +213,48 @@ class UnifiedDataService {
   // INITIALIZATION
   // ============================================================================
 
-  /// Initialize all data services and load data
-  Future<void> initialize() async {
-    print('🔄 UnifiedDataService: Initializing all data services...');
+  /// Initialize all data services and load data.
+  ///
+  /// Idempotent: returns the in-flight future if a load is already running,
+  /// no-ops if data is already loaded for the current user. Pre-auth calls
+  /// short-circuit so RLS-protected queries aren't fired with no session.
+  /// Pass [force] = true to bypass the cache (used by [refreshAll]).
+  Future<void> initialize({bool force = false}) async {
+    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+
+    // Fast path: already loaded for this user.
+    if (!force &&
+        _initializedForUserId != null &&
+        _initializedForUserId == currentUserId) {
+      return;
+    }
+
+    // Coalesce concurrent callers to a single load.
+    if (_initInFlight != null) {
+      return _initInFlight;
+    }
+
+    // Skip wasted RLS-rejected requests when there is no session yet. The
+    // provider re-runs initialize() once Supabase emits a signedIn auth event.
+    if (currentUserId == null) {
+      debugPrint('⏭️  UnifiedDataService: Skipping initial load (no auth user)');
+      return;
+    }
+
+    _initInFlight = _runInitialize(currentUserId);
+    try {
+      await _initInFlight;
+    } finally {
+      _initInFlight = null;
+    }
+  }
+
+  Future<void> _runInitialize(String userId) async {
+    debugPrint('🔄 UnifiedDataService: Initializing all data services...');
 
     try {
-      // Initialize Supabase (already done in main.dart, but ensure it's ready)
       await SupabaseDatabaseService.instance.initialize();
 
-      // Load all data from Supabase in parallel
       await Future.wait([
         _loadWorkOrders(),
         _loadPMTasks(),
@@ -225,27 +264,64 @@ class UnifiedDataService {
         _loadWorkflows(),
       ]);
 
-      // Populate cross-references after all data is loaded
       _populateReferences();
+      _initializedForUserId = userId;
 
-      print('✅ UnifiedDataService: All data loaded successfully from Supabase');
+      debugPrint(
+        '✅ UnifiedDataService: All data loaded successfully from Supabase',
+      );
     } catch (e) {
-      print('❌ UnifiedDataService: Error initializing: $e');
+      debugPrint('❌ UnifiedDataService: Error initializing: $e');
       rethrow;
     }
   }
 
-  /// Load work orders from Supabase
+  /// Reset the per-user cache marker (used on sign-out / user switch).
+  void resetInitialization() {
+    _initializedForUserId = null;
+  }
+
+  /// Load the first page of work orders from Supabase.
+  /// The provider loads additional pages on demand via [appendWorkOrderPage].
   Future<void> _loadWorkOrders() async {
     _isWorkOrdersLoading = true;
     try {
-      _workOrders = await SupabaseDatabaseService.instance.getAllWorkOrders();
-      print('📋 UnifiedDataService: Loaded ${_workOrders.length} work orders from Supabase');
+      _workOrders = await SupabaseDatabaseService.instance
+          .getWorkOrdersPage(page: 0, pageSize: 30);
+      debugPrint('📋 UnifiedDataService: Loaded ${_workOrders.length} '
+          'work orders (page 0) from Supabase');
     } catch (e) {
-      print('❌ UnifiedDataService: Error loading work orders: $e');
-      _workOrders = []; // Initialize empty list on error
+      debugPrint('❌ UnifiedDataService: Error loading work orders: $e');
+      _workOrders = [];
     } finally {
       _isWorkOrdersLoading = false;
+    }
+  }
+
+  /// Append a page of work orders to the cache (called by provider on scroll).
+  /// Returns the number of newly added rows.
+  Future<int> appendWorkOrderPage(int page, {int pageSize = 30}) async {
+    try {
+      final rows = await SupabaseDatabaseService.instance
+          .getWorkOrdersPage(page: page, pageSize: pageSize);
+      if (rows.isEmpty) return 0;
+      final existing = {for (final wo in _workOrders) wo.id: wo};
+      int added = 0;
+      for (final wo in rows) {
+        if (!existing.containsKey(wo.id)) {
+          existing[wo.id] = wo;
+          added++;
+        } else {
+          existing[wo.id] = wo; // keep server version authoritative
+        }
+      }
+      _workOrders = existing.values.toList();
+      debugPrint('📋 UnifiedDataService: Appended $added new work orders '
+          '(page $page)');
+      return rows.length; // caller uses this to detect last page
+    } catch (e) {
+      debugPrint('❌ UnifiedDataService: Error loading work orders page $page: $e');
+      return 0;
     }
   }
 
@@ -266,9 +342,9 @@ class UnifiedDataService {
     _isPMTasksLoading = true;
     try {
       _pmTasks = await SupabaseDatabaseService.instance.getAllPMTasks();
-      print('📋 UnifiedDataService: Loaded ${_pmTasks.length} PM tasks from Supabase');
+      debugPrint('📋 UnifiedDataService: Loaded ${_pmTasks.length} PM tasks from Supabase');
     } catch (e) {
-      print('❌ UnifiedDataService: Error loading PM tasks: $e');
+      debugPrint('❌ UnifiedDataService: Error loading PM tasks: $e');
       _pmTasks = []; // Initialize empty list on error
     } finally {
       _isPMTasksLoading = false;
@@ -280,9 +356,9 @@ class UnifiedDataService {
     _isUsersLoading = true;
     try {
       _users = await SupabaseDatabaseService.instance.getAllUsers();
-      print('👥 UnifiedDataService: Loaded ${_users.length} users from Supabase');
+      debugPrint('👥 UnifiedDataService: Loaded ${_users.length} users from Supabase');
     } catch (e) {
-      print('❌ UnifiedDataService: Error loading users: $e');
+      debugPrint('❌ UnifiedDataService: Error loading users: $e');
       _users = []; // Initialize empty list on error
     } finally {
       _isUsersLoading = false;
@@ -294,9 +370,9 @@ class UnifiedDataService {
     _isAssetsLoading = true;
     try {
       _assets = await SupabaseDatabaseService.instance.getAllAssets();
-      print('🏭 UnifiedDataService: Loaded ${_assets.length} assets from Supabase');
+      debugPrint('🏭 UnifiedDataService: Loaded ${_assets.length} assets from Supabase');
     } catch (e) {
-      print('❌ UnifiedDataService: Error loading assets: $e');
+      debugPrint('❌ UnifiedDataService: Error loading assets: $e');
       _assets = []; // Initialize empty list on error
     } finally {
       _isAssetsLoading = false;
@@ -309,11 +385,11 @@ class UnifiedDataService {
     try {
       _inventoryItems =
           await SupabaseDatabaseService.instance.getAllInventoryItems();
-      print(
+      debugPrint(
         '📦 UnifiedDataService: Loaded ${_inventoryItems.length} inventory items from Supabase',
       );
     } catch (e) {
-      print('❌ UnifiedDataService: Error loading inventory: $e');
+      debugPrint('❌ UnifiedDataService: Error loading inventory: $e');
       _inventoryItems = []; // Initialize empty list on error
     } finally {
       _isInventoryLoading = false;
@@ -331,7 +407,7 @@ class UnifiedDataService {
 
     _pendingUserFetches.addAll(targets);
     try {
-      print(
+      debugPrint(
         '🔎 UnifiedDataService: Fetching ${targets.length} missing user(s)...',
       );
       for (final id in targets) {
@@ -346,14 +422,14 @@ class UnifiedDataService {
               _users.add(fetchedUser);
             }
             // No local DB persistence - Supabase is the source of truth
-            print(
+            debugPrint(
               '✅ UnifiedDataService: Loaded user ${fetchedUser.name} ($id)',
             );
           } else {
-            print('⚠️ UnifiedDataService: User $id not found in Supabase');
+            debugPrint('⚠️ UnifiedDataService: User $id not found in Supabase');
           }
         } catch (e) {
-          print('❌ UnifiedDataService: Error fetching user $id: $e');
+          debugPrint('❌ UnifiedDataService: Error fetching user $id: $e');
         }
       }
       _populateReferences();
@@ -373,7 +449,7 @@ class UnifiedDataService {
 
     _pendingAssetFetches.addAll(targets);
     try {
-      print(
+      debugPrint(
         '🔎 UnifiedDataService: Fetching ${targets.length} missing asset(s)...',
       );
       for (final id in targets) {
@@ -385,7 +461,7 @@ class UnifiedDataService {
           
           // If not found, try the 'items' collection (DAM system)
           if (fetchedAsset == null) {
-            print(
+            debugPrint(
               '⚠️ UnifiedDataService: Asset $id not found in assets collection, trying items collection...',
             );
             fetchedAsset = await _getAssetFromItemsCollection(id);
@@ -399,14 +475,14 @@ class UnifiedDataService {
               _assets.add(fetchedAsset);
             }
             // No local DB persistence - Supabase is the source of truth
-            print(
+            debugPrint(
               '✅ UnifiedDataService: Loaded asset ${fetchedAsset.name} ($id)',
             );
           } else {
-            print('⚠️ UnifiedDataService: Asset $id not found in Supabase (checked both assets and items collections)');
+            debugPrint('⚠️ UnifiedDataService: Asset $id not found in Supabase (checked both assets and items collections)');
           }
         } catch (e) {
-          print('❌ UnifiedDataService: Error fetching asset $id: $e');
+          debugPrint('❌ UnifiedDataService: Error fetching asset $id: $e');
         }
       }
       _populateReferences();
@@ -428,7 +504,7 @@ class UnifiedDataService {
       );
       return asset;
     } catch (e) {
-      print('⚠️ UnifiedDataService: Error fetching asset $assetId from items collection: $e');
+      debugPrint('⚠️ UnifiedDataService: Error fetching asset $assetId from items collection: $e');
       return null;
     }
   }
@@ -466,7 +542,7 @@ class UnifiedDataService {
 
     // Log warning for missing assets (they're optional for general maintenance)
     if (missingAssets.isNotEmpty) {
-      print(
+      debugPrint(
         '⚠️ UnifiedDataService: Asset(s) not found: ${missingAssets.join(', ')}. '
         'Work order will be created without asset reference (general maintenance).',
       );
@@ -485,7 +561,7 @@ class UnifiedDataService {
 
   /// Populate cross-references between entities
   void _populateReferences() {
-    print('🔗 UnifiedDataService: Populating cross-references...');
+    debugPrint('🔗 UnifiedDataService: Populating cross-references...');
 
     // Populate asset references in work orders
     for (var i = 0; i < _workOrders.length; i++) {
@@ -516,7 +592,7 @@ class UnifiedDataService {
             );
             technicians.add(technician);
           } catch (e) {
-            print('⚠️ Technician $techId not found for work order ${workOrder.id}');
+            debugPrint('⚠️ Technician $techId not found for work order ${workOrder.id}');
           }
         }
         if (technicians.isNotEmpty) {
@@ -534,7 +610,7 @@ class UnifiedDataService {
           _workOrders[i] = _workOrders[i].copyWith(requestor: requestor);
         } catch (e) {
           // User not found - leave as null instead of creating fake user
-          print(
+          debugPrint(
             '⚠️ Requestor ${workOrder.requestorId} not found for work order ${workOrder.id}',
           );
         }
@@ -574,7 +650,7 @@ class UnifiedDataService {
             );
             technicians.add(technician);
           } catch (e) {
-            print(
+            debugPrint(
               '⚠️ Technician $techId not found for PM task ${pmTask.id}',
             );
           }
@@ -587,13 +663,13 @@ class UnifiedDataService {
       }
     }
 
-    print('✅ UnifiedDataService: Cross-references populated');
+    debugPrint('✅ UnifiedDataService: Cross-references populated');
   }
 
   /// Refresh all data
   Future<void> refreshAll() async {
-    print('🔄 UnifiedDataService: Refreshing all data...');
-    await initialize();
+    debugPrint('🔄 UnifiedDataService: Refreshing all data...');
+    await initialize(force: true);
   }
 
   // ============================================================================
@@ -700,7 +776,7 @@ class UnifiedDataService {
       // Check for existing work order with same ID (upsert logic)
       final existingIndex = _workOrders.indexWhere((wo) => wo.id == id);
       if (existingIndex != -1) {
-        print('⚠️ Work order $id already exists - updating instead');
+        debugPrint('⚠️ Work order $id already exists - updating instead');
         _workOrders[existingIndex] = woWithId;
       } else {
         _workOrders.add(woWithId);
@@ -708,13 +784,13 @@ class UnifiedDataService {
 
       // Write directly to Supabase
       await SupabaseDatabaseService.instance.createWorkOrder(woWithId);
-      print(
+      debugPrint(
         '✅ UnifiedDataService: Created work order ${woWithId.ticketNumber} in Supabase',
       );
 
       return id;
     } catch (e) {
-      print('❌ UnifiedDataService: Error creating work order: $e');
+      debugPrint('❌ UnifiedDataService: Error creating work order: $e');
       rethrow;
     }
   }
@@ -733,7 +809,7 @@ class UnifiedDataService {
         );
         updatedWorkOrder = updatedWorkOrder.copyWith(asset: asset);
       } catch (e) {
-        print('⚠️ Asset ${updatedWorkOrder.assetId} not found');
+        debugPrint('⚠️ Asset ${updatedWorkOrder.assetId} not found');
       }
     }
 
@@ -747,7 +823,7 @@ class UnifiedDataService {
           );
           technicians.add(technician);
         } catch (e) {
-          print('⚠️ Technician $techId not found for WO ${updatedWorkOrder.id}');
+          debugPrint('⚠️ Technician $techId not found for WO ${updatedWorkOrder.id}');
         }
       }
       if (technicians.isNotEmpty) {
@@ -765,7 +841,7 @@ class UnifiedDataService {
         );
         updatedWorkOrder = updatedWorkOrder.copyWith(requestor: requestor);
       } catch (e) {
-        print('⚠️ Requestor ${updatedWorkOrder.requestorId} not found');
+        debugPrint('⚠️ Requestor ${updatedWorkOrder.requestorId} not found');
       }
     }
 
@@ -784,7 +860,7 @@ class UnifiedDataService {
         );
         updatedPMTask = updatedPMTask.copyWith(asset: asset);
       } catch (e) {
-        print('⚠️ Asset ${updatedPMTask.assetId} not found for PM task ${updatedPMTask.id}');
+        debugPrint('⚠️ Asset ${updatedPMTask.assetId} not found for PM task ${updatedPMTask.id}');
       }
     }
 
@@ -798,7 +874,7 @@ class UnifiedDataService {
           );
           technicians.add(technician);
         } catch (e) {
-          print('⚠️ Technician $techId not found for PM task ${updatedPMTask.id}');
+          debugPrint('⚠️ Technician $techId not found for PM task ${updatedPMTask.id}');
         }
       }
       if (technicians.isNotEmpty) {
@@ -840,13 +916,13 @@ class UnifiedDataService {
       if (index != -1) {
         _workOrders[index] = updatedWorkOrder;
       }
-      print(
+      debugPrint(
         '✅ UnifiedDataService: Updated work order ${updatedWorkOrder.ticketNumber} in Supabase',
       );
 
       return updatedWorkOrder;
     } catch (e) {
-      print('❌ UnifiedDataService: Error updating work order: $e');
+      debugPrint('❌ UnifiedDataService: Error updating work order: $e');
       rethrow;
     }
   }
@@ -857,9 +933,9 @@ class UnifiedDataService {
       // Delete from Supabase
       await SupabaseDatabaseService.instance.deleteWorkOrder(workOrderId);
       _workOrders.removeWhere((wo) => wo.id == workOrderId);
-      print('✅ UnifiedDataService: Deleted work order $workOrderId from Supabase');
+      debugPrint('✅ UnifiedDataService: Deleted work order $workOrderId from Supabase');
     } catch (e) {
-      print('❌ UnifiedDataService: Error deleting work order: $e');
+      debugPrint('❌ UnifiedDataService: Error deleting work order: $e');
       rethrow;
     }
   }
@@ -875,11 +951,11 @@ class UnifiedDataService {
       // Write directly to Supabase
       await SupabaseDatabaseService.instance.createAsset(assetWithId);
       _assets.add(assetWithId);
-      print('✅ UnifiedDataService: Created asset ${asset.name} in Supabase');
+      debugPrint('✅ UnifiedDataService: Created asset ${asset.name} in Supabase');
 
       return assetId;
     } catch (e) {
-      print('❌ UnifiedDataService: Error creating asset: $e');
+      debugPrint('❌ UnifiedDataService: Error creating asset: $e');
       rethrow;
     }
   }
@@ -892,9 +968,9 @@ class UnifiedDataService {
       if (idx != -1) {
         _assets[idx] = asset;
       }
-      print('OK UnifiedDataService: Updated asset  in Supabase');
+      debugPrint('OK UnifiedDataService: Updated asset  in Supabase');
     } catch (e) {
-      print('ERR UnifiedDataService: Error updating asset: ');
+      debugPrint('ERR UnifiedDataService: Error updating asset: ');
       rethrow;
     }
   }
@@ -905,9 +981,9 @@ class UnifiedDataService {
       // Delete from Supabase
       await SupabaseDatabaseService.instance.deleteAsset(assetId);
       _assets.removeWhere((asset) => asset.id == assetId);
-      print('✅ UnifiedDataService: Deleted asset $assetId from Supabase');
+      debugPrint('✅ UnifiedDataService: Deleted asset $assetId from Supabase');
     } catch (e) {
-      print('❌ UnifiedDataService: Error deleting asset: $e');
+      debugPrint('❌ UnifiedDataService: Error deleting asset: $e');
       rethrow;
     }
   }
@@ -918,11 +994,11 @@ class UnifiedDataService {
       // Create in Supabase
       final userId = await SupabaseDatabaseService.instance.createUser(user);
       _users.add(user.copyWith(id: userId));
-      print('✅ UnifiedDataService: Created user ${user.name} in Supabase');
+      debugPrint('✅ UnifiedDataService: Created user ${user.name} in Supabase');
 
       return userId;
     } catch (e) {
-      print('❌ UnifiedDataService: Error creating user: $e');
+      debugPrint('❌ UnifiedDataService: Error creating user: $e');
       rethrow;
     }
   }
@@ -936,9 +1012,9 @@ class UnifiedDataService {
       
       // Delete from Supabase
       await SupabaseDatabaseService.instance.deleteUser(userId);
-      print('✅ UnifiedDataService: Deleted user $userId from Supabase');
+      debugPrint('✅ UnifiedDataService: Deleted user $userId from Supabase');
     } catch (e) {
-      print('❌ UnifiedDataService: Error deleting user: $e');
+      debugPrint('❌ UnifiedDataService: Error deleting user: $e');
       rethrow;
     }
   }
@@ -951,9 +1027,9 @@ class UnifiedDataService {
       if (index != -1) {
         _users[index] = user;
       }
-      print('✅ UnifiedDataService: Updated user ${user.name} in Supabase');
+      debugPrint('✅ UnifiedDataService: Updated user ${user.name} in Supabase');
     } catch (e) {
-      print('❌ UnifiedDataService: Error updating user: $e');
+      debugPrint('❌ UnifiedDataService: Error updating user: $e');
       rethrow;
     }
   }
@@ -971,7 +1047,7 @@ class UnifiedDataService {
       ];
       await updateWorkOrderTechnicianAssignments(workOrderId, updatedIds);
     } catch (e) {
-      print('❌ UnifiedDataService: Error assigning technician: $e');
+      debugPrint('❌ UnifiedDataService: Error assigning technician: $e');
       rethrow;
     }
   }
@@ -1028,62 +1104,15 @@ class UnifiedDataService {
       );
 
       await updateWorkOrder(updatedWorkOrder);
-      print(
+      debugPrint(
         '✅ UnifiedDataService: Updated technician roster (${uniqueIds.length}) for work order $workOrderId',
       );
-      // Send push notification to assigned technicians (if OneSignal is enabled)
-      _sendPushWorkOrderAssigned(
-        technicianIds: uniqueIds,
-        ticketNumber: updatedWorkOrder.ticketNumber,
-        workOrderId: workOrderId,
-      );
     } catch (e) {
-      print(
+      debugPrint(
         '❌ UnifiedDataService: Error updating work order technicians: $e',
       );
       rethrow;
     }
-  }
-
-  /// Calls Supabase Edge Function to send OneSignal push when work order is assigned.
-  static void _sendPushWorkOrderAssigned({
-    required List<String> technicianIds,
-    required String ticketNumber,
-    required String workOrderId,
-  }) {
-    if (technicianIds.isEmpty || !AppConfig.oneSignalEnabled) return;
-    final url = Uri.parse(
-      '${SupabaseConfig.projectUrl}/functions/v1/send-push-notification',
-    );
-    final body = jsonEncode({
-      'type': 'work_order_assigned',
-      'external_user_ids': technicianIds,
-      'title': 'Work Order Assigned',
-      'message': 'You have been assigned $ticketNumber.',
-      'data': {
-        'work_order_id': workOrderId,
-        'ticket_number': ticketNumber,
-      },
-    });
-    http
-        .post(
-          url,
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer ${SupabaseConfig.anonKey}',
-          },
-          body: body,
-        )
-        .then((res) {
-          if (res.statusCode != 200) {
-            print(
-              '⚠️ Push notification request failed: ${res.statusCode} ${res.body}',
-            );
-          }
-        })
-        .catchError((e) {
-          print('⚠️ Push notification error: $e');
-        });
   }
 
   /// Unassign technician from work order
@@ -1100,7 +1129,7 @@ class UnifiedDataService {
               .toList();
       await updateWorkOrderTechnicianAssignments(workOrderId, updatedIds);
     } catch (e) {
-      print('❌ UnifiedDataService: Error unassigning technician: $e');
+      debugPrint('❌ UnifiedDataService: Error unassigning technician: $e');
       rethrow;
     }
   }
@@ -1118,7 +1147,7 @@ class UnifiedDataService {
       ];
       await updatePMTaskTechnicianAssignments(pmTaskId, updatedIds);
     } catch (e) {
-      print('❌ UnifiedDataService: Error assigning technician to PM task: $e');
+      debugPrint('❌ UnifiedDataService: Error assigning technician to PM task: $e');
       rethrow;
     }
   }
@@ -1174,11 +1203,11 @@ class UnifiedDataService {
       );
 
       await updatePMTask(updatedPMTask);
-      print(
+      debugPrint(
         '✅ UnifiedDataService: Updated technician roster (${uniqueIds.length}) for PM task $pmTaskId',
       );
     } catch (e) {
-      print(
+      debugPrint(
         '❌ UnifiedDataService: Error updating PM task technicians: $e',
       );
       rethrow;
@@ -1199,7 +1228,7 @@ class UnifiedDataService {
               .toList();
       await updatePMTaskTechnicianAssignments(pmTaskId, updatedIds);
     } catch (e) {
-      print(
+      debugPrint(
         '❌ UnifiedDataService: Error unassigning technician from PM task: $e',
       );
       rethrow;
@@ -1262,7 +1291,7 @@ class UnifiedDataService {
           DeterministicIdGenerator.normalizeDocumentId(pmIdBase.toUpperCase());
 
       // Debug: Print checklist JSON to verify it's being passed
-      print('📋 UnifiedDataService: Creating PM task with checklist: $checklistJson');
+      debugPrint('📋 UnifiedDataService: Creating PM task with checklist: $checklistJson');
       
       final pmTask = PMTask(
         id: pmDocId.isNotEmpty ? pmDocId : const Uuid().v4(),
@@ -1284,7 +1313,7 @@ class UnifiedDataService {
       );
       
       // Debug: Verify checklist was set on PMTask
-      print('📋 UnifiedDataService: PMTask checklist after creation: ${pmTask.checklist}');
+      debugPrint('📋 UnifiedDataService: PMTask checklist after creation: ${pmTask.checklist}');
 
       // Write directly to Supabase
       await SupabaseDatabaseService.instance.createPMTask(pmTask);
@@ -1292,14 +1321,14 @@ class UnifiedDataService {
       final primaryAssigned = assignedTechnicians?.isNotEmpty ?? false
           ? assignedTechnicians!.first.name
           : null;
-      print(
+      debugPrint(
         primaryAssigned != null
             ? '✅ UnifiedDataService: Created PM task $taskName assigned to $primaryAssigned in Supabase'
             : '✅ UnifiedDataService: Created PM task $taskName (unassigned) in Supabase',
       );
       return pmTask;
     } catch (e) {
-      print('❌ UnifiedDataService: Error creating PM task: $e');
+      debugPrint('❌ UnifiedDataService: Error creating PM task: $e');
       rethrow;
     }
   }
@@ -1319,11 +1348,11 @@ class UnifiedDataService {
       } else {
         _pmTasks.add(populatedPMTask);
       }
-      print('✅ UnifiedDataService: Updated PM task ${populatedPMTask.taskName} in Supabase');
+      debugPrint('✅ UnifiedDataService: Updated PM task ${populatedPMTask.taskName} in Supabase');
       
       return populatedPMTask;
     } catch (e) {
-      print('❌ UnifiedDataService: Error updating PM task: $e');
+      debugPrint('❌ UnifiedDataService: Error updating PM task: $e');
       rethrow;
     }
   }
@@ -1334,9 +1363,9 @@ class UnifiedDataService {
       // Delete from Supabase
       await SupabaseDatabaseService.instance.deletePMTask(pmTaskId);
       _pmTasks.removeWhere((pt) => pt.id == pmTaskId);
-      print('✅ UnifiedDataService: Deleted PM task $pmTaskId from Supabase');
+      debugPrint('✅ UnifiedDataService: Deleted PM task $pmTaskId from Supabase');
     } catch (e) {
-      print('❌ UnifiedDataService: Error deleting PM task: $e');
+      debugPrint('❌ UnifiedDataService: Error deleting PM task: $e');
       rethrow;
     }
   }
@@ -1453,13 +1482,13 @@ class UnifiedDataService {
       if (index != -1) {
         _workOrders[index] = updatedWorkOrder;
       }
-      print(
+      debugPrint(
         '⏸️ UnifiedDataService: Paused work order ${workOrder.ticketNumber} with reason: $reason in Supabase',
       );
       
       return updatedWorkOrder;
     } catch (e) {
-      print('❌ UnifiedDataService: Error pausing work order: $e');
+      debugPrint('❌ UnifiedDataService: Error pausing work order: $e');
       rethrow;
     }
   }
@@ -1487,13 +1516,13 @@ class UnifiedDataService {
       if (index != -1) {
         _workOrders[index] = updatedWorkOrder;
       }
-      print(
+      debugPrint(
         '▶️ UnifiedDataService: Resumed work order ${workOrder.ticketNumber} in Supabase',
       );
       
       return updatedWorkOrder;
     } catch (e) {
-      print('❌ UnifiedDataService: Error resuming work order: $e');
+      debugPrint('❌ UnifiedDataService: Error resuming work order: $e');
       rethrow;
     }
   }
@@ -1523,13 +1552,13 @@ class UnifiedDataService {
       if (index != -1) {
         _pmTasks[index] = updatedPMTask;
       }
-      print(
+      debugPrint(
         '⏸️ UnifiedDataService: Paused PM task ${pmTask.taskName} with reason: $reason in Supabase',
       );
 
       return updatedPMTask;
     } catch (e) {
-      print('❌ UnifiedDataService: Error pausing PM task: $e');
+      debugPrint('❌ UnifiedDataService: Error pausing PM task: $e');
       rethrow;
     }
   }
@@ -1557,13 +1586,13 @@ class UnifiedDataService {
       if (index != -1) {
         _pmTasks[index] = updatedPMTask;
       }
-      print(
+      debugPrint(
         '▶️ UnifiedDataService: Resumed PM task ${pmTask.taskName} in Supabase',
       );
 
       return updatedPMTask;
     } catch (e) {
-      print('❌ UnifiedDataService: Error resuming PM task: $e');
+      debugPrint('❌ UnifiedDataService: Error resuming PM task: $e');
       rethrow;
     }
   }
@@ -1577,9 +1606,9 @@ class UnifiedDataService {
     _isWorkflowsLoading = true;
     try {
       _workflows = await SupabaseDatabaseService.instance.getAllWorkflows();
-      print('📋 UnifiedDataService: Loaded ${_workflows.length} workflows from Supabase');
+      debugPrint('📋 UnifiedDataService: Loaded ${_workflows.length} workflows from Supabase');
     } catch (e) {
-      print('❌ UnifiedDataService: Error loading workflows: $e');
+      debugPrint('❌ UnifiedDataService: Error loading workflows: $e');
       _workflows = []; // Initialize empty list on error
     } finally {
       _isWorkflowsLoading = false;
@@ -1592,11 +1621,11 @@ class UnifiedDataService {
       // Create directly in Supabase
       final workflowId = await SupabaseDatabaseService.instance.createWorkflow(workflow);
       _workflows.add(workflow);
-      print('✅ UnifiedDataService: Created workflow ${workflow.title} in Supabase');
+      debugPrint('✅ UnifiedDataService: Created workflow ${workflow.title} in Supabase');
 
       return workflowId;
     } catch (e) {
-      print('❌ UnifiedDataService: Error creating workflow: $e');
+      debugPrint('❌ UnifiedDataService: Error creating workflow: $e');
       rethrow;
     }
   }
@@ -1611,9 +1640,9 @@ class UnifiedDataService {
       if (index != -1) {
         _workflows[index] = workflow;
       }
-      print('✅ UnifiedDataService: Updated workflow ${workflow.title} in Supabase');
+      debugPrint('✅ UnifiedDataService: Updated workflow ${workflow.title} in Supabase');
     } catch (e) {
-      print('❌ UnifiedDataService: Error updating workflow: $e');
+      debugPrint('❌ UnifiedDataService: Error updating workflow: $e');
       rethrow;
     }
   }
@@ -1624,9 +1653,9 @@ class UnifiedDataService {
       // Delete from Supabase
       await SupabaseDatabaseService.instance.deleteWorkflow(workflowId);
       _workflows.removeWhere((w) => w.id == workflowId);
-      print('✅ UnifiedDataService: Deleted workflow $workflowId from Supabase');
+      debugPrint('✅ UnifiedDataService: Deleted workflow $workflowId from Supabase');
     } catch (e) {
-      print('❌ UnifiedDataService: Error deleting workflow: $e');
+      debugPrint('❌ UnifiedDataService: Error deleting workflow: $e');
       rethrow;
     }
   }
@@ -1699,9 +1728,9 @@ class UnifiedDataService {
       );
 
       await updateWorkflow(updatedWorkflow);
-      print('✅ UnifiedDataService: Approved workflow ${workflow.title}');
+      debugPrint('✅ UnifiedDataService: Approved workflow ${workflow.title}');
     } catch (e) {
-      print('❌ UnifiedDataService: Error approving workflow: $e');
+      debugPrint('❌ UnifiedDataService: Error approving workflow: $e');
       rethrow;
     }
   }
@@ -1739,9 +1768,9 @@ class UnifiedDataService {
       );
 
       await updateWorkflow(updatedWorkflow);
-      print('✅ UnifiedDataService: Rejected workflow ${workflow.title}');
+      debugPrint('✅ UnifiedDataService: Rejected workflow ${workflow.title}');
     } catch (e) {
-      print('❌ UnifiedDataService: Error rejecting workflow: $e');
+      debugPrint('❌ UnifiedDataService: Error rejecting workflow: $e');
       rethrow;
     }
   }
@@ -1766,9 +1795,9 @@ class UnifiedDataService {
       );
 
       await updateWorkflow(updatedWorkflow);
-      print('✅ UnifiedDataService: Completed workflow ${workflow.title}');
+      debugPrint('✅ UnifiedDataService: Completed workflow ${workflow.title}');
     } catch (e) {
-      print('❌ UnifiedDataService: Error completing workflow: $e');
+      debugPrint('❌ UnifiedDataService: Error completing workflow: $e');
       rethrow;
     }
   }
@@ -1792,9 +1821,9 @@ class UnifiedDataService {
       );
 
       await updateWorkflow(updatedWorkflow);
-      print('✅ UnifiedDataService: Cancelled workflow ${workflow.title}');
+      debugPrint('✅ UnifiedDataService: Cancelled workflow ${workflow.title}');
     } catch (e) {
-      print('❌ UnifiedDataService: Error cancelling workflow: $e');
+      debugPrint('❌ UnifiedDataService: Error cancelling workflow: $e');
       rethrow;
     }
   }
@@ -1822,9 +1851,9 @@ class UnifiedDataService {
       );
 
       await updateWorkflow(updatedWorkflow);
-      print('✅ UnifiedDataService: Escalated workflow ${workflow.title}');
+      debugPrint('✅ UnifiedDataService: Escalated workflow ${workflow.title}');
     } catch (e) {
-      print('❌ UnifiedDataService: Error escalating workflow: $e');
+      debugPrint('❌ UnifiedDataService: Error escalating workflow: $e');
       rethrow;
     }
   }

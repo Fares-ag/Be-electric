@@ -1,2 +1,8 @@
 # Copy from defines.production.json.example — do not commit secrets
 defines.production.json
+
+# Database CLI credentials
+db.env
+
+# Database CLI dependencies (run npm install in scripts/db-cli)
+db-cli/node_modules/

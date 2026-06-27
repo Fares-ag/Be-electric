@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Release builds with OneSignal dart-defines.
+# Release builds with optional Supabase dart-defines.
 # Usage (from repo root):
-#   export ONE_SIGNAL_APP_ID=your-uuid
 #   ./scripts/build_production.sh requestor
-# Or create scripts/defines.production.json from defines.production.json.example
+# Optionally export SUPABASE_URL / SUPABASE_ANON_KEY, or create
+# scripts/defines.production.json from defines.production.json.example.
 
 set -euo pipefail
 
@@ -19,11 +19,6 @@ if [[ -f "$DEFINES_FILE" ]]; then
   echo "Using --dart-define-from-file: $DEFINES_FILE"
   define_args+=(--dart-define-from-file="$DEFINES_FILE")
 else
-  if [[ -z "${ONE_SIGNAL_APP_ID:-}" ]]; then
-    echo "ERROR: Set ONE_SIGNAL_APP_ID or create $DEFINES_FILE (see defines.production.json.example)" >&2
-    exit 1
-  fi
-  define_args+=(--dart-define="ONE_SIGNAL_APP_ID=$ONE_SIGNAL_APP_ID")
   [[ -n "${SUPABASE_URL:-}" ]] && define_args+=(--dart-define="SUPABASE_URL=$SUPABASE_URL")
   [[ -n "${SUPABASE_ANON_KEY:-}" ]] && define_args+=(--dart-define="SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY")
 fi
@@ -39,9 +34,13 @@ build_android() {
 
 build_ios() {
   local app_subdir="$1"
+  local export_opts=()
+  if [[ -f "$REPO_ROOT/apps/$app_subdir/ios/ExportOptions.plist" ]]; then
+    export_opts+=(--export-options-plist=ios/ExportOptions.plist)
+  fi
   (
     cd "$REPO_ROOT/apps/$app_subdir"
-    flutter build ipa --release "${define_args[@]}"
+    flutter build ipa --release "${define_args[@]}" "${export_opts[@]}"
   )
 }
 
