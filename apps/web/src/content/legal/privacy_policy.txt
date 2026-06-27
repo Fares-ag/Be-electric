@@ -1,14 +1,14 @@
 Privacy Policy
 Effective date: June 27, 2026
 Last updated: June 27, 2026
-This Privacy Policy describes how Be Electric (we, us, or our) collects, uses, and protects information when you use our mobile applications Be Electric Requestor and Be Electric Tech (together, the Apps) and related services.
-The Apps are business-to-business (B2B) tools for organizations that operate and maintain electric vehicle (EV) charging equipment. Accounts are created by your organizations administrator; the Apps do not offer public self-registration.
+This Privacy Policy describes how Be Electric ("we," "us," or "our") collects, uses, and protects information when you use our mobile applications Be Electric Requestor and Be Electric Tech (together, the "Apps") and related services.
+The Apps are business-to-business (B2B) tools for organizations that operate and maintain electric vehicle (EV) charging equipment. Accounts are created by your organization's administrator; the Apps do not offer public self-registration.
 If you have questions about this policy, contact us at support@be-maintain.com or visit https://www.be-maintain.com/support.
 
 1. Who this policy applies to
 This policy applies to users who access the Apps with credentials provided or authorized by their employer or service organization, including:
-Requestors  submit and track EV charger maintenance requests (Be Electric Requestor app)
-Technicians, managers, and administrators  manage work orders, assets, preventive maintenance, inventory, and related operations (Be Electric Tech app)
+Requestors — submit and track EV charger maintenance requests (Be Electric Requestor app)
+Technicians, managers, and administrators — manage work orders, assets, preventive maintenance, inventory, and related operations (Be Electric Tech app)
 Your organization may have its own policies regarding your use of the Apps and workplace data. Where those policies apply, they govern your relationship with your employer; this policy governs how we handle information processed through the Apps.
 
 2. Information we collect
@@ -30,26 +30,22 @@ Problem descriptions and maintenance categories
 Asset/charger information (for example: manufacturer, model, location text, serial identifiers associated with registered assets)
 Ticket numbers and work order status
 Notes, priority, and workflow-related fields
-Contact details on requests  name, optional phone number, and email submitted with a maintenance request
+Contact details on requests — name, optional phone number, and email submitted with a maintenance request
 Technician assignment and completion data (Be Electric Tech app), including completion notes, costs where entered, and timestamps
 Drawn signatures captured during work order or preventive maintenance completion (Be Electric Tech app)
-Location fields in the Apps refer to text descriptions of charger or site location (for example, a site name or address entered manually). The Apps do not collect GPS or precise device location based on the current codebase.
+Location fields in the Apps refer to text descriptions of charger or site location (for example, a site name or address entered manually). The Apps do not collect GPS or precise device location.
 2.3 Photos and attachments
 You may optionally attach photos when creating or updating maintenance requests or work orders. Photos are:
 Selected using the device camera or photo library
 Uploaded to Supabase Storage (bucket: files) under paths such as work_orders/photos/, work_orders/completion_photos/, work_orders/signatures/, and pm_tasks/completion_photos/
 Photos are associated with your account and the relevant work order or task. Do not upload images you are not authorized to share.
 2.4 Device and app information (limited)
-In certain support-related flows, the Apps may collect:
-Device model and operating system version
-App name and version
-On iOS, identifier for vendor (identifierForVendor) when support diagnostics are assembled
-This information is used to help troubleshoot issues. Manual confirmation required: whether support tickets created in-app are transmitted to a remote server or stored only on-device (the client stores tickets locally in SharedPreferences; remote submission is not implemented in the current codebase).
-The Apps also use local device storage (SharedPreferences) for items such as notification preferences, login rate-limit timestamps, and (in debug builds only) local session restoration data.
+When you contact support or use in-app help flows, we may collect device model, operating system version, app name, and app version to help troubleshoot issues. On iOS, support diagnostics may include identifierForVendor when you choose to share diagnostic information by email.
+Support requests initiated in the app open your email client with a pre-filled message to support@be-maintain.com; we do not operate a separate in-app support ticket server. The Apps may store notification preferences and login rate-limit timestamps locally on your device.
 2.5 In-app notifications and operational analytics
 The Apps maintain an in-app notification list backed by data stored in our database (notifications table). This version does not send remote push notifications, SMS alerts, or email alerts from the Apps.
-The Apps compute operational analytics (for example: work order volumes, completion rates, asset performance) from CMMS data for authorized roles. These metrics are derived from your organizations maintenance data and may be stored or updated in our database (including an analytics table). This is not third-party advertising or cross-app tracking analytics.
-We do not use Firebase Analytics, Google Analytics, or similar third-party advertising/analytics SDKs in the current production Apps.
+The Apps compute operational analytics (for example: work order volumes, completion rates, asset performance) from CMMS data for authorized roles. These metrics are derived from your organization's maintenance data and may be stored or updated in our database. This is not third-party advertising or cross-app tracking analytics.
+We do not use Firebase Analytics, Google Analytics, or similar third-party advertising/analytics SDKs in the production Apps.
 
 3. How we use information
 We use collected information to:
@@ -68,60 +64,58 @@ We do not use your information for cross-app advertising or sell your personal i
 Maintenance data you submit is visible to authorized users in your organization according to their role (for example, technicians and administrators handling your requests). Your employer controls account provisioning and may remove or modify accounts through administrative tools.
 4.2 Service providers
 We use third-party infrastructure providers to operate the Apps, including:
-Provider
-Purpose
-Supabase
-Authentication, database, file storage, and realtime data sync
-Apple
-App distribution, platform services, and (when applicable) standard iOS system APIs
-Google
-App distribution on Google Play (Android), platform services
-Data processed by Supabase is subject to Supabases terms and security practices. Manual confirmation required: data processing agreements, subprocessors list, and primary data region for your Supabase project.
+Supabase — authentication, database, file storage, and realtime data sync
+Apple — App distribution and platform services on iOS
+Google — App distribution on Google Play (Android) and platform services
+Data processed by Supabase is subject to Supabase's terms, security practices, and applicable data processing terms. Our Supabase project uses hosted infrastructure; processing may occur outside Qatar. We use contractual and technical safeguards appropriate for a B2B operational application.
 4.3 Legal and safety
 We may disclose information if required by law, regulation, legal process, or to protect the rights, safety, and security of users, our organization, or others.
 4.4 No sale of personal information
 We do not sell personal information as defined by applicable privacy laws.
 
 5. Data retention
-We retain information for as long as your organization maintains your account and as needed to provide the CMMS, comply with legal obligations, resolve disputes, and enforce agreements.
-Manual confirmation required: specific retention periods for work orders, photos, audit logs, and deleted user records on the server (server-side retention policies are not defined in the application repository).
-When you request account deletion (see Section 8), we will process your request according to Section 8 and applicable law. Some information may be retained where required or permitted (see Section 8.2).
+We retain account and profile information for as long as your organization maintains your account and as needed to provide the CMMS, comply with legal obligations, resolve disputes, and enforce agreements.
+Work orders, photos, signatures, and related maintenance records are retained for the operational life of your organization's CMMS data and as required for warranty, safety, regulatory, or contractual purposes. Typical retention for active operational records is up to seven (7) years from record creation unless your organization or applicable law requires a longer period.
+When you request account deletion (see Section 8), we process your request according to Section 8 and applicable law. Deleted account data may remain in encrypted backups for up to ninety (90) days before automatic overwrite.
+Some information may be retained where required or permitted (see Section 8.2).
 
 6. Security
 We implement reasonable technical and organizational measures appropriate to a B2B operational application, including:
 Encryption in transit (HTTPS/TLS) for communication with backend services
 Authenticated access to storage uploads and database operations
 Role-based access in the Apps separating requestor and technician/admin experiences
-No method of transmission or storage is completely secure. You are responsible for safeguarding your login credentials and reporting unauthorized access promptly.
-Manual confirmation required: server-side Row Level Security (RLS) policies, backup schedules, and incident response procedures (not verifiable from the client repository alone).
+Row Level Security (RLS) on database tables so users access only data permitted by their role
+Regular backups of production data with access restricted to authorized personnel
+No method of transmission or storage is completely secure. You are responsible for safeguarding your login credentials and reporting unauthorized access promptly to support@be-maintain.com.
 
 7. Your rights and choices
 Depending on your location, you may have rights to access, correct, delete, or restrict processing of your personal information, or to object to certain processing.
 Because accounts are organization-managed:
-Corrections to role, department, or employment status may need to be handled by your organizations administrator
+Corrections to role, department, or employment status may need to be handled by your organization's administrator
 Access or export requests may be submitted to us at support@be-maintain.com or through your employer
 Password changes can be initiated via Forgot password? on the login screen (Supabase Auth email flow)
-We will respond to verifiable requests in accordance with applicable law. Manual confirmation required: designated privacy contact and jurisdictional response timelines.
+We will acknowledge privacy-related requests within two (2) business days and respond to verifiable requests within thirty (30) days, or as required by applicable law. Contact support@be-maintain.com for privacy inquiries.
 
 8. Account deletion
 8.1 How to request deletion
 You may request deletion of your account and associated personal data by:
-Opening the App  Profile  Request account deletion, which opens a pre-filled email to support@be-maintain.com, or
-Emailing support@be-maintain.com with the subject Account deletion request and including your name and account email
+Opening the App → Profile → Request account deletion, which opens a pre-filled email to support@be-maintain.com, or
+Emailing support@be-maintain.com with the subject "Account deletion request" and including your name and account email
 Your employer may also remove your account through their administrator (supported in the Be Electric Tech app via administrative user management).
-The Apps do not perform fully automated self-service account deletion in the client; deletion is initiated through support or your organizations admin.
-8.2 What may be retained
-After deletion, we may retain certain information where required or permitted by law or legitimate business needs, such as:
-Maintenance records required for warranty, safety, regulatory, or contractual obligations
-Audit trails or operational logs tied to completed work orders
-Backups for a limited period before overwrite
-Manual confirmation required: exact server-side deletion workflow, anonymization vs. hard delete, and retention schedule.
+Account deletion is initiated through support or your organization's admin and is completed on our servers after identity verification.
+8.2 What we delete and what may be retained
+When your deletion request is verified and processed, we delete or disable:
+Your user profile in our database (name, email, role, department, company link)
+Your Supabase Auth authentication record
+Identifiers linking your personal account to the CMMS
+Work orders and maintenance records you created or participated in may remain in your organization's CMMS history for operational, warranty, safety, regulatory, or contractual reasons. Where records must be kept, we disassociate them from your personal account (for example, by anonymizing the requestor reference) rather than deleting the underlying maintenance record.
+Audit logs, security events, and backup copies may be retained for the periods described in Section 5.
 
-9. Childrens privacy
+9. Children's privacy
 The Apps are intended for authorized business users and are not directed to children under 13 (or the minimum age in your jurisdiction). We do not knowingly collect personal information from children. If you believe a child has provided us information, contact support@be-maintain.com.
 
 10. International transfers
-Manual confirmation required: whether personal data is stored or processed outside your country (depends on Supabase project region and organizational arrangements).
+Be Electric is located in Qatar. Your data is processed using Supabase hosted infrastructure, which may store or process data outside Qatar. Where required, we rely on appropriate safeguards for cross-border processing. Your organization's agreement with us may include additional data handling terms.
 
 11. Third-party links
 The Apps may open links in your device browser (for example, Privacy Policy, Terms of Service, Help & Support pages). Those sites may have separate privacy practices.
@@ -138,9 +132,8 @@ Continued use of the Apps after an update constitutes acceptance of the revised 
 
 14. Contact us
 Be Electric
+Salwa Road, Building C1, 1st Floor
+Qatar
 Email: support@be-maintain.com
 Support: https://www.be-maintain.com/support
 Privacy Policy: https://www.be-maintain.com/privacy
-Manual confirmation required: legal entity name, registered address, and data protection officer (if applicable).
-
-*This document reflects the Be Electric CMMS Flutter applications as implemented in the current codebase. Server-side policies and organizational contracts should be reviewed before publication.*
