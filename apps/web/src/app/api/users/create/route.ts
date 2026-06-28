@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { requireAdmin } from '@/lib/api/require-admin';
 
 /**
  * Creates a user in Supabase Auth AND in public.users so they appear in the app
@@ -8,32 +9,8 @@ import { NextResponse } from 'next/server';
  * Uses the service role key (server-only) for user creation.
  */
 export async function POST(request: Request) {
-  // 1. Verify caller is authenticated and is admin/manager
-  const authHeader = request.headers.get('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-  const token = authHeader.slice(7);
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !anonKey) {
-    return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 });
-  }
-  const supabaseAuth = createClient(url, anonKey, {
-    global: { headers: { Authorization: `Bearer ${token}` } },
-  });
-  const { data: { user }, error: userError } = await supabaseAuth.auth.getUser();
-  if (userError || !user?.email) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: adminData } = await (supabaseAuth as any).rpc('get_admin_by_email', {
-    p_email: user.email,
-  });
-  const adminRow = (adminData as { is_admin?: boolean; is_manager?: boolean }[] | null)?.[0];
-  if (!adminRow?.is_admin && !adminRow?.is_manager) {
-    return NextResponse.json({ error: 'Forbidden: admin or manager role required' }, { status: 403 });
-  }
+  const auth = await requireAdmin(request);
+  if (!auth.ok) return auth.response;
 
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!serviceRoleKey) {
@@ -94,7 +71,6 @@ export async function POST(request: Request) {
 
   const id = authUser.user.id;
 
-  // Ensure public.users has the full profile (trigger may have inserted; upsert to set role, company, department)
   const { error: profileError } = await supabase.from('users').upsert(
     {
       id,
@@ -132,5 +108,5 @@ function generateTempPassword(length = 14): string {
   for (let i = 0; i < length; i++) {
     s += chars[Math.floor(Math.random() * chars.length)];
   }
-  return s + '!1'; // ensure at least one special and one number for typical password rules
+  return s + '!1';
 }

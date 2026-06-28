@@ -40,6 +40,29 @@ export async function uploadRequestPhotos(
   return urls;
 }
 
+export async function uploadPmOccurrenceCompletionPhoto(
+  file: File,
+  occurrenceId: string
+): Promise<string> {
+  if (file.size > MAX_SIZE_MB * 1024 * 1024) {
+    throw new Error(`Image must be under ${MAX_SIZE_MB}MB`);
+  }
+  if (!ALLOWED_TYPES.includes(file.type)) {
+    throw new Error('Only JPEG, PNG, and WebP images are allowed');
+  }
+  const ext = file.name.split('.').pop() || 'jpg';
+  const path = `pm-occurrences/${occurrenceId}/completion/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+
+  const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
+    cacheControl: '3600',
+    upsert: false,
+  });
+  if (error) throw error;
+
+  const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
+  return data.publicUrl;
+}
+
 export async function uploadPmTaskCompletionPhoto(file: File, taskId: string): Promise<string> {
   if (file.size > MAX_SIZE_MB * 1024 * 1024) {
     throw new Error(`Image must be under ${MAX_SIZE_MB}MB`);

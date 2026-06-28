@@ -57,6 +57,14 @@
   .table-modern tbody tr:last-child td {
     @apply border-b-0;
   }
+
+  /* Scrollable table region with sticky header for long lists */
+  .table-scroll {
+    @apply max-h-[min(70vh,720px)] overflow-auto;
+  }
+  .table-scroll .table-modern thead th {
+    @apply sticky top-0 z-10 bg-[rgb(var(--muted))]/95 backdrop-blur-sm;
+  }
 }
 
 @layer utilities {

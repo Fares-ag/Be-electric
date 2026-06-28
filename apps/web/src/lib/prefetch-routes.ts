@@ -1,5 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { USERS_LIST_QUERY_KEY, fetchUsersList, fetchUsersMapEntries } from '@/lib/queries/users';
 
 /**
  * Prefetch React Query data for a route when the user hovers a nav link.
@@ -27,17 +28,8 @@ export async function prefetchRoute(
             staleTime: 60 * 1000,
           }),
           queryClient.prefetchQuery({
-            queryKey: ['users-list'],
-            queryFn: async () => {
-              const { data, error } = await (supabase as any).rpc('get_users_list');
-              if (error) throw error;
-              return ((data ?? []) as Record<string, unknown>[]).map((u) => ({
-                id: String(u.id),
-                name: String(u.name ?? ''),
-                role: u.role ? String(u.role) : undefined,
-                email: u.email ? String(u.email) : undefined,
-              }));
-            },
+            queryKey: USERS_LIST_QUERY_KEY,
+            queryFn: fetchUsersMapEntries,
             staleTime: 60 * 1000,
           }),
         ]);
@@ -53,6 +45,17 @@ export async function prefetchRoute(
               .order('name');
             return (data ?? []) as unknown[];
           },
+          staleTime: 60 * 1000,
+        });
+        break;
+      }
+      case '/pm-schedules': {
+        const { fetchPmSchedulesList, PM_SCHEDULES_LIST_QUERY_KEY } = await import(
+          '@/lib/queries/pm-schedules'
+        );
+        await queryClient.prefetchQuery({
+          queryKey: PM_SCHEDULES_LIST_QUERY_KEY,
+          queryFn: fetchPmSchedulesList,
           staleTime: 60 * 1000,
         });
         break;
@@ -84,12 +87,8 @@ export async function prefetchRoute(
       }
       case '/users': {
         await queryClient.prefetchQuery({
-          queryKey: ['users'],
-          queryFn: async () => {
-            const { data, error } = await (supabase as any).rpc('get_users_list');
-            if (error) throw error;
-            return (data ?? []) as unknown[];
-          },
+          queryKey: USERS_LIST_QUERY_KEY,
+          queryFn: fetchUsersList,
           staleTime: 60 * 1000,
         });
         break;
@@ -172,6 +171,23 @@ export async function prefetchRoute(
           queryFn: async () => {
             const { data } = await supabase.from('parts_requests').select('*');
             return (data ?? []) as unknown[];
+          },
+          staleTime: 60 * 1000,
+        });
+        break;
+      }
+      case '/support-requests': {
+        await queryClient.prefetchQuery({
+          queryKey: ['support-requests'],
+          queryFn: async () => {
+            const { data, error } = await supabase
+              .from('support_requests')
+              .select(
+                'id, ticketNumber, type, status, subject, requesterId, requesterName, requesterEmail, companyId, submittedAt, updatedAt, company:companies(name)'
+              )
+              .order('submittedAt', { ascending: false });
+            if (error) throw error;
+            return data ?? [];
           },
           staleTime: 60 * 1000,
         });

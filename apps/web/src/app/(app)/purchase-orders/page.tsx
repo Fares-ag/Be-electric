@@ -7,27 +7,30 @@ import { SearchFilterBar } from '@/components/SearchFilterBar';
 import { usePagination } from '@/hooks/usePagination';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
-import { Card } from '@/components/ui/Card';
+import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { StatusBadge } from '@/components/ui/Badge';
+import { DataTableShell, PageHeader } from '@/components/ui/PageStates';
 
 export default function PurchaseOrdersPage() {
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const [modalOpen, setModalOpen] = useState(false);
+  const [viewPo, setViewPo] = useState<Record<string, unknown> | null>(null);
   const [orderNumber, setOrderNumber] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
 
-  const { data: pos, isLoading } = useQuery({
+  const { data: pos, isLoading, error: queryError, refetch } = useQuery({
     queryKey: ['purchase-orders'],
     staleTime: 60 * 1000,
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error: err } = await supabase
         .from('purchase_orders')
         .select('*')
         .order('createdAt', { ascending: false });
+      if (err) throw err;
       return data ?? [];
     },
   });
@@ -49,7 +52,7 @@ export default function PurchaseOrdersPage() {
       setModalOpen(false);
       setOrderNumber('');
     },
-    onError: (err: Error) => setError(err.message),
+    onError: (err: Error) => setFormError(err.message),
   });
 
   const [search, setSearch] = useState('');
@@ -71,63 +74,103 @@ export default function PurchaseOrdersPage() {
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
+    if (submitting) return;
+    setFormError(null);
     setSubmitting(true);
     createMutation.mutate(orderNumber, { onSettled: () => setSubmitting(false) });
   };
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">Purchase Orders</h1>
-        <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
-          <SearchFilterBar
-            search={search}
-            onSearchChange={setSearch}
-            placeholder="Search PO #, status..."
-            className="sm:min-w-[220px]"
-          />
-          <Button onClick={() => { setModalOpen(true); setError(null); setOrderNumber(''); }} className="shrink-0">Create PO</Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Purchase Orders"
+        actions={
+          <>
+            <SearchFilterBar
+              search={search}
+              onSearchChange={setSearch}
+              placeholder="Search PO #, status..."
+              className="sm:min-w-[220px]"
+            />
+            <Button
+              onClick={() => {
+                setModalOpen(true);
+                setFormError(null);
+                setOrderNumber('');
+              }}
+              className="shrink-0"
+            >
+              Create PO
+            </Button>
+          </>
+        }
+      />
       <Card>
-        {isLoading ? (
-          <p className="text-[#757575]">Loading...</p>
-        ) : !pos?.length ? (
-          <p className="text-[#757575]">No purchase orders yet.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="table-modern">
-              <thead>
-                <tr className="border-b border-[#E0E0E0]">
-                  <th className="text-left py-3 px-4 font-semibold">PO #</th>
-                  <th className="text-left py-3 px-4 font-semibold">Status</th>
-                  <th className="text-left py-3 px-4 font-semibold">Date</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedItems.map((po: Record<string, unknown>) => (
-                  <tr key={po.id as string} className="border-b border-[#E0E0E0]">
-                    <td className="py-3 px-4 font-medium">{String(po.orderNumber ?? po.poNumber ?? po.id)}</td>
-                    <td className="py-3 px-4">
-                      <StatusBadge status={po.status != null ? String(po.status) : undefined} />
-                    </td>
-                    <td className="py-3 px-4">
-                      {po.createdAt
-                        ? new Date(po.createdAt as string).toLocaleDateString()
-                        : '-'}
-                    </td>
-                    <td className="py-3 px-4">
-                      <Button variant="outline">View</Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {!isLoading && totalItems > 0 && (
+        <CardContent className="p-0">
+          <DataTableShell
+            isLoading={isLoading}
+            error={queryError}
+            isEmpty={!isLoading && !queryError && (pos?.length ?? 0) === 0}
+            emptyTitle="No purchase orders yet"
+            emptyDescription="Create a purchase order to track parts and supplies procurement."
+            emptyAction={
+              <Button
+                type="button"
+                onClick={() => {
+                  setModalOpen(true);
+                  setFormError(null);
+                  setOrderNumber('');
+                }}
+              >
+                Create PO
+              </Button>
+            }
+            onRetry={() => refetch()}
+          >
+            {filtered.length === 0 && (pos?.length ?? 0) > 0 ? (
+              <div className="px-6 py-12 text-center">
+                <p className="font-medium text-foreground">No matching purchase orders</p>
+                <p className="mt-1 text-sm text-muted-foreground">Try a different search term.</p>
+              </div>
+            ) : (
+              <div className="table-scroll overflow-x-auto">
+                <table className="table-modern">
+                  <thead>
+                    <tr>
+                      <th>PO #</th>
+                      <th>Status</th>
+                      <th>Date</th>
+                      <th className="w-24" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedItems.map((po: Record<string, unknown>) => (
+                      <tr key={po.id as string}>
+                        <td className="font-medium">
+                          {String(po.orderNumber ?? po.poNumber ?? po.id)}
+                        </td>
+                        <td>
+                          <StatusBadge status={po.status != null ? String(po.status) : undefined} />
+                        </td>
+                        <td>
+                          {po.createdAt
+                            ? new Date(po.createdAt as string).toLocaleDateString()
+                            : '—'}
+                        </td>
+                        <td>
+                          <Button variant="outline" size="sm" onClick={() => setViewPo(po)}>
+                            View
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </DataTableShell>
+        </CardContent>
+        {!isLoading && !queryError && totalItems > 0 && filtered.length > 0 && (
           <Pagination
             page={page}
             pageSize={pageSize}
@@ -140,12 +183,12 @@ export default function PurchaseOrdersPage() {
 
       <Modal
         open={modalOpen}
-        onClose={() => { setModalOpen(false); setError(null); }}
+        onClose={() => { setModalOpen(false); setFormError(null); }}
         title="Create Purchase Order"
       >
         <form onSubmit={handleCreate} className="space-y-4">
-          {error && (
-            <p className="text-sm text-destructive bg-destructive/10 p-2 rounded">{error}</p>
+          {formError && (
+            <p className="text-sm text-destructive bg-destructive/10 p-2 rounded">{formError}</p>
           )}
           <div>
             <label className="block text-sm font-medium text-foreground mb-1">PO / Order number (optional)</label>
@@ -166,6 +209,42 @@ export default function PurchaseOrdersPage() {
             </Button>
           </ModalActions>
         </form>
+      </Modal>
+
+      <Modal
+        open={!!viewPo}
+        onClose={() => setViewPo(null)}
+        title={viewPo ? `PO ${String(viewPo.orderNumber ?? viewPo.poNumber ?? viewPo.id)}` : 'Purchase order'}
+      >
+        {viewPo && (
+          <dl className="space-y-3 text-sm">
+            <div>
+              <dt className="text-muted-foreground">Status</dt>
+              <dd className="mt-0.5 font-medium capitalize">{String(viewPo.status ?? '—')}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Created</dt>
+              <dd className="mt-0.5 font-medium">
+                {viewPo.createdAt
+                  ? new Date(viewPo.createdAt as string).toLocaleString()
+                  : '—'}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Ordered items</dt>
+              <dd className="mt-0.5 font-medium">
+                {Array.isArray(viewPo.orderedItems) && viewPo.orderedItems.length > 0
+                  ? `${viewPo.orderedItems.length} line item(s)`
+                  : 'No items yet'}
+              </dd>
+            </div>
+          </dl>
+        )}
+        <ModalActions>
+          <Button type="button" variant="outline" onClick={() => setViewPo(null)}>
+            Close
+          </Button>
+        </ModalActions>
       </Modal>
     </div>
   );

@@ -10,6 +10,7 @@ import { usePagination } from '@/hooks/usePagination';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Modal, ModalActions } from '@/components/ui/Modal';
+import { DataTableShell, PageHeader } from '@/components/ui/PageStates';
 
 type Company = {
   id: string;
@@ -32,16 +33,14 @@ export default function CompaniesPage() {
   const [editing, setEditing] = useState<Company | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
 
-  const { data: companies, isLoading } = useQuery({
+  const { data: companies, isLoading, error: queryError, refetch } = useQuery({
     queryKey: ['companies'],
     staleTime: 60 * 1000,
     queryFn: async () => {
-      const { data } = await supabase
-        .from('companies')
-        .select('*')
-        .order('name');
+      const { data, error: err } = await supabase.from('companies').select('*').order('name');
+      if (err) throw err;
       return (data ?? []) as Company[];
     },
   });
@@ -98,7 +97,7 @@ export default function CompaniesPage() {
       setForm(emptyForm);
       setEditing(null);
     },
-    onError: (err: Error) => setError(err.message),
+    onError: (err: Error) => setFormError(err.message),
   });
 
   const updateMutation = useMutation({
@@ -121,7 +120,7 @@ export default function CompaniesPage() {
       setForm(emptyForm);
       setEditing(null);
     },
-    onError: (err: Error) => setError(err.message),
+    onError: (err: Error) => setFormError(err.message),
   });
 
   const deleteMutation = useMutation({
@@ -130,13 +129,13 @@ export default function CompaniesPage() {
       if (e) throw e;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['companies'] }),
-    onError: (err: Error) => setError(err.message),
+    onError: (err: Error) => setFormError(err.message),
   });
 
   const openAdd = () => {
     setEditing(null);
     setForm(emptyForm);
-    setError(null);
+    setFormError(null);
     setModalOpen(true);
   };
 
@@ -148,13 +147,14 @@ export default function CompaniesPage() {
       contactPhone: c.contactPhone ?? '',
       address: c.address ?? '',
     });
-    setError(null);
+    setFormError(null);
     setModalOpen(true);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
+    if (submitting) return;
+    setFormError(null);
     setSubmitting(true);
     if (editing) {
       updateMutation.mutate(
@@ -174,71 +174,97 @@ export default function CompaniesPage() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">Companies</h1>
-        <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
-          <SearchFilterBar
-            search={search}
-            onSearchChange={setSearch}
-            placeholder="Search name, email, phone, address..."
-            className="sm:min-w-[220px]"
-          />
-          <Button onClick={openAdd} className="shrink-0">Add Company</Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Companies"
+        actions={
+          <>
+            <SearchFilterBar
+              search={search}
+              onSearchChange={setSearch}
+              placeholder="Search name, email, phone, address..."
+              className="sm:min-w-[220px]"
+            />
+            <Button onClick={openAdd} className="shrink-0">
+              Add Company
+            </Button>
+          </>
+        }
+      />
       <Card>
-        {isLoading ? (
-          <p className="text-[#757575]">Loading...</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="table-modern">
-              <thead>
-                <tr className="border-b border-[#E0E0E0]">
-                  <th className="text-left py-3 px-4 font-semibold">Name</th>
-                  <th className="text-left py-3 px-4 font-semibold">Chargers</th>
-                  <th className="text-left py-3 px-4 font-semibold">Email</th>
-                  <th className="text-left py-3 px-4 font-semibold">Phone</th>
-                  <th className="text-left py-3 px-4 font-semibold">Address</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedItems.map((c) => {
-                  const chargerCount = chargerCountByCompany?.[c.id] ?? 0;
-                  return (
-                  <tr key={c.id} className="border-b border-[#E0E0E0]">
-                    <td className="py-3 px-4 font-medium">{c.name}</td>
-                    <td className="py-3 px-4">
-                      <Link
-                        href={chargerCount > 0 ? `/assets?companyId=${c.id}` : '/assets'}
-                        className="text-primary hover:underline font-medium"
-                      >
-                        {chargerCount}
-                      </Link>
-                    </td>
-                    <td className="py-3 px-4">{c.contactEmail ?? '-'}</td>
-                    <td className="py-3 px-4">{c.contactPhone ?? '-'}</td>
-                    <td className="py-3 px-4 max-w-[200px] truncate">{c.address ?? '-'}</td>
-                    <td className="py-3 px-4 flex gap-2">
-                      <Button variant="outline" size="sm" onClick={() => openEdit(c)}>
-                        Edit
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => handleDelete(c)}
-                        disabled={deleteMutation.isPending}
-                      >
-                        Delete
-                      </Button>
-                    </td>
-                  </tr>
-                );})}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {!isLoading && totalItems > 0 && (
+        <CardContent className="p-0">
+          <DataTableShell
+            isLoading={isLoading}
+            error={queryError}
+            isEmpty={!isLoading && !queryError && (companies?.length ?? 0) === 0}
+            emptyTitle="No companies yet"
+            emptyDescription="Add your first company to associate chargers and work orders."
+            emptyAction={
+              <Button type="button" onClick={openAdd}>
+                Add Company
+              </Button>
+            }
+            onRetry={() => refetch()}
+          >
+            {filtered.length === 0 && (companies?.length ?? 0) > 0 ? (
+              <div className="px-6 py-12 text-center">
+                <p className="font-medium text-foreground">No matching companies</p>
+                <p className="mt-1 text-sm text-muted-foreground">Try a different search term.</p>
+              </div>
+            ) : (
+              <div className="table-scroll overflow-x-auto">
+                <table className="table-modern">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Chargers</th>
+                      <th>Email</th>
+                      <th>Phone</th>
+                      <th>Address</th>
+                      <th className="w-40" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedItems.map((c) => {
+                      const chargerCount = chargerCountByCompany?.[c.id] ?? 0;
+                      return (
+                        <tr key={c.id}>
+                          <td className="font-medium">{c.name}</td>
+                          <td>
+                            <Link
+                              href={chargerCount > 0 ? `/assets?companyId=${c.id}` : '/assets'}
+                              className="font-medium text-primary hover:underline"
+                            >
+                              {chargerCount}
+                            </Link>
+                          </td>
+                          <td>{c.contactEmail ?? '—'}</td>
+                          <td>{c.contactPhone ?? '—'}</td>
+                          <td className="max-w-[200px] truncate">{c.address ?? '—'}</td>
+                          <td>
+                            <div className="flex gap-2">
+                              <Button variant="outline" size="sm" onClick={() => openEdit(c)}>
+                                Edit
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => handleDelete(c)}
+                                disabled={deleteMutation.isPending}
+                              >
+                                Delete
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </DataTableShell>
+        </CardContent>
+        {!isLoading && !queryError && totalItems > 0 && filtered.length > 0 && (
           <Pagination
             page={page}
             pageSize={pageSize}
@@ -251,12 +277,12 @@ export default function CompaniesPage() {
 
       <Modal
         open={modalOpen}
-        onClose={() => { setModalOpen(false); setError(null); }}
+        onClose={() => { setModalOpen(false); setFormError(null); }}
         title={editing ? 'Edit Company' : 'Add Company'}
       >
         <form onSubmit={handleSubmit} className="space-y-4">
-          {error && (
-            <p className="text-sm text-destructive bg-destructive/10 p-2 rounded">{error}</p>
+          {formError && (
+            <p className="text-sm text-destructive bg-destructive/10 p-2 rounded">{formError}</p>
           )}
           <div>
             <label className="block text-sm font-medium text-foreground mb-1">Name *</label>

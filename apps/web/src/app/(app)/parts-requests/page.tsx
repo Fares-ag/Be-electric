@@ -12,6 +12,7 @@ import { useUsersMap } from '@/hooks/useUsersMap';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { StatusBadge } from '@/components/ui/Badge';
+import { DataTableShell, PageHeader } from '@/components/ui/PageStates';
 
 type PartsRequestRow = {
   id: string;
@@ -48,16 +49,17 @@ export default function PartsRequestsPage() {
 
   const { usersMap } = useUsersMap();
 
-  const { data: requests, isLoading } = useQuery({
+  const { data: requests, isLoading, error: queryError, refetch } = useQuery({
     queryKey: ['parts-requests'],
     staleTime: 60 * 1000,
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error: err } = await supabase
         .from('parts_requests')
         .select(
           'id, status, requestedBy, requestedAt, requestedParts, workOrderId, workOrder:work_orders(ticketNumber)'
         )
         .order('requestedAt', { ascending: false });
+      if (err) throw err;
       return (data ?? []) as PartsRequestRow[];
     },
   });
@@ -138,94 +140,115 @@ export default function PartsRequestsPage() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">Parts Requests</h1>
-        <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
-          <SearchFilterBar
-            search={search}
-            onSearchChange={setSearch}
-            placeholder="Search WO, requester, status..."
-            className="sm:min-w-[220px]"
-          />
-          {pending.length > 0 && (
-            <span className="text-sm text-primary font-medium">
-              {pending.length} pending
-            </span>
-          )}
-        </div>
-      </div>
+      <PageHeader
+        title="Parts Requests"
+        actions={
+          <>
+            <SearchFilterBar
+              search={search}
+              onSearchChange={setSearch}
+              placeholder="Search WO, requester, status..."
+              className="sm:min-w-[220px]"
+            />
+            {pending.length > 0 && (
+              <span className="text-sm font-medium text-primary">{pending.length} pending</span>
+            )}
+          </>
+        }
+      />
       <Card>
-        {isLoading ? (
-          <p className="text-[#757575]">Loading...</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="table-modern">
-              <thead>
-                <tr className="border-b border-[#E0E0E0]">
-                  <th className="text-left py-3 px-4 font-semibold">WO</th>
-                  <th className="text-left py-3 px-4 font-semibold">Requested by</th>
-                  <th className="text-left py-3 px-4 font-semibold">Parts</th>
-                  <th className="text-left py-3 px-4 font-semibold">Requested</th>
-                  <th className="text-left py-3 px-4 font-semibold">Status</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedItems.map((r) => {
-                  const parts = r.requestedParts as Array<{ name?: string; quantity?: number; unit?: string }> | undefined;
-                  const partsSummary = Array.isArray(parts)
-                    ? parts.map((p) => `${p.name ?? '?'} (×${p.quantity ?? 0})`).join(', ') || '-'
-                    : typeof parts === 'object' && parts !== null
-                      ? JSON.stringify(parts)
-                      : '-';
-                  return (
-                    <tr key={r.id} className="border-b border-[#E0E0E0]">
-                      <td className="py-3 px-4">
-                        {r.workOrderId ? (
-                          <Link href={`/work-orders/${r.workOrderId}`} className="text-primary hover:underline">
-                            {r.workOrder?.ticketNumber ?? r.workOrderId.slice(0, 8)}
-                          </Link>
-                        ) : (
-                          r.workOrder?.ticketNumber ?? '-'
-                        )}
-                      </td>
-                      <td className="py-3 px-4">{usersMap.get(r.requestedBy)?.name ?? '-'}</td>
-                      <td className="py-3 px-4 max-w-[200px] truncate" title={partsSummary}>
-                        {partsSummary}
-                      </td>
-                      <td className="py-3 px-4 text-muted-foreground text-sm">
-                        {r.requestedAt ? new Date(r.requestedAt).toLocaleDateString() : '-'}
-                      </td>
-                      <td className="py-3 px-4">
-                        <StatusBadge status={r.status} />
-                      </td>
-                      <td className="py-3 px-4">
-                        {r.status === 'pending' && (
-                          <div className="flex gap-2">
-                            <Button
-                              onClick={() => handleApprove(r)}
-                              disabled={approveMutation.isPending || rejectMutation.isPending}
-                            >
-                              Approve
-                            </Button>
-                            <Button
-                              variant="destructive"
-                              onClick={() => handleReject(r)}
-                              disabled={approveMutation.isPending || rejectMutation.isPending}
-                            >
-                              Reject
-                            </Button>
-                          </div>
-                        )}
-                      </td>
+        <CardContent className="p-0">
+          <DataTableShell
+            isLoading={isLoading}
+            error={queryError}
+            isEmpty={!isLoading && !queryError && (requests?.length ?? 0) === 0}
+            emptyTitle="No parts requests yet"
+            emptyDescription="Technicians submit parts requests from the mobile app when work orders need supplies."
+            onRetry={() => refetch()}
+          >
+            {filtered.length === 0 && (requests?.length ?? 0) > 0 ? (
+              <div className="px-6 py-12 text-center">
+                <p className="font-medium text-foreground">No matching requests</p>
+                <p className="mt-1 text-sm text-muted-foreground">Try a different search term.</p>
+              </div>
+            ) : (
+              <div className="table-scroll overflow-x-auto">
+                <table className="table-modern">
+                  <thead>
+                    <tr>
+                      <th>WO</th>
+                      <th>Requested by</th>
+                      <th>Parts</th>
+                      <th>Requested</th>
+                      <th>Status</th>
+                      <th className="w-48" />
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {!isLoading && totalItems > 0 && (
+                  </thead>
+                  <tbody>
+                    {paginatedItems.map((r) => {
+                      const parts = r.requestedParts as
+                        | Array<{ name?: string; quantity?: number; unit?: string }>
+                        | undefined;
+                      const partsSummary = Array.isArray(parts)
+                        ? parts.map((p) => `${p.name ?? '?'} (×${p.quantity ?? 0})`).join(', ') || '—'
+                        : typeof parts === 'object' && parts !== null
+                          ? JSON.stringify(parts)
+                          : '—';
+                      return (
+                        <tr key={r.id}>
+                          <td>
+                            {r.workOrderId ? (
+                              <Link
+                                href={`/work-orders/${r.workOrderId}`}
+                                className="text-primary hover:underline"
+                              >
+                                {r.workOrder?.ticketNumber ?? r.workOrderId.slice(0, 8)}
+                              </Link>
+                            ) : (
+                              r.workOrder?.ticketNumber ?? '—'
+                            )}
+                          </td>
+                          <td>{usersMap.get(r.requestedBy)?.name ?? '—'}</td>
+                          <td className="max-w-[200px] truncate" title={partsSummary}>
+                            {partsSummary}
+                          </td>
+                          <td className="text-sm text-muted-foreground">
+                            {r.requestedAt ? new Date(r.requestedAt).toLocaleDateString() : '—'}
+                          </td>
+                          <td>
+                            <StatusBadge status={r.status} />
+                          </td>
+                          <td>
+                            {r.status === 'pending' && (
+                              <div className="flex gap-2">
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleApprove(r)}
+                                  disabled={approveMutation.isPending || rejectMutation.isPending}
+                                >
+                                  Approve
+                                </Button>
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  onClick={() => handleReject(r)}
+                                  disabled={approveMutation.isPending || rejectMutation.isPending}
+                                >
+                                  Reject
+                                </Button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </DataTableShell>
+        </CardContent>
+        {!isLoading && !queryError && totalItems > 0 && filtered.length > 0 && (
           <Pagination
             page={page}
             pageSize={pageSize}

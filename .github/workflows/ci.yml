@@ -24,5 +24,22 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Unit tests
+        run: npm run test
+
       - name: Build
         run: npm run build
+
+      - name: Install Playwright browsers
+        working-directory: apps/web
+        run: npx playwright install --with-deps chromium
+
+      - name: E2E smoke tests
+        working-directory: apps/web
+        run: npm run e2e
+        env:
+          CI: true
+          E2E_ADMIN_EMAIL: ${{ secrets.E2E_ADMIN_EMAIL }}
+          E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
+          E2E_REQUESTOR_EMAIL: ${{ secrets.E2E_REQUESTOR_EMAIL }}
+          E2E_REQUESTOR_PASSWORD: ${{ secrets.E2E_REQUESTOR_PASSWORD }}

@@ -27,6 +27,10 @@ export const STATUS_VARIANT: Record<string, string> = {
   active: 'active',
   inactive: 'inactive',
   maintenance: 'maintenance',
+  // Support inbox
+  in_progress: 'inProgress',
+  waiting_on_customer: 'pending',
+  resolved: 'completed',
 };
 
 export type StatusBadgeVariant = keyof typeof STATUS_VARIANT | 'default';

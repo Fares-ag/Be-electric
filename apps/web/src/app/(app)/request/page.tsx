@@ -9,6 +9,7 @@ import { uploadRequestPhotos } from '@/lib/storage';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { PhotoUploader } from '@/components/PhotoUploader';
+import { PageHeader } from '@/components/ui/PageStates';
 import { cn } from '@/lib/utils';
 
 const priorities = ['low', 'medium', 'high', 'urgent', 'critical'] as const;
@@ -53,6 +54,7 @@ export default function RequestMaintenancePage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (submitting) return;
     setError('');
     if (!description.trim()) {
       setError('Problem description is required');
@@ -91,14 +93,20 @@ export default function RequestMaintenancePage() {
         return;
       }
 
-      if (wo?.id) {
+      if (photos.length > 0 && wo?.id) {
         try {
           const urls = await uploadRequestPhotos(photos, wo.id);
-          const photoPath = urls.length === 1 ? urls[0] : JSON.stringify(urls);
-          await supabase
-            .from('work_orders')
-            .update({ photoPath })
-            .eq('id', wo.id);
+          if (urls.length > 0) {
+            const photoPath = urls.length === 1 ? urls[0] : JSON.stringify(urls);
+            const { error: photoUpdateErr } = await supabase
+              .from('work_orders')
+              .update({ photoPath })
+              .eq('id', wo.id);
+            if (photoUpdateErr) {
+              setError(`Work order created but failed to save photo: ${photoUpdateErr.message}`);
+              return;
+            }
+          }
         } catch (uploadErr) {
           setError(
             uploadErr instanceof Error
@@ -116,9 +124,10 @@ export default function RequestMaintenancePage() {
 
   return (
     <div className="space-y-6 sm:space-y-8">
-      <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">
-        Request Maintenance
-      </h1>
+      <PageHeader
+        title="Request Maintenance"
+        description="Describe the issue and attach photos so technicians can respond quickly."
+      />
       <Card>
         <CardContent className="pt-6 px-4 sm:px-6 pb-6">
           <form onSubmit={handleSubmit} className="space-y-6 max-w-xl">
@@ -209,9 +218,17 @@ export default function RequestMaintenancePage() {
                 className={cn(inputClass, 'min-h-[80px] py-3')}
               />
             </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button type="submit" disabled={submitting || photos.length < MIN_PHOTOS} className="min-h-[48px] w-full sm:w-auto touch-manipulation">
-              {submitting ? 'Submitting...' : 'Submit Request'}
+            {error && (
+              <p className="text-sm text-destructive" role="alert">
+                {error}
+              </p>
+            )}
+            <Button
+              type="submit"
+              disabled={submitting || photos.length < MIN_PHOTOS}
+              className="min-h-[48px] w-full touch-manipulation sm:w-auto"
+            >
+              {submitting ? 'Submitting…' : 'Submit Request'}
             </Button>
           </form>
         </CardContent>

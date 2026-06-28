@@ -48,7 +48,33 @@ This document is the **single source of truth** for how the React admin app and 
 
 ---
 
-## Keeping the two Cursor projects in sync
+## Preventive maintenance (Option A — schedules + occurrences)
+
+New PM work uses **`pm_schedules`** (template) and **`pm_task_occurrences`** (one row per charger × due date). Legacy **`pm_tasks`** remains for existing mobile data until Flutter migrates.
+
+### Tables
+
+| Table | Purpose |
+|-------|---------|
+| `pm_schedules` | Admin-created template: task name, frequency, schedule window, company, assigned technicians |
+| `pm_task_occurrences` | Materialized due dates per asset; technicians complete these individually |
+| `pm_tasks` | **Legacy** — do not create new rows from admin; Flutter may still read until migrated |
+
+### Flutter technician app — migration checklist
+
+1. **Query `pm_task_occurrences`** instead of `pm_tasks` for assigned work lists.
+2. **Filter**: `auth.uid()::text = ANY("assignedTechnicianIds")` (RLS enforces this).
+3. **Complete** an occurrence: `UPDATE` status to `completed`, set `completedAt`, optional `completionPhotoPath`.
+4. **Overdue**: derive client-side — `status = 'pending'` and `dueDate < today` → show as overdue (stored status stays `pending` in v1).
+5. **Read schedule context**: join `pm_schedules` on `scheduleId` for task name, description, frequency.
+6. RPC **`create_pm_schedule_with_occurrences`** is admin-only (web); mobile does not call it.
+
+### RLS summary
+
+- **Admin/manager**: full CRUD on `pm_schedules` and `pm_task_occurrences`.
+- **Technician**: SELECT + UPDATE occurrences where assigned; SELECT parent schedule when assigned to any occurrence.
+
+---
 
 Cursor does **not** support chat between workspaces. To keep context aligned:
 

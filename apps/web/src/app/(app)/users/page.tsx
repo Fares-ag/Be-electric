@@ -6,32 +6,13 @@ import { Pagination } from '@/components/Pagination';
 import { SearchFilterBar } from '@/components/SearchFilterBar';
 import { usePagination } from '@/hooks/usePagination';
 import { supabase } from '@/lib/supabase';
-import { Card } from '@/components/ui/Card';
+import { USERS_LIST_QUERY_KEY, fetchUsersList, type UsersListEntry } from '@/lib/queries/users';
+import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Modal, ModalActions } from '@/components/ui/Modal';
+import { DataTableShell, PageHeader } from '@/components/ui/PageStates';
 
-type UserRow = {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  isActive: boolean;
-  companyId: string | null;
-  department: string | null;
-};
-
-// Normalize DB row (Supabase may return camelCase or snake_case depending on schema)
-function toUserRow(r: Record<string, unknown>): UserRow {
-  return {
-    id: String(r.id ?? ''),
-    name: String(r.name ?? ''),
-    email: String(r.email ?? ''),
-    role: String(r.role ?? 'requestor'),
-    isActive: r.isActive !== false && r.is_active !== false,
-    companyId: r.companyId != null ? String(r.companyId) : r.company_id != null ? String(r.company_id) : null,
-    department: r.department != null ? String(r.department) : null,
-  };
-}
+type UserRow = UsersListEntry;
 
 const emptyForm = {
   name: '',
@@ -59,14 +40,9 @@ export default function UsersPage() {
     error: queryError,
     refetch,
   } = useQuery({
-    queryKey: ['users'],
+    queryKey: USERS_LIST_QUERY_KEY,
     staleTime: 60 * 1000,
-    queryFn: async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- get_users_list exists in DB, may not be in generated types
-      const { data, error: e } = await (supabase as any).rpc('get_users_list');
-      if (e) throw e;
-      return ((data ?? []) as Record<string, unknown>[]).map(toUserRow);
-    },
+    queryFn: fetchUsersList,
   });
 
   const { data: companies } = useQuery({
@@ -121,7 +97,7 @@ export default function UsersPage() {
       return data as { tempPassword?: string };
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: USERS_LIST_QUERY_KEY });
       setForm(emptyForm);
       setEditing(null);
       if (data?.tempPassword) {
@@ -160,7 +136,7 @@ export default function UsersPage() {
       if (!res.ok) throw new Error(data.error ?? res.statusText);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: USERS_LIST_QUERY_KEY });
       setModalOpen(false);
       setEditing(null);
     },
@@ -183,7 +159,7 @@ export default function UsersPage() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? res.statusText);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['users'] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: USERS_LIST_QUERY_KEY }),
     onError: (err: Error) => setError(err.message),
   });
 
@@ -218,6 +194,7 @@ export default function UsersPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting) return;
     setError(null);
     setSubmitting(true);
     if (editing) {
@@ -240,72 +217,86 @@ export default function UsersPage() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">Users</h1>
-        <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
-          <SearchFilterBar
-            search={search}
-            onSearchChange={setSearch}
-            placeholder="Search name, email, role..."
-            className="sm:min-w-[220px]"
-          />
-          <Button onClick={openAdd} className="shrink-0">Add User</Button>
-        </div>
-      </div>
-      <Card>
-        {queryError && (
-          <div className="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
-            <p className="font-medium">Failed to load users.</p>
-            <p className="mt-1 text-xs opacity-90">{String(queryError.message)}</p>
-            <p className="mt-2 text-xs">Ensure you’re logged in as admin and run the RLS script in Supabase.</p>
-            <Button variant="outline" size="sm" className="mt-2" onClick={() => refetch()}>
-              Retry
+      <PageHeader
+        title="Users"
+        actions={
+          <>
+            <SearchFilterBar
+              search={search}
+              onSearchChange={setSearch}
+              placeholder="Search name, email, role..."
+              className="sm:min-w-[220px]"
+            />
+            <Button onClick={openAdd} className="shrink-0">
+              Add User
             </Button>
-          </div>
-        )}
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="table-modern">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Email</th>
-                  <th>Role</th>
-                  <th>Status</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedItems.map((u) => (
-                  <tr key={u.id}>
-                    <td className="font-medium text-foreground">{u.name}</td>
-                    <td className="text-sm">{u.email}</td>
-                    <td className="capitalize">{u.role}</td>
-                    <td>{u.isActive ? 'Active' : 'Inactive'}</td>
-                    <td className="flex gap-2">
-                      <Button variant="outline" size="sm" onClick={() => openEdit(u)}>
-                        Edit
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => handleDelete(u)}
-                        disabled={deleteMutation.isPending}
-                      >
-                        Delete
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {!isLoading && totalItems > 0 && (
+          </>
+        }
+      />
+      <Card>
+        <CardContent className="p-0">
+          <DataTableShell
+            isLoading={isLoading}
+            error={queryError}
+            isEmpty={!isLoading && !queryError && (users?.length ?? 0) === 0}
+            emptyTitle="No users yet"
+            emptyDescription="Add team members to assign roles and manage access."
+            emptyAction={
+              <Button type="button" onClick={openAdd}>
+                Add User
+              </Button>
+            }
+            onRetry={() => refetch()}
+            errorHint="Ensure you're logged in as admin and run the RLS script in Supabase."
+          >
+            {filtered.length === 0 && (users?.length ?? 0) > 0 ? (
+              <div className="px-6 py-12 text-center">
+                <p className="font-medium text-foreground">No matching users</p>
+                <p className="mt-1 text-sm text-muted-foreground">Try a different search term.</p>
+              </div>
+            ) : (
+              <div className="table-scroll overflow-x-auto">
+                <table className="table-modern">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Email</th>
+                      <th>Role</th>
+                      <th>Status</th>
+                      <th className="w-40" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedItems.map((u) => (
+                      <tr key={u.id}>
+                        <td className="font-medium text-foreground">{u.name}</td>
+                        <td className="text-sm">{u.email}</td>
+                        <td className="capitalize">{u.role}</td>
+                        <td>{u.isActive ? 'Active' : 'Inactive'}</td>
+                        <td>
+                          <div className="flex gap-2">
+                            <Button variant="outline" size="sm" onClick={() => openEdit(u)}>
+                              Edit
+                            </Button>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => handleDelete(u)}
+                              disabled={deleteMutation.isPending}
+                            >
+                              Delete
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </DataTableShell>
+        </CardContent>
+        {!isLoading && !queryError && totalItems > 0 && filtered.length > 0 && (
           <Pagination
             page={page}
             pageSize={pageSize}

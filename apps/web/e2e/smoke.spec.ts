@@ -62,3 +62,50 @@ test.describe('Smoke', () => {
     await expect(page.getByText(/failed to load users/i)).not.toBeVisible({ timeout: 5000 });
   });
 });
+
+test.describe('Public legal pages', () => {
+  test('privacy page loads without login', async ({ page }) => {
+    await page.goto('/privacy', { waitUntil: 'networkidle' });
+    await expect(page).toHaveURL('/privacy');
+    await expect(page.getByRole('heading', { name: /privacy policy/i })).toBeVisible();
+    await expect(page.getByText(/support@be-maintain\.com/i)).toBeVisible();
+  });
+
+  test('terms page loads without login', async ({ page }) => {
+    await page.goto('/terms', { waitUntil: 'networkidle' });
+    await expect(page.getByRole('heading', { name: /terms of service/i })).toBeVisible();
+  });
+
+  test('support page loads without login', async ({ page }) => {
+    await page.goto('/support', { waitUntil: 'networkidle' });
+    await expect(page.getByRole('heading', { name: /help|support/i })).toBeVisible();
+  });
+
+  test('account deletion page loads without login', async ({ page }) => {
+    await page.goto('/account-deletion', { waitUntil: 'networkidle' });
+    await expect(page.getByRole('heading', { name: /account deletion/i })).toBeVisible();
+  });
+});
+
+test.describe('Route guard', () => {
+  test('requestor cannot access admin users page', async ({ page }) => {
+    test.skip(!hasRequestorCreds, 'Set E2E_REQUESTOR_EMAIL and E2E_REQUESTOR_PASSWORD to run');
+    await loginAs(page, process.env.E2E_REQUESTOR_EMAIL!, process.env.E2E_REQUESTOR_PASSWORD!);
+    await page.goto('/users');
+    await expect(page).toHaveURL(/\/my-requests/, { timeout: 15000 });
+    await expect(page.getByRole('heading', { name: /^users$/i })).not.toBeVisible();
+  });
+
+  test('requestor can open work order detail but not admin list', async ({ page }) => {
+    test.skip(!hasRequestorCreds, 'Set E2E_REQUESTOR_EMAIL and E2E_REQUESTOR_PASSWORD to run');
+    await loginAs(page, process.env.E2E_REQUESTOR_EMAIL!, process.env.E2E_REQUESTOR_PASSWORD!);
+    await page.goto('/work-orders');
+    await expect(page).toHaveURL(/\/my-requests/, { timeout: 15000 });
+    await page.goto('/my-requests');
+    const viewLink = page.getByRole('link', { name: /view/i }).first();
+    if (await viewLink.isVisible().catch(() => false)) {
+      await viewLink.click();
+      await expect(page).toHaveURL(/\/work-orders\/[^/]+/, { timeout: 15000 });
+    }
+  });
+});

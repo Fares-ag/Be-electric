@@ -6,9 +6,10 @@ import { supabase } from '@/lib/supabase';
 import { Pagination } from '@/components/Pagination';
 import { SearchFilterBar } from '@/components/SearchFilterBar';
 import { usePagination } from '@/hooks/usePagination';
-import { Card } from '@/components/ui/Card';
+import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Modal, ModalActions } from '@/components/ui/Modal';
+import { DataTableShell, PageHeader } from '@/components/ui/PageStates';
 
 type InventoryItem = {
   id: string;
@@ -39,16 +40,17 @@ export default function InventoryPage() {
   const [editing, setEditing] = useState<InventoryItem | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
 
-  const { data: items, isLoading } = useQuery({
+  const { data: items, isLoading, error: queryError, refetch } = useQuery({
     queryKey: ['inventory'],
     staleTime: 60 * 1000,
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error: err } = await supabase
         .from('inventory_items')
         .select('*')
         .order('name');
+      if (err) throw err;
       return (data ?? []) as InventoryItem[];
     },
   });
@@ -75,7 +77,7 @@ export default function InventoryPage() {
       setForm(emptyForm);
       setEditing(null);
     },
-    onError: (err: Error) => setError(err.message),
+    onError: (err: Error) => setFormError(err.message),
   });
 
   const updateMutation = useMutation({
@@ -102,7 +104,7 @@ export default function InventoryPage() {
       setForm(emptyForm);
       setEditing(null);
     },
-    onError: (err: Error) => setError(err.message),
+    onError: (err: Error) => setFormError(err.message),
   });
 
   const deleteMutation = useMutation({
@@ -111,13 +113,13 @@ export default function InventoryPage() {
       if (e) throw e;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['inventory'] }),
-    onError: (err: Error) => setError(err.message),
+    onError: (err: Error) => setFormError(err.message),
   });
 
   const openAdd = () => {
     setEditing(null);
     setForm(emptyForm);
-    setError(null);
+    setFormError(null);
     setModalOpen(true);
   };
 
@@ -133,13 +135,14 @@ export default function InventoryPage() {
       location: item.location ?? '',
       description: item.description ?? '',
     });
-    setError(null);
+    setFormError(null);
     setModalOpen(true);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
+    if (submitting) return;
+    setFormError(null);
     setSubmitting(true);
     if (editing) {
       updateMutation.mutate(
@@ -180,76 +183,97 @@ export default function InventoryPage() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">Inventory</h1>
-        <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
-          <SearchFilterBar
-            search={search}
-            onSearchChange={setSearch}
-            placeholder="Search name, category, SKU..."
-            className="sm:min-w-[220px]"
-          />
-          {lowStock.length > 0 && (
-          <span className="text-sm text-amber-600 font-medium">
-            {lowStock.length} low stock
-          </span>
-          )}
-          <Button onClick={openAdd} className="shrink-0">Add Item</Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Inventory"
+        actions={
+          <>
+            <SearchFilterBar
+              search={search}
+              onSearchChange={setSearch}
+              placeholder="Search name, category, SKU..."
+              className="sm:min-w-[220px]"
+            />
+            {lowStock.length > 0 && (
+              <span className="text-sm font-medium text-amber-600">{lowStock.length} low stock</span>
+            )}
+            <Button onClick={openAdd} className="shrink-0">
+              Add Item
+            </Button>
+          </>
+        }
+      />
       <Card>
-        {isLoading ? (
-          <p className="text-[#757575]">Loading...</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="table-modern">
-              <thead>
-                <tr className="border-b border-[#E0E0E0]">
-                  <th className="text-left py-3 px-4 font-semibold">Name</th>
-                  <th className="text-left py-3 px-4 font-semibold">Category</th>
-                  <th className="text-left py-3 px-4 font-semibold">Quantity</th>
-                  <th className="text-left py-3 px-4 font-semibold">Unit</th>
-                  <th className="text-left py-3 px-4 font-semibold">Min</th>
-                  <th className="text-left py-3 px-4 font-semibold">Status</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedItems.map((i) => {
-                  const qty = Number(stock(i));
-                  const min = minS(i) != null ? Number(minS(i)) : null;
-                  const isLow = min != null && qty <= min;
-                  return (
-                    <tr key={i.id} className="border-b border-[#E0E0E0]">
-                      <td className="py-3 px-4 font-medium">{i.name}</td>
-                      <td className="py-3 px-4">{i.category ?? '-'}</td>
-                      <td className={`py-3 px-4 ${isLow ? 'text-[#F57C00] font-medium' : ''}`}>
-                        {String(qty)}
-                      </td>
-                      <td className="py-3 px-4">{i.unit ?? '-'}</td>
-                      <td className="py-3 px-4">{min != null ? String(min) : '-'}</td>
-                      <td className="py-3 px-4">{isLow ? 'Low' : 'OK'}</td>
-                      <td className="py-3 px-4 flex gap-2">
-                        <Button variant="outline" size="sm" onClick={() => openEdit(i)}>
-                          Edit
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => handleDelete(i)}
-                          disabled={deleteMutation.isPending}
-                        >
-                          Delete
-                        </Button>
-                      </td>
+        <CardContent className="p-0">
+          <DataTableShell
+            isLoading={isLoading}
+            error={queryError}
+            isEmpty={!isLoading && !queryError && (items?.length ?? 0) === 0}
+            emptyTitle="No inventory items yet"
+            emptyDescription="Track spare parts and consumables used in maintenance."
+            emptyAction={
+              <Button type="button" onClick={openAdd}>
+                Add Item
+              </Button>
+            }
+            onRetry={() => refetch()}
+          >
+            {filtered.length === 0 && (items?.length ?? 0) > 0 ? (
+              <div className="px-6 py-12 text-center">
+                <p className="font-medium text-foreground">No matching items</p>
+                <p className="mt-1 text-sm text-muted-foreground">Try a different search term.</p>
+              </div>
+            ) : (
+              <div className="table-scroll overflow-x-auto">
+                <table className="table-modern">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Category</th>
+                      <th>Quantity</th>
+                      <th>Unit</th>
+                      <th>Min</th>
+                      <th>Status</th>
+                      <th className="w-40" />
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {!isLoading && totalItems > 0 && (
+                  </thead>
+                  <tbody>
+                    {paginatedItems.map((i) => {
+                      const qty = Number(stock(i));
+                      const min = minS(i) != null ? Number(minS(i)) : null;
+                      const isLow = min != null && qty <= min;
+                      return (
+                        <tr key={i.id}>
+                          <td className="font-medium">{i.name}</td>
+                          <td>{i.category ?? '—'}</td>
+                          <td className={isLow ? 'font-medium text-amber-600' : ''}>{String(qty)}</td>
+                          <td>{i.unit ?? '—'}</td>
+                          <td>{min != null ? String(min) : '—'}</td>
+                          <td>{isLow ? 'Low' : 'OK'}</td>
+                          <td>
+                            <div className="flex gap-2">
+                              <Button variant="outline" size="sm" onClick={() => openEdit(i)}>
+                                Edit
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => handleDelete(i)}
+                                disabled={deleteMutation.isPending}
+                              >
+                                Delete
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </DataTableShell>
+        </CardContent>
+        {!isLoading && !queryError && totalItems > 0 && filtered.length > 0 && (
           <Pagination
             page={page}
             pageSize={pageSize}
@@ -262,12 +286,12 @@ export default function InventoryPage() {
 
       <Modal
         open={modalOpen}
-        onClose={() => { setModalOpen(false); setError(null); }}
+        onClose={() => { setModalOpen(false); setFormError(null); }}
         title={editing ? 'Edit Item' : 'Add Item'}
       >
         <form onSubmit={handleSubmit} className="space-y-4">
-          {error && (
-            <p className="text-sm text-destructive bg-destructive/10 p-2 rounded">{error}</p>
+          {formError && (
+            <p className="text-sm text-destructive bg-destructive/10 p-2 rounded">{formError}</p>
           )}
           <div>
             <label className="block text-sm font-medium text-foreground mb-1">Name *</label>

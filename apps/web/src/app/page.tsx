@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/stores/auth-store';
+import { defaultHomeForRole } from '@/lib/roles';
 
 export default function Home() {
   const { user, loading } = useAuthStore();
@@ -14,13 +15,14 @@ export default function Home() {
       router.replace('/login');
       return;
     }
-    const isAdmin = user.role === 'admin' || user.role === 'manager';
-    router.replace(isAdmin ? '/dashboard' : '/my-requests');
+    router.replace(defaultHomeForRole(user.role));
   }, [user, loading, router]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#F5F5F5]">
-      <div className="text-[#757575]">Redirecting...</div>
+    <div className="flex min-h-screen items-center justify-center bg-background">
+      <p className="text-sm text-muted-foreground" role="status">
+        Redirecting…
+      </p>
     </div>
   );
 }

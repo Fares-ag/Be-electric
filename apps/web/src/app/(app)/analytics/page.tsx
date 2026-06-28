@@ -4,39 +4,63 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
+import { LoadingSpinner, PageHeader, QueryErrorState } from '@/components/ui/PageStates';
+import {
+  computeAnalyticsMetrics,
+  type AnalyticsPmTask,
+  type AnalyticsWorkOrder,
+} from '@/lib/analytics-metrics';
 import { AnalyticsCharts } from './AnalyticsCharts';
 import { Wrench, CheckCircle, Clock, AlertTriangle, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
 
-type WO = { id: string; status: string; priority: string; createdAt: string; completedAt: string | null; closedAt: string | null };
-type PM = { id: string; status: string; nextDueDate: string };
-
-function formatLabel(s: string): string {
-  return s.replace(/([A-Z])/g, ' $1').trim();
-}
-
 export default function AnalyticsPage() {
-  const { data: workOrders } = useQuery({
+  const woQuery = useQuery({
     queryKey: ['analytics-work-orders'],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('work_orders')
         .select('id, status, priority, createdAt, completedAt, closedAt');
-      return (data ?? []) as WO[];
+      if (error) throw error;
+      return (data ?? []) as AnalyticsWorkOrder[];
     },
     staleTime: 60 * 1000,
   });
 
-  const { data: pmTasks } = useQuery({
+  const pmQuery = useQuery({
     queryKey: ['analytics-pm-tasks'],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('pm_tasks')
         .select('id, status, nextDueDate');
-      return (data ?? []) as PM[];
+      if (error) throw error;
+      return (data ?? []) as AnalyticsPmTask[];
     },
     staleTime: 60 * 1000,
   });
+
+  const isLoading = woQuery.isLoading || pmQuery.isLoading;
+  const queryError = woQuery.error ?? pmQuery.error;
+
+  const metrics = useMemo(
+    () => computeAnalyticsMetrics(woQuery.data ?? [], pmQuery.data ?? []),
+    [woQuery.data, pmQuery.data]
+  );
+
+  if (isLoading) return <LoadingSpinner label="Loading analytics" />;
+
+  if (queryError) {
+    return (
+      <QueryErrorState
+        title="Failed to load analytics"
+        message={queryError instanceof Error ? queryError.message : String(queryError)}
+        onRetry={() => {
+          woQuery.refetch();
+          pmQuery.refetch();
+        }}
+      />
+    );
+  }
 
   const {
     statusData,
@@ -49,91 +73,15 @@ export default function AnalyticsPage() {
     completionRate,
     mttrDays,
     overduePmCount,
-  } = useMemo(() => {
-    const wos = workOrders ?? [];
-    const pms = pmTasks ?? [];
-
-    const statusCounts = wos.reduce((acc: Record<string, number>, wo) => {
-      const s = wo.status ?? 'unknown';
-      acc[s] = (acc[s] ?? 0) + 1;
-      return acc;
-    }, {});
-    const statusData = Object.entries(statusCounts).map(([name, value]) => ({
-      name: formatLabel(name),
-      value,
-    }));
-
-    const priorityCounts = wos.reduce((acc: Record<string, number>, wo) => {
-      const p = wo.priority ?? 'medium';
-      acc[p] = (acc[p] ?? 0) + 1;
-      return acc;
-    }, {});
-    const priorityData = Object.entries(priorityCounts).map(([name, value]) => ({
-      name: formatLabel(name),
-      value,
-    }));
-
-    const pmStatusCounts = pms.reduce((acc: Record<string, number>, t) => {
-      const s = t.status ?? 'pending';
-      acc[s] = (acc[s] ?? 0) + 1;
-      return acc;
-    }, {});
-    const pmStatusData = Object.entries(pmStatusCounts).map(([name, value]) => ({
-      name: formatLabel(name),
-      value,
-    }));
-
-    const totalWorkOrders = wos.length;
-    const openCount = wos.filter((wo) => wo.status === 'open').length;
-    const inProgressCount = wos.filter((wo) =>
-      ['assigned', 'inProgress'].includes(wo.status)
-    ).length;
-    const completedCount = wos.filter((wo) =>
-      ['completed', 'closed'].includes(wo.status)
-    ).length;
-    const completionRate =
-      totalWorkOrders > 0
-        ? Math.round((completedCount / totalWorkOrders) * 100)
-        : 0;
-
-    const completedWithDate = wos.filter(
-      (wo) => (wo.completedAt || wo.closedAt) && wo.createdAt
-    );
-    const mttrMs =
-      completedWithDate.length > 0
-        ? completedWithDate.reduce((sum, wo) => {
-            const end = wo.completedAt || wo.closedAt || wo.createdAt;
-            return sum + (new Date(end).getTime() - new Date(wo.createdAt).getTime());
-          }, 0) / completedWithDate.length
-        : 0;
-    const mttrDays = Math.round((mttrMs / (24 * 60 * 60 * 1000)) * 10) / 10;
-
-    const today = new Date().toISOString().slice(0, 10);
-    const overduePmCount = pms.filter(
-      (t) => t.status !== 'completed' && t.nextDueDate < today
-    ).length;
-
-    return {
-      statusData,
-      priorityData,
-      pmStatusData,
-      totalWorkOrders,
-      openCount,
-      inProgressCount,
-      completedCount,
-      completionRate,
-      mttrDays,
-      overduePmCount,
-    };
-  }, [workOrders, pmTasks]);
+  } = metrics;
 
   return (
     <div className="space-y-6">
-      <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">
-        Analytics
-      </h1>
+      <PageHeader
+        title="Analytics"
+        description="Work order and preventive maintenance performance."
+      />
 
-      {/* Summary cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Link href="/work-orders">
           <Card className="cursor-pointer transition-all hover:border-primary/30">
@@ -141,27 +89,21 @@ export default function AnalyticsPage() {
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Total Work Orders
               </CardTitle>
-              <Wrench className="h-4 w-4 text-muted-foreground" />
+              <Wrench className="h-4 w-4 text-muted-foreground" aria-hidden />
             </CardHeader>
             <CardContent>
-              <p className="font-display text-2xl font-bold text-foreground">
-                {totalWorkOrders}
-              </p>
+              <p className="font-display text-2xl font-bold text-foreground">{totalWorkOrders}</p>
             </CardContent>
           </Card>
         </Link>
         <Link href="/work-orders?status=open">
           <Card className="cursor-pointer transition-all hover:border-primary/30">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Open
-              </CardTitle>
-              <Clock className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium text-muted-foreground">Open</CardTitle>
+              <Clock className="h-4 w-4 text-muted-foreground" aria-hidden />
             </CardHeader>
             <CardContent>
-              <p className="font-display text-2xl font-bold text-foreground">
-                {openCount}
-              </p>
+              <p className="font-display text-2xl font-bold text-foreground">{openCount}</p>
             </CardContent>
           </Card>
         </Link>
@@ -170,13 +112,11 @@ export default function AnalyticsPage() {
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Completion Rate
             </CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            <TrendingUp className="h-4 w-4 text-muted-foreground" aria-hidden />
           </CardHeader>
           <CardContent>
-            <p className="font-display text-2xl font-bold text-foreground">
-              {completionRate}%
-            </p>
-            <p className="text-xs text-muted-foreground mt-0.5">
+            <p className="font-display text-2xl font-bold text-foreground">{completionRate}%</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
               {completedCount} of {totalWorkOrders} closed/completed
             </p>
           </CardContent>
@@ -186,15 +126,11 @@ export default function AnalyticsPage() {
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Mean Time to Resolve
             </CardTitle>
-            <CheckCircle className="h-4 w-4 text-muted-foreground" />
+            <CheckCircle className="h-4 w-4 text-muted-foreground" aria-hidden />
           </CardHeader>
           <CardContent>
-            <p className="font-display text-2xl font-bold text-foreground">
-              {mttrDays} days
-            </p>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Avg. from create to complete/close
-            </p>
+            <p className="font-display text-2xl font-bold text-foreground">{mttrDays} days</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">Avg. from create to complete/close</p>
           </CardContent>
         </Card>
       </div>
@@ -203,14 +139,10 @@ export default function AnalyticsPage() {
         <Link href="/work-orders?status=inProgress">
           <Card className="cursor-pointer transition-all hover:border-primary/30">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                In Progress
-              </CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">In Progress</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="font-display text-2xl font-bold text-foreground">
-                {inProgressCount}
-              </p>
+              <p className="font-display text-2xl font-bold text-foreground">{inProgressCount}</p>
             </CardContent>
           </Card>
         </Link>
@@ -220,23 +152,24 @@ export default function AnalyticsPage() {
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Overdue PM Tasks
               </CardTitle>
-              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              <AlertTriangle className="h-4 w-4 text-amber-600" aria-hidden />
             </CardHeader>
             <CardContent>
-              <p className="font-display text-2xl font-bold text-foreground">
-                {overduePmCount}
-              </p>
+              <p className="font-display text-2xl font-bold text-foreground">{overduePmCount}</p>
             </CardContent>
           </Card>
         </Link>
       </div>
 
-      {/* Charts */}
-      <AnalyticsCharts
-        statusData={statusData}
-        priorityData={priorityData}
-        pmStatusData={pmStatusData}
-      />
+      {totalWorkOrders === 0 && pmQuery.data?.length === 0 ? (
+        <Card>
+          <CardContent className="py-10 text-center text-sm text-muted-foreground">
+            No work orders or PM tasks yet. Data will appear here as your team uses the system.
+          </CardContent>
+        </Card>
+      ) : (
+        <AnalyticsCharts statusData={statusData} priorityData={priorityData} pmStatusData={pmStatusData} />
+      )}
     </div>
   );
 }

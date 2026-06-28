@@ -53,8 +53,8 @@ async function createFallbackUser(
 }
 
 async function getAdminRoleByEmail(email: string): Promise<'admin' | 'manager' | null> {
-  const { data } = await (supabase as any).rpc('get_admin_by_email', { p_email: email });
-  const row = (data as { is_admin?: boolean; is_manager?: boolean }[] | null)?.[0];
+  const { data } = await supabase.rpc('get_admin_by_email', { p_email: email });
+  const row = data?.[0];
   if (!row) return null;
   if (row.is_admin) return 'admin';
   if (row.is_manager) return 'manager';
@@ -63,14 +63,15 @@ async function getAdminRoleByEmail(email: string): Promise<'admin' | 'manager' |
 
 /** Fetches user row only (no admin role override). */
 async function getUserByAuthIdOnly(authId: string): Promise<User | null> {
-  const { data, error } = await (supabase as any).rpc('get_user_by_id', { p_id: authId });
+  const { data, error } = await supabase.rpc('get_user_by_id', { p_id: authId });
   if (error) {
-    console.warn('[auth] users table fetch failed:', error.message);
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('[auth] users table fetch failed:', error.message);
+    }
     return null;
   }
-  const rows = data as Record<string, unknown>[] | null;
-  const row = rows && rows.length > 0 ? rows[0] : null;
-  return toUser(row);
+  const row = data?.[0] ?? null;
+  return toUser(row as Record<string, unknown> | null);
 }
 
 async function getUserByAuthId(authId: string, _knownEmail?: string): Promise<User | null> {

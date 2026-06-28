@@ -6,9 +6,11 @@ import { useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { uploadPmTaskCompletionPhoto } from '@/lib/storage';
 import { useUsersMap } from '@/hooks/useUsersMap';
+import { useFormSubmitLock } from '@/hooks/useFormSubmitLock';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge, StatusBadge } from '@/components/ui/Badge';
+import { LoadingSpinner, PageHeader, QueryErrorState } from '@/components/ui/PageStates';
 
 type PMTaskDetail = {
   id: string;
@@ -29,8 +31,9 @@ export default function PMTaskDetailPage() {
   const id = params.id as string;
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { submitting: completing, runSubmit: runComplete } = useFormSubmitLock();
 
-  const { data: task, isLoading } = useQuery({
+  const { data: task, isLoading, error: queryError, refetch } = useQuery({
     queryKey: ['pm-task', id],
     staleTime: 60 * 1000,
     queryFn: async (): Promise<PMTaskDetail | null> => {
@@ -118,28 +121,40 @@ export default function PMTaskDetailPage() {
 
   const onFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) completeTaskMutation.mutate(file);
-    else completeTaskMutation.mutate(null);
+    void runComplete(async () => {
+      await completeTaskMutation.mutateAsync(file ?? null);
+    });
     e.target.value = '';
   };
 
-  if (isLoading || !task) {
+  if (isLoading) return <LoadingSpinner label="Loading PM task" />;
+
+  if (queryError || !task) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-      </div>
+      <QueryErrorState
+        title="PM task unavailable"
+        message={
+          queryError instanceof Error
+            ? queryError.message
+            : 'This PM task may have been removed or you may not have permission to view it.'
+        }
+        onRetry={() => refetch()}
+      />
     );
   }
 
   return (
     <div>
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-8">
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">{task.taskName}</h1>
-        <div className="flex gap-2">
-          <StatusBadge status={task.status} />
-          <Badge>{task.frequency}</Badge>
-        </div>
-      </div>
+      <PageHeader
+        title={task.taskName}
+        actions={
+          <>
+            <StatusBadge status={task.status} />
+            <Badge>{task.frequency}</Badge>
+          </>
+        }
+        className="mb-8"
+      />
 
       <input
         ref={fileInputRef}
@@ -257,14 +272,18 @@ export default function PMTaskDetailPage() {
             <div className="flex flex-wrap items-center gap-2">
               <Button
                 onClick={handleCompleteWithPhoto}
-                disabled={completeTaskMutation.isPending}
+                disabled={completeTaskMutation.isPending || completing}
               >
                 Mark complete with photo
               </Button>
               <Button
                 variant="outline"
-                onClick={() => completeTaskMutation.mutate(null)}
-                disabled={completeTaskMutation.isPending}
+                onClick={() =>
+                  void runComplete(async () => {
+                    await completeTaskMutation.mutateAsync(null);
+                  })
+                }
+                disabled={completeTaskMutation.isPending || completing}
               >
                 Mark complete (no photo)
               </Button>

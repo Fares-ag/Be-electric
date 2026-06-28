@@ -66,3 +66,23 @@ export function subscribePMTasks(
     .subscribe();
   return channel;
 }
+
+export function subscribePmOccurrences(
+  onInsert?: (payload: unknown) => void,
+  onUpdate?: (payload: unknown) => void
+): RealtimeChannel {
+  const channel = supabase
+    .channel('pm-occurrences-changes')
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'pm_task_occurrences' },
+      (payload) => onInsert?.(payload)
+    )
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'pm_task_occurrences' },
+      (payload) => onUpdate?.(payload)
+    )
+    .subscribe();
+  return channel;
+}

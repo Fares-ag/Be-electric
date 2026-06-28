@@ -7,6 +7,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/auth-store';
 import { prefetchRoute } from '@/lib/prefetch-routes';
+import { isAdminRole } from '@/lib/roles';
 import {
   LayoutDashboard,
   Wrench,
@@ -16,6 +17,7 @@ import {
   Building2,
   Boxes,
   ClipboardCheck,
+  LifeBuoy,
   ShoppingCart,
   BarChart3,
   FileText,
@@ -33,12 +35,13 @@ import beElectricLogo from '@/app/(app)/assets/beElectricLogo.png';
 const adminNav = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/work-orders', label: 'Work Orders', icon: Wrench },
-  { href: '/pm-tasks', label: 'PM Tasks', icon: ClipboardList },
+  { href: '/pm-schedules', label: 'PM Schedules', icon: ClipboardList },
   { href: '/assets', label: 'Chargers', icon: Package },
   { href: '/users', label: 'Users', icon: Users },
   { href: '/companies', label: 'Companies', icon: Building2 },
   { href: '/inventory', label: 'Inventory', icon: Boxes },
   { href: '/parts-requests', label: 'Parts Requests', icon: ClipboardCheck },
+  { href: '/support-requests', label: 'Support Inbox', icon: LifeBuoy },
   { href: '/purchase-orders', label: 'Purchase Orders', icon: ShoppingCart },
   { href: '/analytics', label: 'Analytics', icon: BarChart3 },
   { href: '/reports', label: 'Reports', icon: FileText },
@@ -99,7 +102,7 @@ export function RoleBasedLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const isAdmin = user?.role === 'admin' || user?.role === 'manager';
+  const isAdmin = isAdminRole(user?.role);
   const nav = isAdmin ? adminNav : requestorNav;
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 

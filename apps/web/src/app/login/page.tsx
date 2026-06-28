@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useAuthStore } from '@/stores/auth-store';
+import { useFormSubmitLock } from '@/hooks/useFormSubmitLock';
 import { LEGAL_SUPPORT_EMAIL, LEGAL_URLS } from '@/lib/legal-urls';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
@@ -14,16 +15,27 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const { submitting, runSubmit } = useFormSubmitLock();
   const signIn = useAuthStore((s) => s.signIn);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
-    setLoading(true);
-    const { error: err } = await signIn(email, password);
-    setLoading(false);
-    if (err) setError(err.message ?? 'Login failed');
+
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      setError('Please enter your email address.');
+      return;
+    }
+    if (!password) {
+      setError('Please enter your password.');
+      return;
+    }
+
+    await runSubmit(async () => {
+      const { error: err } = await signIn(trimmedEmail, password);
+      if (err) setError(err.message ?? 'Login failed. Check your email and password.');
+    });
   }
 
   const inputBase = cn(
@@ -64,7 +76,12 @@ export default function LoginPage() {
           <h2 className="text-lg font-semibold text-foreground mb-6">
             Sign in to your account
           </h2>
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form
+            onSubmit={handleSubmit}
+            className="space-y-5"
+            aria-busy={submitting}
+            noValidate
+          >
             <div>
               <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-foreground">
                 Email
@@ -103,21 +120,28 @@ export default function LoginPage() {
             </div>
             {error && (
               <div
+                id="login-error"
                 role="alert"
+                aria-live="polite"
                 className="flex items-center gap-2 rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive"
               >
-                <AlertCircle className="h-4 w-4 shrink-0" />
+                <AlertCircle className="h-4 w-4 shrink-0" aria-hidden />
                 <span>{error}</span>
               </div>
             )}
             <Button
               type="submit"
-              disabled={loading}
+              disabled={submitting}
               className="w-full py-3"
+              aria-describedby={error ? 'login-error' : undefined}
             >
-              {loading ? (
+              {submitting ? (
                 <span className="flex items-center justify-center gap-2">
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  <span
+                    className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
+                    aria-hidden
+                  />
+                  <span className="sr-only">Signing in</span>
                   Signing in...
                 </span>
               ) : (

@@ -14,7 +14,7 @@ export function usePagination<T>(
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(defaultPageSize);
 
-  const list = items ?? [];
+  const list = useMemo(() => items ?? [], [items]);
   const totalItems = list.length;
 
   const paginatedItems = useMemo(() => {

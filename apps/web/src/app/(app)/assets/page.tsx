@@ -12,6 +12,8 @@ import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { StatusBadge } from '@/components/ui/Badge';
+import { DataTableShell, PageHeader } from '@/components/ui/PageStates';
+import { manufacturerFromChargerName } from '@/lib/charger-manufacturer';
 
 type Asset = {
   id: string;
@@ -45,16 +47,17 @@ export default function AssetsPage() {
   const [editing, setEditing] = useState<Asset | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
 
-  const { data: assets, isLoading } = useQuery({
+  const { data: assets, isLoading, error: queryError, refetch } = useQuery({
     queryKey: ['assets'],
     staleTime: 60 * 1000,
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error: err } = await supabase
         .from('assets')
         .select('*, company:companies(name)')
         .order('name');
+      if (err) throw err;
       return (data ?? []) as Asset[];
     },
   });
@@ -95,6 +98,7 @@ export default function AssetsPage() {
 
   const createMutation = useMutation({
     mutationFn: async (payload: typeof emptyForm) => {
+      const manufacturer = manufacturerFromChargerName(payload.name.trim());
       const { error: e } = await supabase.from('assets').insert({
         id: crypto.randomUUID(),
         name: payload.name.trim(),
@@ -102,7 +106,7 @@ export default function AssetsPage() {
         assetType: payload.assetType.trim() || null,
         status: payload.status.trim() || null,
         companyId: payload.companyId.trim() || null,
-        manufacturer: payload.manufacturer.trim() || null,
+        manufacturer,
         model: payload.model.trim() || null,
         serialNumber: payload.serialNumber.trim() || null,
         updatedAt: new Date().toISOString(),
@@ -115,11 +119,12 @@ export default function AssetsPage() {
       setForm(emptyForm);
       setEditing(null);
     },
-    onError: (err: Error) => setError(err.message),
+    onError: (err: Error) => setFormError(err.message),
   });
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, ...payload }: Asset & typeof emptyForm) => {
+      const manufacturer = manufacturerFromChargerName(payload.name.trim());
       const { error: e } = await supabase
         .from('assets')
         .update({
@@ -128,7 +133,7 @@ export default function AssetsPage() {
           assetType: payload.assetType.trim() || null,
           status: payload.status.trim() || null,
           companyId: payload.companyId.trim() || null,
-          manufacturer: payload.manufacturer.trim() || null,
+          manufacturer,
           model: payload.model.trim() || null,
           serialNumber: payload.serialNumber.trim() || null,
           updatedAt: new Date().toISOString(),
@@ -142,7 +147,7 @@ export default function AssetsPage() {
       setForm(emptyForm);
       setEditing(null);
     },
-    onError: (err: Error) => setError(err.message),
+    onError: (err: Error) => setFormError(err.message),
   });
 
   const deleteMutation = useMutation({
@@ -151,13 +156,13 @@ export default function AssetsPage() {
       if (e) throw e;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['assets'] }),
-    onError: (err: Error) => setError(err.message),
+    onError: (err: Error) => setFormError(err.message),
   });
 
   const openAdd = () => {
     setEditing(null);
     setForm(emptyForm);
-    setError(null);
+    setFormError(null);
     setModalOpen(true);
   };
 
@@ -173,13 +178,14 @@ export default function AssetsPage() {
       model: a.model ?? '',
       serialNumber: a.serialNumber ?? '',
     });
-    setError(null);
+    setFormError(null);
     setModalOpen(true);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
+    if (submitting) return;
+    setFormError(null);
     setSubmitting(true);
     if (editing) {
       updateMutation.mutate(
@@ -197,71 +203,98 @@ export default function AssetsPage() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">Chargers</h1>
-        <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
-          <SearchFilterBar
-            search={search}
-            onSearchChange={setSearch}
-            placeholder="Search name, location, company..."
-            className="sm:min-w-[220px]"
-          />
-          <Button onClick={openAdd} className="shrink-0">Add Charger</Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Chargers"
+        actions={
+          <>
+            <SearchFilterBar
+              search={search}
+              onSearchChange={setSearch}
+              placeholder="Search name, location, company..."
+              className="sm:min-w-[220px]"
+            />
+            <Button onClick={openAdd} className="shrink-0">
+              Add Charger
+            </Button>
+          </>
+        }
+      />
       {filteredByCompanyName && (
         <p className="text-sm text-muted-foreground">
           Showing chargers for <span className="font-medium text-foreground">{filteredByCompanyName}</span>
           {' · '}
-          <Link href="/assets" className="text-primary hover:underline">Show all</Link>
+          <Link href="/assets" className="text-primary hover:underline">
+            Show all
+          </Link>
         </p>
       )}
       <Card>
-        {isLoading ? (
-          <p className="text-[#757575]">Loading...</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="table-modern">
-              <thead>
-                <tr className="border-b border-[#E0E0E0]">
-                  <th className="text-left py-3 px-4 font-semibold">Name</th>
-                  <th className="text-left py-3 px-4 font-semibold">Company</th>
-                  <th className="text-left py-3 px-4 font-semibold">Location</th>
-                  <th className="text-left py-3 px-4 font-semibold">Type</th>
-                  <th className="text-left py-3 px-4 font-semibold">Status</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedItems.map((a) => (
-                  <tr key={a.id} className="border-b border-[#E0E0E0]">
-                    <td className="py-3 px-4 font-medium">{a.name}</td>
-                    <td className="py-3 px-4">{a.company?.name ?? '-'}</td>
-                    <td className="py-3 px-4">{a.location ?? '-'}</td>
-                    <td className="py-3 px-4">{a.assetType ?? '-'}</td>
-                    <td className="py-3 px-4">
-                      <StatusBadge status={a.status} />
-                    </td>
-                    <td className="py-3 px-4 flex gap-2">
-                      <Button variant="outline" size="sm" onClick={() => openEdit(a)}>
-                        Edit
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => handleDelete(a)}
-                        disabled={deleteMutation.isPending}
-                      >
-                        Delete
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {!isLoading && totalItems > 0 && (
+        <CardContent className="p-0">
+          <DataTableShell
+            isLoading={isLoading}
+            error={queryError}
+            isEmpty={!isLoading && !queryError && (assets?.length ?? 0) === 0}
+            emptyTitle="No chargers yet"
+            emptyDescription="Register EV chargers to link them to work orders and PM tasks."
+            emptyAction={
+              <Button type="button" onClick={openAdd}>
+                Add Charger
+              </Button>
+            }
+            onRetry={() => refetch()}
+          >
+            {filtered.length === 0 && (assets?.length ?? 0) > 0 ? (
+              <div className="px-6 py-12 text-center">
+                <p className="font-medium text-foreground">No matching chargers</p>
+                <p className="mt-1 text-sm text-muted-foreground">Try a different search or company filter.</p>
+              </div>
+            ) : (
+              <div className="table-scroll overflow-x-auto">
+                <table className="table-modern">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Company</th>
+                      <th>Location</th>
+                      <th>Type</th>
+                      <th>Status</th>
+                      <th className="w-40" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedItems.map((a) => (
+                      <tr key={a.id}>
+                        <td className="font-medium">{a.name}</td>
+                        <td>{a.company?.name ?? '—'}</td>
+                        <td>{a.location ?? '—'}</td>
+                        <td>{a.assetType ?? '—'}</td>
+                        <td>
+                          <StatusBadge status={a.status} />
+                        </td>
+                        <td>
+                          <div className="flex gap-2">
+                            <Button variant="outline" size="sm" onClick={() => openEdit(a)}>
+                              Edit
+                            </Button>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => handleDelete(a)}
+                              disabled={deleteMutation.isPending}
+                            >
+                              Delete
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </DataTableShell>
+        </CardContent>
+        {!isLoading && !queryError && totalItems > 0 && filtered.length > 0 && (
           <Pagination
             page={page}
             pageSize={pageSize}
@@ -274,12 +307,12 @@ export default function AssetsPage() {
 
       <Modal
         open={modalOpen}
-        onClose={() => { setModalOpen(false); setError(null); }}
+        onClose={() => { setModalOpen(false); setFormError(null); }}
         title={editing ? 'Edit Charger' : 'Add Charger'}
       >
         <form onSubmit={handleSubmit} className="space-y-4">
-          {error && (
-            <p className="text-sm text-destructive bg-destructive/10 p-2 rounded">{error}</p>
+          {formError && (
+            <p className="text-sm text-destructive bg-destructive/10 p-2 rounded">{formError}</p>
           )}
           <div>
             <label className="block text-sm font-medium text-foreground mb-1">Name *</label>
@@ -339,10 +372,14 @@ export default function AssetsPage() {
             <label className="block text-sm font-medium text-foreground mb-1">Manufacturer</label>
             <input
               type="text"
-              value={form.manufacturer}
-              onChange={(e) => setForm((f) => ({ ...f, manufacturer: e.target.value }))}
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+              readOnly
+              value={manufacturerFromChargerName(form.name) ?? '—'}
+              className="w-full rounded-lg border border-border bg-muted px-3 py-2 text-sm text-muted-foreground"
+              aria-describedby="manufacturer-hint"
             />
+            <p id="manufacturer-hint" className="mt-1 text-xs text-muted-foreground">
+              KOS* names → Kostad; all other chargers → Siemens
+            </p>
           </div>
           <div>
             <label className="block text-sm font-medium text-foreground mb-1">Model</label>

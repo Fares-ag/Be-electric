@@ -5,16 +5,17 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
-import { Wrench, ClipboardList, AlertTriangle, Package, Activity } from 'lucide-react';
+import { LoadingSpinner, PageHeader, QueryErrorState } from '@/components/ui/PageStates';
+import { Wrench, AlertTriangle, Package, Activity } from 'lucide-react';
+import { parseActivityHistory, type WorkOrderActivityEntry } from '@/lib/work-order-detail';
 
-type ActivityEntry = { at: string; type?: string; note?: string };
 type WorkOrderRow = {
   id: string;
   ticketNumber: string;
   status: string;
   createdAt: string;
   updatedAt: string;
-  activityHistory?: ActivityEntry[] | null;
+  activityHistory?: WorkOrderActivityEntry[] | string | null;
 };
 
 type FeedItem =
@@ -22,54 +23,46 @@ type FeedItem =
   | { kind: 'wo_activity'; at: string; id: string; ticketNumber: string; type: string; note?: string }
   | { kind: 'pm_completed'; at: string; id: string; taskName: string };
 
-function parseActivityHistory(value: unknown): ActivityEntry[] {
-  if (!value) return [];
-  if (Array.isArray(value)) return value as ActivityEntry[];
-  try {
-    const parsed = typeof value === 'string' ? JSON.parse(value) : value;
-    return Array.isArray(parsed) ? (parsed as ActivityEntry[]) : [];
-  } catch {
-    return [];
-  }
-}
-
 export default function DashboardPage() {
-  const { data: workOrders } = useQuery({
+  const summaryQuery = useQuery({
     queryKey: ['work-orders-summary'],
     staleTime: 60 * 1000,
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('work_orders')
         .select('id, status')
         .in('status', ['open', 'assigned', 'inProgress']);
+      if (error) throw error;
       return (data ?? []) as { id: string; status: string }[];
     },
   });
 
-  const { data: pmTasks } = useQuery({
+  const pmQuery = useQuery({
     queryKey: ['pm-tasks-overdue'],
     staleTime: 60 * 1000,
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('pm_tasks')
         .select('id, status, nextDueDate')
         .eq('status', 'overdue');
+      if (error) throw error;
       return (data ?? []) as { id: string }[];
     },
   });
 
-  const { data: inventory } = useQuery({
+  const inventoryQuery = useQuery({
     queryKey: ['inventory-low-stock'],
     staleTime: 60 * 1000,
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('inventory_items')
         .select('id, name, currentStock, minStock');
+      if (error) throw error;
       return (data ?? []) as { currentStock: number; minStock: number | null }[];
     },
   });
 
-  const { data: recentActivityRaw } = useQuery({
+  const activityQuery = useQuery({
     queryKey: ['dashboard-recent-activity'],
     staleTime: 60 * 1000,
     queryFn: async () => {
@@ -87,16 +80,28 @@ export default function DashboardPage() {
           .order('lastCompletedDate', { ascending: false })
           .limit(15),
       ]);
+      if (woRes.error) throw woRes.error;
+      if (pmRes.error) throw pmRes.error;
       return {
         workOrders: (woRes.data ?? []) as WorkOrderRow[],
-        pmTasks: (pmRes.data ?? []) as { id: string; taskName: string; status: string; lastCompletedDate: string }[],
+        pmTasks: (pmRes.data ?? []) as {
+          id: string;
+          taskName: string;
+          status: string;
+          lastCompletedDate: string;
+        }[],
       };
     },
   });
 
+  const isLoading =
+    summaryQuery.isLoading || pmQuery.isLoading || inventoryQuery.isLoading || activityQuery.isLoading;
+  const queryError =
+    summaryQuery.error ?? pmQuery.error ?? inventoryQuery.error ?? activityQuery.error;
+
   const recentActivity = useMemo(() => {
     const items: FeedItem[] = [];
-    const raw = recentActivityRaw;
+    const raw = activityQuery.data;
     if (!raw) return items;
 
     for (const wo of raw.workOrders) {
@@ -135,18 +140,18 @@ export default function DashboardPage() {
 
     items.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
     return items.slice(0, 25);
-  }, [recentActivityRaw]);
+  }, [activityQuery.data]);
+
+  const workOrders = summaryQuery.data;
+  const pmTasks = pmQuery.data;
+  const inventory = inventoryQuery.data;
 
   const openCount = workOrders?.filter((wo) => wo.status === 'open').length ?? 0;
   const inProgressCount =
-    workOrders?.filter(
-      (wo) => wo.status === 'assigned' || wo.status === 'inProgress'
-    ).length ?? 0;
+    workOrders?.filter((wo) => wo.status === 'assigned' || wo.status === 'inProgress').length ?? 0;
   const overdueCount = pmTasks?.length ?? 0;
   const lowStockCount =
-    inventory?.filter(
-      (i) => i.minStock != null && i.currentStock <= i.minStock
-    ).length ?? 0;
+    inventory?.filter((i) => i.minStock != null && i.currentStock <= i.minStock).length ?? 0;
 
   const cards = [
     { label: 'Open Work Orders', value: openCount, href: '/work-orders?status=open', icon: Wrench },
@@ -180,21 +185,35 @@ export default function DashboardPage() {
     }
   }
 
+  if (isLoading) return <LoadingSpinner label="Loading dashboard" />;
+
+  if (queryError) {
+    return (
+      <QueryErrorState
+        title="Failed to load dashboard"
+        message={queryError instanceof Error ? queryError.message : String(queryError)}
+        onRetry={() => {
+          summaryQuery.refetch();
+          pmQuery.refetch();
+          inventoryQuery.refetch();
+          activityQuery.refetch();
+        }}
+      />
+    );
+  }
+
   return (
     <div className="space-y-6 sm:space-y-8">
-      <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">
-        Dashboard
-      </h1>
+      <PageHeader title="Dashboard" description="Operational overview and recent activity." />
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {cards.map(({ href, label, value, icon: Icon }) => (
           <Link key={href} href={href}>
             <Card className="cursor-pointer transition-all duration-200 hover:border-primary/30">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  {label}
-                </CardTitle>
+                <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
                 <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-accent-foreground">
-                  <Icon className="h-4 w-4" />
+                  <Icon className="h-4 w-4" aria-hidden />
                 </span>
               </CardHeader>
               <CardContent>
@@ -204,10 +223,11 @@ export default function DashboardPage() {
           </Link>
         ))}
       </div>
-      <Card className="mt-6 sm:mt-8">
+
+      <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Recent Activity</CardTitle>
-          <Activity className="h-5 w-5 text-muted-foreground" />
+          <Activity className="h-5 w-5 text-muted-foreground" aria-hidden />
         </CardHeader>
         <CardContent>
           {recentActivity.length === 0 ? (
@@ -218,9 +238,9 @@ export default function DashboardPage() {
                 <li key={`${item.kind}-${item.id}-${item.at}-${i}`}>
                   <Link
                     href={hrefFor(item)}
-                    className="flex flex-wrap items-baseline gap-2 rounded-lg py-2 px-2 -mx-2 text-left transition-colors hover:bg-muted/60"
+                    className="-mx-2 flex flex-wrap items-baseline gap-2 rounded-lg px-2 py-2 text-left transition-colors hover:bg-muted/60"
                   >
-                    <time className="text-xs text-muted-foreground shrink-0 tabular-nums">
+                    <time className="shrink-0 text-xs tabular-nums text-muted-foreground">
                       {new Date(item.at).toLocaleString(undefined, {
                         dateStyle: 'short',
                         timeStyle: 'short',

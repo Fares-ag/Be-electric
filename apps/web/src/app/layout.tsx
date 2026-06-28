@@ -5,7 +5,9 @@ import { usePathname, useRouter } from 'next/navigation';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/auth-store';
 import { useRealtimeSubscriptions } from '@/hooks/useRealtime';
+import { LoadingSpinner } from '@/components/ui/PageStates';
 import { isPublicLegalPath } from '@/lib/legal-urls';
+import { defaultHomeForRole } from '@/lib/roles';
 import { Inter, Plus_Jakarta_Sans } from 'next/font/google';
 import './globals.css';
 
@@ -70,18 +72,14 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
       return;
     }
     if (user && isLogin) {
-      const isAdmin = user.role === 'admin' || user.role === 'manager';
-      router.replace(isAdmin ? '/dashboard' : '/my-requests');
+      router.replace(defaultHomeForRole(user.role));
     }
   }, [user, loading, isLogin, isPublicPage, router]);
 
   if (loading && !isPublicLegalPath(pathname)) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-          <p className="text-sm text-muted-foreground">Loading...</p>
-        </div>
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <LoadingSpinner label="Loading application" />
       </div>
     );
   }

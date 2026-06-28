@@ -19,6 +19,7 @@
     "schema:types": "node scripts/schema-pull.mjs",
     "schema:pull": "node scripts/schema-pull.mjs --schema",
     "e2e": "npm run e2e --workspace=@beelectric/web",
+    "test": "npm run test --workspace=@beelectric/web",
     "html-to-pdf": "node scripts/html-to-pdf.mjs"
   },
   "devDependencies": {

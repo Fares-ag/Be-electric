@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/auth-store';
-import { subscribeWorkOrders, subscribeNotifications } from '@/lib/realtime';
+import { subscribeWorkOrders, subscribeNotifications, subscribePMTasks, subscribePmOccurrences } from '@/lib/realtime';
 
 export function useRealtimeSubscriptions() {
   const queryClient = useQueryClient();
@@ -14,13 +14,24 @@ export function useRealtimeSubscriptions() {
     if (!user && !authUser) return;
 
     const userId = user?.id ?? authUser?.id;
-    const invalidate = () => {
+    const invalidateWorkOrders = () => {
       queryClient.invalidateQueries({ queryKey: ['work-orders'] });
       queryClient.invalidateQueries({ queryKey: ['work-orders-summary'] });
       queryClient.invalidateQueries({ queryKey: ['my-work-orders'] });
     };
+    const invalidatePmTasks = () => {
+      queryClient.invalidateQueries({ queryKey: ['pm-tasks'] });
+    };
+    const invalidatePmSchedules = () => {
+      queryClient.invalidateQueries({ queryKey: ['pm-schedules'] });
+      queryClient.invalidateQueries({ queryKey: ['pm-schedule'] });
+      queryClient.invalidateQueries({ queryKey: ['pm-schedule-occurrences'] });
+      queryClient.invalidateQueries({ queryKey: ['pm-occurrence'] });
+    };
 
-    const channelWo = subscribeWorkOrders(invalidate, invalidate, invalidate);
+    const channelWo = subscribeWorkOrders(invalidateWorkOrders, invalidateWorkOrders, invalidateWorkOrders);
+    const channelPm = subscribePMTasks(invalidatePmTasks, invalidatePmTasks);
+    const channelPmOcc = subscribePmOccurrences(invalidatePmSchedules, invalidatePmSchedules);
 
     let channelNotif: ReturnType<typeof subscribeNotifications> | null = null;
     if (userId) {
@@ -31,7 +42,9 @@ export function useRealtimeSubscriptions() {
 
     return () => {
       channelWo.unsubscribe();
+      channelPm.unsubscribe();
+      channelPmOcc.unsubscribe();
       channelNotif?.unsubscribe();
     };
-  }, [user?.id, authUser?.id, queryClient]);
+  }, [user, authUser, queryClient]);
 }

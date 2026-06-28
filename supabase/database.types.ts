@@ -472,6 +472,246 @@ export type Database = {
           },
         ]
       }
+      support_request_messages: {
+        Row: {
+          authorId: string | null
+          authorName: string | null
+          body: string
+          createdAt: string
+          id: string
+          kind: string
+          supportRequestId: string
+        }
+        Insert: {
+          authorId?: string | null
+          authorName?: string | null
+          body: string
+          createdAt?: string
+          id?: string
+          kind: string
+          supportRequestId: string
+        }
+        Update: {
+          authorId?: string | null
+          authorName?: string | null
+          body?: string
+          createdAt?: string
+          id?: string
+          kind?: string
+          supportRequestId?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_request_messages_authorId_fkey"
+            columns: ["authorId"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "support_request_messages_supportRequestId_fkey"
+            columns: ["supportRequestId"]
+            isOneToOne: false
+            referencedRelation: "support_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      support_requests: {
+        Row: {
+          attachments: Json
+          companyId: string | null
+          createdAt: string
+          description: string | null
+          id: string
+          metadata: Json | null
+          requesterEmail: string | null
+          requesterId: string | null
+          requesterName: string | null
+          requesterPhone: string | null
+          status: string
+          subject: string
+          submittedAt: string
+          submittedFields: Json
+          ticketNumber: string
+          type: string
+          updatedAt: string | null
+        }
+        Insert: {
+          attachments?: Json
+          companyId?: string | null
+          createdAt?: string
+          description?: string | null
+          id?: string
+          metadata?: Json | null
+          requesterEmail?: string | null
+          requesterId?: string | null
+          requesterName?: string | null
+          requesterPhone?: string | null
+          status?: string
+          subject: string
+          submittedAt?: string
+          submittedFields?: Json
+          ticketNumber: string
+          type?: string
+          updatedAt?: string | null
+        }
+        Update: {
+          attachments?: Json
+          companyId?: string | null
+          createdAt?: string
+          description?: string | null
+          id?: string
+          metadata?: Json | null
+          requesterEmail?: string | null
+          requesterId?: string | null
+          requesterName?: string | null
+          requesterPhone?: string | null
+          status?: string
+          subject?: string
+          submittedAt?: string
+          submittedFields?: Json
+          ticketNumber?: string
+          type?: string
+          updatedAt?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_requests_companyId_fkey"
+            columns: ["companyId"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "support_requests_requesterId_fkey"
+            columns: ["requesterId"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pm_schedules: {
+        Row: {
+          assignedTechnicianIds: string[] | null
+          companyId: string | null
+          createdAt: string
+          createdById: string | null
+          description: string | null
+          frequency: string
+          frequencyValue: number
+          id: string
+          metadata: Json | null
+          scheduleEndDate: string
+          scheduleStartDate: string
+          taskName: string
+          updatedAt: string
+        }
+        Insert: {
+          assignedTechnicianIds?: string[] | null
+          companyId?: string | null
+          createdAt?: string
+          createdById?: string | null
+          description?: string | null
+          frequency: string
+          frequencyValue?: number
+          id?: string
+          metadata?: Json | null
+          scheduleEndDate: string
+          scheduleStartDate: string
+          taskName: string
+          updatedAt?: string
+        }
+        Update: {
+          assignedTechnicianIds?: string[] | null
+          companyId?: string | null
+          createdAt?: string
+          createdById?: string | null
+          description?: string | null
+          frequency?: string
+          frequencyValue?: number
+          id?: string
+          metadata?: Json | null
+          scheduleEndDate?: string
+          scheduleStartDate?: string
+          taskName?: string
+          updatedAt?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pm_schedules_companyId_fkey"
+            columns: ["companyId"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pm_schedules_createdById_fkey"
+            columns: ["createdById"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pm_task_occurrences: {
+        Row: {
+          assetId: string
+          assignedTechnicianIds: string[] | null
+          completedAt: string | null
+          completionPhotoPath: string | null
+          createdAt: string
+          dueDate: string
+          id: string
+          metadata: Json | null
+          scheduleId: string
+          status: string
+          updatedAt: string
+        }
+        Insert: {
+          assetId: string
+          assignedTechnicianIds?: string[] | null
+          completedAt?: string | null
+          completionPhotoPath?: string | null
+          createdAt?: string
+          dueDate: string
+          id?: string
+          metadata?: Json | null
+          scheduleId: string
+          status?: string
+          updatedAt?: string
+        }
+        Update: {
+          assetId?: string
+          assignedTechnicianIds?: string[] | null
+          completedAt?: string | null
+          completionPhotoPath?: string | null
+          createdAt?: string
+          dueDate?: string
+          id?: string
+          metadata?: Json | null
+          scheduleId?: string
+          status?: string
+          updatedAt?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pm_task_occurrences_assetId_fkey"
+            columns: ["assetId"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pm_task_occurrences_scheduleId_fkey"
+            columns: ["scheduleId"]
+            isOneToOne: false
+            referencedRelation: "pm_schedules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pm_tasks: {
         Row: {
           assetId: string
@@ -961,11 +1201,49 @@ export type Database = {
     }
     Functions: {
       check_user_is_admin_or_manager: { Args: never; Returns: boolean }
+      create_pm_schedule_with_occurrences: {
+        Args: {
+          p_asset_ids: string[]
+          p_occurrences: Json
+          p_schedule: Json
+        }
+        Returns: Json
+      }
+      delete_user_by_id: { Args: { p_id: string }; Returns: undefined }
+      get_admin_by_email: {
+        Args: { p_email: string }
+        Returns: { is_admin: boolean; is_manager: boolean }[]
+      }
       get_current_user_company_id: { Args: never; Returns: string }
       get_my_email: { Args: never; Returns: string }
       get_my_role: { Args: never; Returns: string }
+      get_user_by_id: { Args: { p_id: string }; Returns: Database['public']['Tables']['users']['Row'][] }
+      get_users_list: { Args: Record<PropertyKey, never>; Returns: Database['public']['Tables']['users']['Row'][] }
+      insert_user: {
+        Args: {
+          p_id: string
+          p_email: string
+          p_name: string
+          p_role: string
+          p_is_active: boolean
+          p_company_id: string | null
+          p_department: string | null
+        }
+        Returns: undefined
+      }
       is_admin_or_manager: { Args: never; Returns: boolean }
       is_current_user_admin_or_manager: { Args: never; Returns: boolean }
+      update_user: {
+        Args: {
+          p_id: string
+          p_name: string
+          p_role: string
+          p_is_active: boolean
+          p_company_id: string | null
+          p_department: string | null
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never
