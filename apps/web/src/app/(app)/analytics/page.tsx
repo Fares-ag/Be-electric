@@ -7,9 +7,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { LoadingSpinner, PageHeader, QueryErrorState } from '@/components/ui/PageStates';
 import {
   computeAnalyticsMetrics,
-  type AnalyticsPmTask,
+  computePmOccurrenceStatusData,
   type AnalyticsWorkOrder,
 } from '@/lib/analytics-metrics';
+import { deriveOccurrenceStatus } from '@/lib/pm-schedule';
+import {
+  countOverduePmOccurrences,
+  fetchPmOccurrencesForAnalytics,
+} from '@/lib/queries/pm-schedules';
 import { AnalyticsCharts } from './AnalyticsCharts';
 import { Wrench, CheckCircle, Clock, AlertTriangle, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
@@ -27,24 +32,33 @@ export default function AnalyticsPage() {
     staleTime: 60 * 1000,
   });
 
-  const pmQuery = useQuery({
-    queryKey: ['analytics-pm-tasks'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('pm_tasks')
-        .select('id, status, nextDueDate');
-      if (error) throw error;
-      return (data ?? []) as AnalyticsPmTask[];
-    },
+  const pmOccAnalyticsQuery = useQuery({
+    queryKey: ['analytics-pm-occurrences'],
+    queryFn: fetchPmOccurrencesForAnalytics,
     staleTime: 60 * 1000,
   });
 
-  const isLoading = woQuery.isLoading || pmQuery.isLoading;
-  const queryError = woQuery.error ?? pmQuery.error;
+  const pmOccOverdueQuery = useQuery({
+    queryKey: ['pm-occurrences-overdue'],
+    queryFn: () => countOverduePmOccurrences(),
+    staleTime: 60 * 1000,
+  });
+
+  const isLoading = woQuery.isLoading || pmOccAnalyticsQuery.isLoading || pmOccOverdueQuery.isLoading;
+  const queryError = woQuery.error ?? pmOccAnalyticsQuery.error ?? pmOccOverdueQuery.error;
 
   const metrics = useMemo(
-    () => computeAnalyticsMetrics(woQuery.data ?? [], pmQuery.data ?? []),
-    [woQuery.data, pmQuery.data]
+    () => computeAnalyticsMetrics(woQuery.data ?? [], []),
+    [woQuery.data]
+  );
+
+  const pmStatusData = useMemo(
+    () =>
+      computePmOccurrenceStatusData(
+        pmOccAnalyticsQuery.data ?? [],
+        deriveOccurrenceStatus
+      ),
+    [pmOccAnalyticsQuery.data]
   );
 
   if (isLoading) return <LoadingSpinner label="Loading analytics" />;
@@ -56,7 +70,8 @@ export default function AnalyticsPage() {
         message={queryError instanceof Error ? queryError.message : String(queryError)}
         onRetry={() => {
           woQuery.refetch();
-          pmQuery.refetch();
+          pmOccAnalyticsQuery.refetch();
+          pmOccOverdueQuery.refetch();
         }}
       />
     );
@@ -65,15 +80,15 @@ export default function AnalyticsPage() {
   const {
     statusData,
     priorityData,
-    pmStatusData,
     totalWorkOrders,
     openCount,
     inProgressCount,
     completedCount,
     completionRate,
     mttrDays,
-    overduePmCount,
   } = metrics;
+  const overduePmCount = pmOccOverdueQuery.data ?? 0;
+  const hasPmOccurrenceData = (pmOccAnalyticsQuery.data?.length ?? 0) > 0;
 
   return (
     <div className="space-y-6">
@@ -136,7 +151,7 @@ export default function AnalyticsPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Link href="/work-orders?status=inProgress">
+        <Link href="/work-orders?status=active">
           <Card className="cursor-pointer transition-all hover:border-primary/30">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">In Progress</CardTitle>
@@ -146,11 +161,11 @@ export default function AnalyticsPage() {
             </CardContent>
           </Card>
         </Link>
-        <Link href="/pm-tasks">
+        <Link href="/pm-schedules">
           <Card className="cursor-pointer transition-all hover:border-primary/30">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                Overdue PM Tasks
+                Overdue PM Occurrences
               </CardTitle>
               <AlertTriangle className="h-4 w-4 text-amber-600" aria-hidden />
             </CardHeader>
@@ -161,10 +176,10 @@ export default function AnalyticsPage() {
         </Link>
       </div>
 
-      {totalWorkOrders === 0 && pmQuery.data?.length === 0 ? (
+      {totalWorkOrders === 0 && !hasPmOccurrenceData ? (
         <Card>
           <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            No work orders or PM tasks yet. Data will appear here as your team uses the system.
+            No work orders or PM schedule occurrences yet. Data will appear here as your team uses the system.
           </CardContent>
         </Card>
       ) : (

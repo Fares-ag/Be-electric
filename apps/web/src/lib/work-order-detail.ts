@@ -90,6 +90,31 @@ export const WORK_ORDER_STATUSES = [
   'reopened',
 ] as const;
 
+/** Admin/manager status changes allowed from each current status (includes current for display). */
+export const ADMIN_STATUS_TRANSITIONS: Record<string, readonly string[]> = {
+  open: ['open', 'assigned', 'inProgress', 'cancelled'],
+  assigned: ['assigned', 'open', 'inProgress', 'cancelled'],
+  inProgress: ['inProgress', 'assigned', 'open', 'completed', 'cancelled'],
+  completed: ['completed', 'closed', 'cancelled'],
+  closed: ['closed', 'open'],
+  cancelled: ['cancelled', 'open'],
+  reopened: ['reopened', 'assigned', 'inProgress', 'cancelled'],
+};
+
+export function allowedAdminStatuses(current: string | null | undefined): readonly string[] {
+  if (!current) return WORK_ORDER_STATUSES;
+  return ADMIN_STATUS_TRANSITIONS[current] ?? WORK_ORDER_STATUSES;
+}
+
+export function isAllowedAdminStatusTransition(
+  from: string | null | undefined,
+  to: string
+): boolean {
+  if (!from || from === to) return true;
+  const allowed = ADMIN_STATUS_TRANSITIONS[from];
+  return allowed ? allowed.includes(to) : false;
+}
+
 export const STATUSES_REQUIRING_REASON = ['completed', 'closed', 'cancelled', 'reopened'] as const;
 
 const SUPABASE_STORAGE_PUBLIC =
@@ -264,7 +289,14 @@ export function parseReopenHistory(
 }
 
 export function canRequestorReopen(
-  wo: WorkOrderDetail | null | undefined,
+  wo:
+    | {
+        requestorId?: string | null;
+        status?: string | null;
+        metadata?: Record<string, unknown> | WorkOrderMetadata | null;
+      }
+    | null
+    | undefined,
   userId: string | undefined,
   isRequestor: boolean
 ): boolean {

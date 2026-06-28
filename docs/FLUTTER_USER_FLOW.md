@@ -36,7 +36,8 @@
 
 **Important for React:**  
 - Flutter depends on **`public.users`** for role and identity. Admin-created users in the React app (with correct `id` = auth UUID and `role`) will log in correctly in Flutter.  
-- User lookup uses RPCs: `get_user_by_email`, `get_user_by_id`, `get_users_list` (and `insert_user` / `update_user` / `delete_user_by_id` for writes). Flutter does not read `public.users` via direct table SELECT.
+- User lookup uses RPCs: `get_user_by_email`, `get_user_by_id`, `get_users_list` (and `insert_user` / `update_user` / `delete_user_by_id` for writes). Flutter does not read `public.users` via direct table SELECT.  
+- **Security (June 2026):** All user RPCs require an **authenticated JWT** (`anon` EXECUTE revoked). Call `get_user_by_email` / `get_user_by_id` only **after** `signInWithPassword`. Self-registration via `insert_user` is allowed only when `p_id = auth.uid()` and role is `requestor` or `technician`. Admin-only: `get_users_list`, `update_user`, `delete_user_by_id`.
 
 ---
 

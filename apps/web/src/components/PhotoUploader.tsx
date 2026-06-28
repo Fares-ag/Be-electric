@@ -9,6 +9,7 @@ interface PhotoUploaderProps {
   onChange: (files: File[]) => void;
   maxFiles?: number;
   maxSizeMB?: number;
+  showLabel?: boolean;
 }
 
 export function PhotoUploader({
@@ -16,6 +17,7 @@ export function PhotoUploader({
   onChange,
   maxFiles = 5,
   maxSizeMB = 2,
+  showLabel = true,
 }: PhotoUploaderProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState('');
@@ -48,9 +50,11 @@ export function PhotoUploader({
 
   return (
     <div>
-      <label className="mb-1.5 block text-sm font-medium text-foreground">
-        Photos (optional)
-      </label>
+      {showLabel && (
+        <label className="mb-1.5 block text-sm font-medium text-foreground">
+          Photos (optional)
+        </label>
+      )}
       <div className="flex flex-wrap gap-3 items-center">
         {files.map((f, i) => (
           <div

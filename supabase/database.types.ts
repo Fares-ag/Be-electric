@@ -472,108 +472,63 @@ export type Database = {
           },
         ]
       }
-      support_request_messages: {
-        Row: {
-          authorId: string | null
-          authorName: string | null
-          body: string
-          createdAt: string
-          id: string
-          kind: string
-          supportRequestId: string
-        }
-        Insert: {
-          authorId?: string | null
-          authorName?: string | null
-          body: string
-          createdAt?: string
-          id?: string
-          kind: string
-          supportRequestId: string
-        }
-        Update: {
-          authorId?: string | null
-          authorName?: string | null
-          body?: string
-          createdAt?: string
-          id?: string
-          kind?: string
-          supportRequestId?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "support_request_messages_authorId_fkey"
-            columns: ["authorId"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "support_request_messages_supportRequestId_fkey"
-            columns: ["supportRequestId"]
-            isOneToOne: false
-            referencedRelation: "support_requests"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       support_requests: {
         Row: {
+          address: string | null
           attachments: Json
+          chargerModel: string | null
+          chargerSerialNumber: string | null
           companyId: string | null
+          country: string | null
           createdAt: string
-          description: string | null
+          createdBy: string | null
+          details: string | null
           id: string
-          metadata: Json | null
-          requesterEmail: string | null
-          requesterId: string | null
-          requesterName: string | null
-          requesterPhone: string | null
+          question: string | null
+          scheduledDate: string | null
+          staffReply: string | null
           status: string
-          subject: string
-          submittedAt: string
-          submittedFields: Json
-          ticketNumber: string
+          summary: string | null
+          topic: string | null
           type: string
-          updatedAt: string | null
         }
         Insert: {
+          address?: string | null
           attachments?: Json
+          chargerModel?: string | null
+          chargerSerialNumber?: string | null
           companyId?: string | null
+          country?: string | null
           createdAt?: string
-          description?: string | null
+          createdBy?: string | null
+          details?: string | null
           id?: string
-          metadata?: Json | null
-          requesterEmail?: string | null
-          requesterId?: string | null
-          requesterName?: string | null
-          requesterPhone?: string | null
+          question?: string | null
+          scheduledDate?: string | null
+          staffReply?: string | null
           status?: string
-          subject: string
-          submittedAt?: string
-          submittedFields?: Json
-          ticketNumber: string
+          summary?: string | null
+          topic?: string | null
           type?: string
-          updatedAt?: string | null
         }
         Update: {
+          address?: string | null
           attachments?: Json
+          chargerModel?: string | null
+          chargerSerialNumber?: string | null
           companyId?: string | null
+          country?: string | null
           createdAt?: string
-          description?: string | null
+          createdBy?: string | null
+          details?: string | null
           id?: string
-          metadata?: Json | null
-          requesterEmail?: string | null
-          requesterId?: string | null
-          requesterName?: string | null
-          requesterPhone?: string | null
+          question?: string | null
+          scheduledDate?: string | null
+          staffReply?: string | null
           status?: string
-          subject?: string
-          submittedAt?: string
-          submittedFields?: Json
-          ticketNumber?: string
+          summary?: string | null
+          topic?: string | null
           type?: string
-          updatedAt?: string | null
         }
         Relationships: [
           {
@@ -584,8 +539,8 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "support_requests_requesterId_fkey"
-            columns: ["requesterId"]
+            foreignKeyName: "support_requests_createdBy_fkey"
+            columns: ["createdBy"]
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
@@ -1209,6 +1164,10 @@ export type Database = {
         }
         Returns: Json
       }
+      get_user_by_email: {
+        Args: { p_email: string }
+        Returns: Database['public']['Tables']['users']['Row'][]
+      }
       delete_user_by_id: { Args: { p_id: string }; Returns: undefined }
       get_admin_by_email: {
         Args: { p_email: string }
@@ -1244,6 +1203,7 @@ export type Database = {
         }
         Returns: undefined
       }
+      upsert_work_order: { Args: { p_row: Json }; Returns: undefined }
     }
     Enums: {
       [_ in never]: never

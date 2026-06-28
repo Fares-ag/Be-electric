@@ -24,7 +24,11 @@ const EXPORT_SELECT =
 
 export async function fetchWorkOrdersList(statusFilter?: string): Promise<WorkOrderListRow[]> {
   let q = supabase.from('work_orders').select(LIST_SELECT).order('createdAt', { ascending: false });
-  if (statusFilter) q = q.eq('status', statusFilter);
+  if (statusFilter === 'active') {
+    q = q.in('status', ['assigned', 'inProgress']);
+  } else if (statusFilter) {
+    q = q.eq('status', statusFilter);
+  }
   const { data, error } = await q;
   if (error) throw error;
   return (data ?? []) as WorkOrderListRow[];
@@ -43,7 +47,11 @@ export const WORK_ORDER_EXPORT_HEADERS = [
 
 export async function fetchWorkOrdersForExport(statusFilter?: string): Promise<Record<string, unknown>[]> {
   let q = supabase.from('work_orders').select(EXPORT_SELECT).order('createdAt', { ascending: false });
-  if (statusFilter) q = q.eq('status', statusFilter);
+  if (statusFilter === 'active') {
+    q = q.in('status', ['assigned', 'inProgress']);
+  } else if (statusFilter) {
+    q = q.eq('status', statusFilter);
+  }
   const { data, error } = await q;
   if (error) throw error;
   return (data ?? []) as Record<string, unknown>[];

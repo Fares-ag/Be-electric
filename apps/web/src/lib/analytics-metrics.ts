@@ -13,6 +13,11 @@ export type AnalyticsPmTask = {
   nextDueDate: string;
 };
 
+export type AnalyticsPmOccurrence = {
+  status: string;
+  dueDate: string;
+};
+
 export type ChartDatum = { name: string; value: number };
 
 export type AnalyticsMetrics = {
@@ -30,6 +35,23 @@ export type AnalyticsMetrics = {
 
 export function formatAnalyticsLabel(value: string): string {
   return value.replace(/([A-Z])/g, ' $1').trim();
+}
+
+/** PM schedule occurrence counts by derived status (pending / overdue / completed / cancelled). */
+export function computePmOccurrenceStatusData(
+  occurrences: AnalyticsPmOccurrence[],
+  deriveStatus: (storedStatus: string, dueDate: string, todayIso?: string) => string,
+  todayIsoDate = new Date().toISOString().slice(0, 10)
+): ChartDatum[] {
+  const counts = occurrences.reduce<Record<string, number>>((acc, row) => {
+    const derived = deriveStatus(row.status, row.dueDate, todayIsoDate);
+    acc[derived] = (acc[derived] ?? 0) + 1;
+    return acc;
+  }, {});
+  return Object.entries(counts).map(([name, value]) => ({
+    name: formatAnalyticsLabel(name),
+    value,
+  }));
 }
 
 export function computeAnalyticsMetrics(

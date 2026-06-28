@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { computeAnalyticsMetrics } from '@/lib/analytics-metrics';
+import { computeAnalyticsMetrics, computePmOccurrenceStatusData } from '@/lib/analytics-metrics';
+import { deriveOccurrenceStatus } from '@/lib/pm-schedule';
 import { manufacturerFromChargerName } from '@/lib/charger-manufacturer';
 import { rowsToCsv } from '@/lib/export-csv';
 import {
@@ -12,6 +13,7 @@ import {
   collectCompletionPhotos,
   formatMaybeIso,
   getReopenCount,
+  isAllowedAdminStatusTransition,
   metaPhotoPaths,
   parsePhotoPaths,
   parseReopenHistory,
@@ -22,6 +24,7 @@ import {
   isAdminRoute,
   isWorkOrderDetailRoute,
   redirectForUnauthorizedRoute,
+  unauthorizedRouteMessage,
 } from '@/lib/roles';
 
 describe('charger-manufacturer', () => {
@@ -80,6 +83,11 @@ describe('roles', () => {
     expect(isAdminRoute('/work-orders')).toBe(true);
     expect(isAdminRoute('/support-requests')).toBe(true);
     expect(isAdminRoute('/my-requests')).toBe(false);
+  });
+
+  it('explains unauthorized redirects for requestors', () => {
+    expect(unauthorizedRouteMessage('/users', 'requestor')).toContain('administrators');
+    expect(unauthorizedRouteMessage('/work-orders', 'requestor')).toContain('work order list');
   });
 });
 
@@ -164,6 +172,27 @@ describe('work-order-detail', () => {
     ).toBe(true);
   });
 
+  it('allows reopen for closed and cancelled work orders', () => {
+    const base = {
+      id: '1',
+      ticketNumber: 'WO-1',
+      problemDescription: 'x',
+      requestorId: 'u1',
+      priority: 'medium' as const,
+      createdAt: new Date().toISOString(),
+      metadata: { reopenCount: 0 },
+    };
+    expect(canRequestorReopen({ ...base, status: 'closed' }, 'u1', true)).toBe(true);
+    expect(canRequestorReopen({ ...base, status: 'cancelled' }, 'u1', true)).toBe(true);
+    expect(canRequestorReopen({ ...base, status: 'open' }, 'u1', true)).toBe(false);
+  });
+
+  it('blocks invalid admin status transitions', () => {
+    expect(isAllowedAdminStatusTransition('open', 'completed')).toBe(false);
+    expect(isAllowedAdminStatusTransition('inProgress', 'completed')).toBe(true);
+    expect(isAllowedAdminStatusTransition('completed', 'closed')).toBe(true);
+  });
+
   it('formats ISO timestamps for display', () => {
     expect(formatMaybeIso(null)).toBe('—');
     expect(formatMaybeIso('2024-01-15T10:00:00.000Z')).not.toBe('—');
@@ -201,6 +230,22 @@ describe('analytics-metrics', () => {
     expect(metrics.completionRate).toBe(50);
     expect(metrics.overduePmCount).toBe(1);
     expect(metrics.mttrDays).toBeGreaterThan(0);
+  });
+
+  it('derives PM occurrence status buckets for charts', () => {
+    const data = computePmOccurrenceStatusData(
+      [
+        { status: 'pending', dueDate: '2024-06-10' },
+        { status: 'pending', dueDate: '2024-05-01' },
+        { status: 'completed', dueDate: '2024-04-01' },
+      ],
+      deriveOccurrenceStatus,
+      '2024-06-01'
+    );
+    const byName = Object.fromEntries(data.map((d) => [d.name, d.value]));
+    expect(byName.pending).toBe(1);
+    expect(byName.overdue).toBe(1);
+    expect(byName.completed).toBe(1);
   });
 });
 

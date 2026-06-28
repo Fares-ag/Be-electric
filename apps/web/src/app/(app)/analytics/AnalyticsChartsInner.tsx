@@ -213,10 +213,10 @@ export function AnalyticsChartsInner({
         </div>
       </section>
 
-      {/* PM Tasks by Status */}
+      {/* PM schedule occurrences by derived status */}
       <section>
         <h2 className="font-display text-lg font-semibold text-foreground mb-4">
-          PM Tasks by Status
+          PM Schedule Occurrences by Status
         </h2>
         <Card className="overflow-hidden">
           <div className="px-4 pt-4 pb-1 border-b border-border">
@@ -260,7 +260,7 @@ export function AnalyticsChartsInner({
               </div>
             </div>
           ) : (
-            <p className="p-6 text-sm text-muted-foreground">No PM task data</p>
+            <p className="p-6 text-sm text-muted-foreground">No PM occurrence data</p>
           )}
         </Card>
       </section>

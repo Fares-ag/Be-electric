@@ -46,6 +46,47 @@ This document is the **single source of truth** for how the React admin app and 
 - **`get_my_role()`** (used by “Admins can read all work orders”) now checks **`public.admin_users` first**: if the logged-in user’s email is in `admin_users` with `is_admin` or `is_manager`, it returns `'admin'`. Otherwise it uses `public.users.role`. That way admins who were synced from auth with role `'requestor'` still get admin visibility.
 - **To fix:** Ensure the admin’s email exists in `public.admin_users` with `is_admin = true` or `is_manager = true`. Run `supabase/fix-once-and-for-all.sql` (or the same `get_my_role()` definition) in the Supabase SQL Editor so the function is deployed. Diagnostic: `supabase/diagnose-admin-work-orders.sql` (replace `YOUR_ADMIN_EMAIL` and run).
 
+### Security hardening (June 2026)
+
+- **`public.users` / `public.admin_users`**: RLS re-enabled; direct `anon` table grants revoked.
+- **User RPCs** (`get_user_by_id`, `get_user_by_email`, `get_users_list`, `insert_user`, `update_user`, `delete_user_by_id`, `get_admin_by_email`): authenticated only; self-read or admin-scoped. Flutter must call these **after** `signInWithPassword` (JWT present).
+- **`upsert_work_order`**: requires auth; non-admin callers must set `requestorId = auth.uid()`; `anon` EXECUTE revoked (migration `20260629140000`).
+- **Inventory / purchase orders**: admin/manager only. **Parts requests**: admin manage + users read/insert own rows.
+- **Work order INSERT RLS**: `requestorId` must match `auth.uid()` unless admin/manager.
+
+---
+
+## Be Electric Support (requestor + admin inbox)
+
+Requestors submit **Know How** and **Commissioning** requests from the Flutter app. Admin staff review them in **Support Inbox** (`/support-requests`).
+
+### Table: `support_requests`
+
+| Column | Notes |
+|--------|--------|
+| `type` | `knowHow` \| `commissioning` |
+| `status` | Requestor creates `submitted`; admin sets `in_progress`, `resolved`, `closed` |
+| `summary`, `topic`, `question` | Know How fields |
+| `chargerModel`, `chargerSerialNumber`, `address`, `country`, `scheduledDate`, `details` | Commissioning fields |
+| `attachments` | jsonb URL array (Storage bucket `files`, path `support_requests/{id}/{fileName}`) |
+| `createdBy` | text FK → `users.id` (not `requesterId`) |
+| `companyId` | text FK → `companies.id` |
+| `staffReply` | text — admin sets; requestor reads in mobile detail |
+
+No RPCs. No threaded `support_request_messages` table (removed; use `staffReply`).
+
+### RLS
+
+| Role | Access |
+|------|--------|
+| Requestor | INSERT/SELECT own rows (`createdBy = auth.uid()::text`) |
+| Admin/manager | Full CRUD via `get_my_role() IN ('admin','manager')` |
+
+### Admin web
+
+- List/detail at `/support-requests` — update **`staffReply`** and **`status`** only.
+- Do not use legacy columns (`ticketNumber`, `subject`, `requesterId`).
+
 ---
 
 ## Preventive maintenance (Option A — schedules + occurrences)
@@ -75,6 +116,8 @@ New PM work uses **`pm_schedules`** (template) and **`pm_task_occurrences`** (on
 - **Technician**: SELECT + UPDATE occurrences where assigned; SELECT parent schedule when assigned to any occurrence.
 
 ---
+
+## Keeping the two Cursor projects in sync
 
 Cursor does **not** support chat between workspaces. To keep context aligned:
 

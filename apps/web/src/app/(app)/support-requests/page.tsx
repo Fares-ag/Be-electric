@@ -79,7 +79,7 @@ export default function SupportRequestsPage() {
       <SearchFilterBar
         search={search}
         onSearchChange={setSearch}
-        placeholder="Search ticket, subject, requester, email..."
+        placeholder="Search summary, requester, email..."
       >
         <div className="flex w-full flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-end">
           <label className="flex min-w-[140px] flex-col gap-1 text-xs text-muted-foreground">
@@ -170,8 +170,7 @@ export default function SupportRequestsPage() {
                 <table className="table-modern">
                   <thead>
                     <tr>
-                      <th>Ticket</th>
-                      <th>Subject</th>
+                      <th>Summary</th>
                       <th>Type</th>
                       <th>Status</th>
                       <th>Requester</th>
@@ -183,16 +182,19 @@ export default function SupportRequestsPage() {
                   <tbody>
                     {paginatedItems.map((request) => (
                       <tr key={request.id}>
-                        <td className="font-medium text-foreground">{request.ticketNumber}</td>
-                        <td className="max-w-xs truncate">{request.subject}</td>
+                        <td className="max-w-xs truncate font-medium text-foreground">
+                          {request.summary ?? '—'}
+                        </td>
                         <td className="text-sm">{formatSupportLabel(request.type)}</td>
                         <td>
                           <StatusBadge status={request.status} />
                         </td>
-                        <td className="text-sm">{request.requesterName ?? request.requesterEmail ?? '—'}</td>
+                        <td className="text-sm">
+                          {request.requester?.name ?? request.requester?.email ?? '—'}
+                        </td>
                         <td className="text-sm">{request.company?.name ?? '—'}</td>
                         <td className="text-sm text-muted-foreground">
-                          {new Date(request.submittedAt).toLocaleString()}
+                          {new Date(request.createdAt).toLocaleString()}
                         </td>
                         <td>
                           <Link href={`/support-requests/${request.id}`}>

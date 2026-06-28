@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { LoadingSpinner, PageHeader, QueryErrorState } from '@/components/ui/PageStates';
 import { Wrench, AlertTriangle, Package, Activity } from 'lucide-react';
 import { parseActivityHistory, type WorkOrderActivityEntry } from '@/lib/work-order-detail';
+import { countOverduePmOccurrences, fetchRecentCompletedPmOccurrences } from '@/lib/queries/pm-schedules';
 
 type WorkOrderRow = {
   id: string;
@@ -21,7 +22,13 @@ type WorkOrderRow = {
 type FeedItem =
   | { kind: 'wo_created'; at: string; id: string; ticketNumber: string; status: string }
   | { kind: 'wo_activity'; at: string; id: string; ticketNumber: string; type: string; note?: string }
-  | { kind: 'pm_completed'; at: string; id: string; taskName: string };
+  | {
+      kind: 'pm_occ_completed';
+      at: string;
+      occurrenceId: string;
+      scheduleId: string;
+      taskName: string;
+    };
 
 export default function DashboardPage() {
   const summaryQuery = useQuery({
@@ -38,16 +45,9 @@ export default function DashboardPage() {
   });
 
   const pmQuery = useQuery({
-    queryKey: ['pm-tasks-overdue'],
+    queryKey: ['pm-occurrences-overdue'],
     staleTime: 60 * 1000,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('pm_tasks')
-        .select('id, status, nextDueDate')
-        .eq('status', 'overdue');
-      if (error) throw error;
-      return (data ?? []) as { id: string }[];
-    },
+    queryFn: () => countOverduePmOccurrences(),
   });
 
   const inventoryQuery = useQuery({
@@ -72,24 +72,12 @@ export default function DashboardPage() {
           .select('id, ticketNumber, status, createdAt, updatedAt, activityHistory')
           .order('updatedAt', { ascending: false })
           .limit(25),
-        supabase
-          .from('pm_tasks')
-          .select('id, taskName, status, lastCompletedDate')
-          .eq('status', 'completed')
-          .not('lastCompletedDate', 'is', null)
-          .order('lastCompletedDate', { ascending: false })
-          .limit(15),
+        fetchRecentCompletedPmOccurrences(15),
       ]);
       if (woRes.error) throw woRes.error;
-      if (pmRes.error) throw pmRes.error;
       return {
         workOrders: (woRes.data ?? []) as WorkOrderRow[],
-        pmTasks: (pmRes.data ?? []) as {
-          id: string;
-          taskName: string;
-          status: string;
-          lastCompletedDate: string;
-        }[],
+        pmOccurrences: pmRes,
       };
     },
   });
@@ -127,12 +115,13 @@ export default function DashboardPage() {
       }
     }
 
-    for (const pm of raw.pmTasks) {
-      if (pm.lastCompletedDate) {
+    for (const pm of raw.pmOccurrences) {
+      if (pm.completedAt) {
         items.push({
-          kind: 'pm_completed',
-          at: pm.lastCompletedDate,
-          id: pm.id,
+          kind: 'pm_occ_completed',
+          at: pm.completedAt,
+          occurrenceId: pm.id,
+          scheduleId: pm.scheduleId,
           taskName: pm.taskName,
         });
       }
@@ -149,14 +138,14 @@ export default function DashboardPage() {
   const openCount = workOrders?.filter((wo) => wo.status === 'open').length ?? 0;
   const inProgressCount =
     workOrders?.filter((wo) => wo.status === 'assigned' || wo.status === 'inProgress').length ?? 0;
-  const overdueCount = pmTasks?.length ?? 0;
+  const overdueCount = pmTasks ?? 0;
   const lowStockCount =
     inventory?.filter((i) => i.minStock != null && i.currentStock <= i.minStock).length ?? 0;
 
   const cards = [
     { label: 'Open Work Orders', value: openCount, href: '/work-orders?status=open', icon: Wrench },
-    { label: 'In Progress', value: inProgressCount, href: '/work-orders?status=inProgress', icon: Wrench },
-    { label: 'Overdue PM Tasks', value: overdueCount, href: '/pm-tasks?status=overdue', icon: AlertTriangle },
+    { label: 'In Progress', value: inProgressCount, href: '/work-orders?status=active', icon: Wrench },
+    { label: 'Overdue PM Occurrences', value: overdueCount, href: '/pm-schedules', icon: AlertTriangle },
     { label: 'Low Stock Items', value: lowStockCount, href: '/inventory', icon: Package },
   ];
 
@@ -166,8 +155,8 @@ export default function DashboardPage() {
         return `Work order #${item.ticketNumber} created`;
       case 'wo_activity':
         return `Work order #${item.ticketNumber} — ${item.type}${item.note ? `: ${item.note}` : ''}`;
-      case 'pm_completed':
-        return `PM task "${item.taskName}" completed`;
+      case 'pm_occ_completed':
+        return `PM "${item.taskName}" occurrence completed`;
       default:
         return '';
     }
@@ -178,11 +167,18 @@ export default function DashboardPage() {
       case 'wo_created':
       case 'wo_activity':
         return `/work-orders/${item.id}`;
-      case 'pm_completed':
-        return `/pm-tasks/${item.id}`;
+      case 'pm_occ_completed':
+        return `/pm-schedules/${item.scheduleId}/occurrences/${item.occurrenceId}`;
       default:
         return '#';
     }
+  }
+
+  function feedItemKey(item: FeedItem, index: number): string {
+    if (item.kind === 'pm_occ_completed') {
+      return `${item.kind}-${item.occurrenceId}-${item.at}-${index}`;
+    }
+    return `${item.kind}-${item.id}-${item.at}-${index}`;
   }
 
   if (isLoading) return <LoadingSpinner label="Loading dashboard" />;
@@ -235,7 +231,7 @@ export default function DashboardPage() {
           ) : (
             <ul className="space-y-3">
               {recentActivity.map((item, i) => (
-                <li key={`${item.kind}-${item.id}-${item.at}-${i}`}>
+                <li key={feedItemKey(item, i)}>
                   <Link
                     href={hrefFor(item)}
                     className="-mx-2 flex flex-wrap items-baseline gap-2 rounded-lg px-2 py-2 text-left transition-colors hover:bg-muted/60"

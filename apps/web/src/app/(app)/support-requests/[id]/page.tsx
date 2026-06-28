@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft } from 'lucide-react';
-import { useAuthStore } from '@/stores/auth-store';
 import { Button } from '@/components/ui/Button';
 import { StatusBadge } from '@/components/ui/Badge';
 import { LoadingSpinner, QueryErrorState } from '@/components/ui/PageStates';
@@ -15,16 +14,14 @@ import {
   SupportRequestSubmittedFieldsCard,
 } from '@/components/support-requests/SupportRequestDetailCards';
 import {
-  SupportRequestMessagesPanel,
+  SupportRequestStaffReplyPanel,
   SupportRequestStatusSelect,
 } from '@/components/support-requests/SupportRequestMessagesPanel';
 import {
   SUPPORT_REQUESTS_LIST_QUERY_KEY,
-  addSupportRequestMessage,
   fetchSupportRequestDetail,
-  fetchSupportRequestMessages,
   supportRequestDetailQueryKey,
-  supportRequestMessagesQueryKey,
+  updateSupportRequestStaffReply,
   updateSupportRequestStatus,
 } from '@/lib/queries/support-requests';
 import { formatSupportLabel, type SupportRequestStatus } from '@/lib/support-requests';
@@ -33,7 +30,6 @@ export default function SupportRequestDetailPage() {
   const params = useParams();
   const id = params.id as string;
   const queryClient = useQueryClient();
-  const user = useAuthStore((s) => s.user);
   const [statusError, setStatusError] = useState<string | null>(null);
 
   const { data: request, isLoading, error, refetch } = useQuery({
@@ -42,28 +38,13 @@ export default function SupportRequestDetailPage() {
     queryFn: () => fetchSupportRequestDetail(id),
   });
 
-  const { data: messages, isLoading: messagesLoading } = useQuery({
-    queryKey: supportRequestMessagesQueryKey(id),
-    staleTime: 30 * 1000,
-    queryFn: () => fetchSupportRequestMessages(id),
-  });
-
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: supportRequestDetailQueryKey(id) });
-    queryClient.invalidateQueries({ queryKey: supportRequestMessagesQueryKey(id) });
     queryClient.invalidateQueries({ queryKey: SUPPORT_REQUESTS_LIST_QUERY_KEY });
   };
 
   const statusMutation = useMutation({
-    mutationFn: async (status: SupportRequestStatus) => {
-      if (!user?.id || !user.name) throw new Error('Not signed in');
-      await updateSupportRequestStatus({
-        id,
-        status,
-        authorId: user.id,
-        authorName: user.name,
-      });
-    },
+    mutationFn: (status: SupportRequestStatus) => updateSupportRequestStatus({ id, status }),
     onSuccess: () => {
       setStatusError(null);
       invalidate();
@@ -71,27 +52,12 @@ export default function SupportRequestDetailPage() {
     onError: (err: Error) => setStatusError(err.message),
   });
 
-  const messageMutation = useMutation({
-    mutationFn: async ({
-      kind,
-      body,
-    }: {
-      kind: 'internal_note' | 'customer_reply';
-      body: string;
-    }) => {
-      if (!user?.id || !user.name) throw new Error('Not signed in');
-      await addSupportRequestMessage({
-        supportRequestId: id,
-        kind,
-        body,
-        authorId: user.id,
-        authorName: user.name,
-      });
-    },
+  const replyMutation = useMutation({
+    mutationFn: (staffReply: string) => updateSupportRequestStaffReply({ id, staffReply }),
     onSuccess: invalidate,
   });
 
-  if (isLoading || messagesLoading) return <LoadingSpinner label="Loading support request" />;
+  if (isLoading) return <LoadingSpinner label="Loading support request" />;
 
   if (error || !request) {
     return (
@@ -107,7 +73,7 @@ export default function SupportRequestDetailPage() {
     );
   }
 
-  const pending = statusMutation.isPending || messageMutation.isPending;
+  const pending = statusMutation.isPending || replyMutation.isPending;
 
   return (
     <div className="space-y-6">
@@ -122,13 +88,13 @@ export default function SupportRequestDetailPage() {
           </Link>
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-              {request.ticketNumber}
+              {request.summary ?? 'Support request'}
             </h1>
             <StatusBadge status={request.status} />
           </div>
-          <p className="text-lg text-foreground">{request.subject}</p>
           <p className="text-sm text-muted-foreground">
-            {formatSupportLabel(request.type)} · Submitted {new Date(request.submittedAt).toLocaleString()}
+            {formatSupportLabel(request.type)} · Submitted{' '}
+            {new Date(request.createdAt).toLocaleString()}
           </p>
         </div>
         <div className="w-full max-w-xs space-y-2">
@@ -151,11 +117,10 @@ export default function SupportRequestDetailPage() {
           <SupportRequestSubmittedFieldsCard request={request} />
           <SupportRequestAttachmentsCard attachments={request.attachments} />
         </div>
-        <SupportRequestMessagesPanel
-          messages={messages ?? []}
+        <SupportRequestStaffReplyPanel
+          staffReply={request.staffReply}
           pending={pending}
-          onAddInternalNote={(body) => messageMutation.mutateAsync({ kind: 'internal_note', body })}
-          onAddCustomerReply={(body) => messageMutation.mutateAsync({ kind: 'customer_reply', body })}
+          onSaveStaffReply={(body) => replyMutation.mutateAsync(body)}
         />
       </div>
     </div>

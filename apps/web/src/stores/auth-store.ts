@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { supabase } from '@/lib/supabase';
 import type { User } from '@beelectric/supabase';
+import { setAuthFlash } from '@/lib/auth-flash';
 
 interface AuthState {
   user: User | null;
@@ -106,6 +107,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         email: data.user.email ?? undefined,
         name: authUser.name,
       });
+      const user = get().user;
+      if (user && !user.isActive) {
+        await get().signOut();
+        return {
+          error: new Error('Your account has been deactivated. Contact your administrator.'),
+        };
+      }
     }
     return { error: null };
   },
@@ -140,6 +148,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           email: session.user.email ?? undefined,
           name: authUser.name,
         });
+        const user = get().user;
+        if (user && !user.isActive) {
+          setAuthFlash('Your account has been deactivated. Contact your administrator.');
+          await get().signOut();
+        }
       } else {
         set({ user: null, authUser: null });
       }

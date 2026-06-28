@@ -21,7 +21,15 @@ import {
 } from '@/lib/queries/work-orders';
 import { ChevronRight } from 'lucide-react';
 
-const STATUS_FILTERS = ['open', 'assigned', 'inProgress', 'completed', 'closed'] as const;
+const STATUS_FILTERS = [
+  'open',
+  'assigned',
+  'inProgress',
+  'completed',
+  'closed',
+  'cancelled',
+  'reopened',
+] as const;
 
 export default function WorkOrdersPage() {
   const searchParams = useSearchParams();
@@ -96,8 +104,13 @@ export default function WorkOrdersPage() {
         placeholder="Search ticket, description, requestor..."
       >
         <div className="flex shrink-0 flex-wrap gap-2">
+          <Link href="/work-orders">
+            <Button variant={!statusFilter ? 'primary' : 'outline'} size="sm">
+              All
+            </Button>
+          </Link>
           {STATUS_FILTERS.map((s) => (
-            <Link key={s} href={s === 'open' ? '/work-orders' : `?status=${s}`}>
+            <Link key={s} href={`/work-orders?status=${s}`}>
               <Button variant={statusFilter === s ? 'primary' : 'outline'} size="sm">
                 {s.replace(/([A-Z])/g, ' $1').trim()}
               </Button>
@@ -105,6 +118,11 @@ export default function WorkOrdersPage() {
           ))}
         </div>
       </SearchFilterBar>
+      {statusFilter === 'active' && (
+        <p className="text-sm text-muted-foreground">
+          Showing assigned and in-progress work orders.
+        </p>
+      )}
 
       <Card>
         <CardContent className="p-0">

@@ -5,8 +5,8 @@ import { RouteGuard } from '@/components/RouteGuard';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
-    <RoleBasedLayout>
-      <RouteGuard>{children}</RouteGuard>
-    </RoleBasedLayout>
+    <RouteGuard>
+      <RoleBasedLayout>{children}</RoleBasedLayout>
+    </RouteGuard>
   );
 }

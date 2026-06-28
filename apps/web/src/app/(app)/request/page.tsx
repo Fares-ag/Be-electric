@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
 import { uploadRequestPhotos } from '@/lib/storage';
+import { useFormSubmitLock } from '@/hooks/useFormSubmitLock';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { PhotoUploader } from '@/components/PhotoUploader';
@@ -33,7 +34,7 @@ export default function RequestMaintenancePage() {
   const [notes, setNotes] = useState('');
   const [photos, setPhotos] = useState<File[]>([]);
   const [error, setError] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const { submitting, runSubmit } = useFormSubmitLock();
 
   const isRequestor = user?.role === 'requestor';
   const companyId = user?.companyId ?? null;
@@ -54,7 +55,6 @@ export default function RequestMaintenancePage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (submitting) return;
     setError('');
     if (!description.trim()) {
       setError('Problem description is required');
@@ -65,61 +65,41 @@ export default function RequestMaintenancePage() {
       return;
     }
     if (!user) return;
-    setSubmitting(true);
 
-    try {
+    await runSubmit(async () => {
+      const workOrderId = crypto.randomUUID();
       const ticketNumber = `WO-${Date.now()}`;
-      const { data: wo, error: insertError } = await supabase
-        .from('work_orders')
-        .insert({
-          id: crypto.randomUUID(),
-          ticketNumber,
-          problemDescription: description,
-          requestorId: user.id,
-          requestorName: user.name,
-          status: 'open',
-          priority,
-          category: null,
-          location: location || null,
-          assetId: assetId || null,
-          notes: notes || null,
-          assignedTechnicianIds: [],
-        })
-        .select('id')
-        .single();
+      let photoPath: string | null = null;
+
+      const urls = await uploadRequestPhotos(photos, workOrderId);
+      if (urls.length > 0) {
+        photoPath = urls.length === 1 ? urls[0] : JSON.stringify(urls);
+      }
+
+      const { error: insertError } = await supabase.from('work_orders').insert({
+        id: workOrderId,
+        ticketNumber,
+        problemDescription: description,
+        requestorId: user.id,
+        requestorName: user.name,
+        companyId: companyId || null,
+        status: 'open',
+        priority,
+        category: null,
+        location: location || null,
+        assetId: assetId || null,
+        notes: notes || null,
+        photoPath,
+        assignedTechnicianIds: [],
+      });
 
       if (insertError) {
         setError(insertError.message);
         return;
       }
 
-      if (photos.length > 0 && wo?.id) {
-        try {
-          const urls = await uploadRequestPhotos(photos, wo.id);
-          if (urls.length > 0) {
-            const photoPath = urls.length === 1 ? urls[0] : JSON.stringify(urls);
-            const { error: photoUpdateErr } = await supabase
-              .from('work_orders')
-              .update({ photoPath })
-              .eq('id', wo.id);
-            if (photoUpdateErr) {
-              setError(`Work order created but failed to save photo: ${photoUpdateErr.message}`);
-              return;
-            }
-          }
-        } catch (uploadErr) {
-          setError(
-            uploadErr instanceof Error
-              ? uploadErr.message
-              : 'Work order created but photo upload failed.'
-          );
-          return;
-        }
-      }
       router.push(`/my-requests`);
-    } finally {
-      setSubmitting(false);
-    }
+    });
   }
 
   return (
@@ -199,7 +179,7 @@ export default function RequestMaintenancePage() {
               <label className="mb-1.5 block text-sm font-medium text-foreground">
                 Photos <span className="text-destructive">*</span> (at least {MIN_PHOTOS} required)
               </label>
-              <PhotoUploader files={photos} onChange={setPhotos} />
+              <PhotoUploader files={photos} onChange={setPhotos} showLabel={false} />
               {photos.length > 0 && photos.length < MIN_PHOTOS && (
                 <p className="mt-1.5 text-sm text-muted-foreground">
                   Add {MIN_PHOTOS - photos.length} more photo{MIN_PHOTOS - photos.length === 1 ? '' : 's'}.

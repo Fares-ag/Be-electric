@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useAuthStore } from '@/stores/auth-store';
+import { consumeAuthFlash } from '@/lib/auth-flash';
 import { useFormSubmitLock } from '@/hooks/useFormSubmitLock';
 import { LEGAL_SUPPORT_EMAIL, LEGAL_URLS } from '@/lib/legal-urls';
 import { cn } from '@/lib/utils';
@@ -17,6 +18,11 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const { submitting, runSubmit } = useFormSubmitLock();
   const signIn = useAuthStore((s) => s.signIn);
+
+  useEffect(() => {
+    const flash = consumeAuthFlash();
+    if (flash) setError(flash);
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

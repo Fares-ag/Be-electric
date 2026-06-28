@@ -3,43 +3,46 @@
 import { DetailCard, DetailField, DetailGrid } from '@/components/ui/DetailCard';
 import {
   formatSupportLabel,
-  parseSubmittedFields,
+  isCommissioningRequest,
+  isKnowHowRequest,
   type SupportRequestDetail,
 } from '@/lib/support-requests';
 
-function formatFieldValue(value: unknown): string {
-  if (value == null || value === '') return '—';
-  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-    return String(value);
-  }
-  return JSON.stringify(value, null, 2);
-}
-
 export function SupportRequestSubmittedFieldsCard({ request }: { request: SupportRequestDetail }) {
-  const fields = parseSubmittedFields(request.submittedFields);
-  const entries = Object.entries(fields);
-
   return (
-    <DetailCard title="Submitted fields">
-      {request.description ? (
-        <div className="mb-4 space-y-1 text-sm">
-          <p className="text-xs font-medium text-muted-foreground">Description</p>
-          <p className="whitespace-pre-wrap">{request.description}</p>
-        </div>
-      ) : null}
-      {entries.length > 0 ? (
-        <DetailGrid>
-          {entries.map(([key, value]) => (
-            <DetailField key={key} label={formatSupportLabel(key)} span={typeof value === 'object' ? 2 : 1}>
-              <span className={typeof value === 'object' ? 'whitespace-pre-wrap font-mono text-xs' : ''}>
-                {formatFieldValue(value)}
-              </span>
+    <DetailCard title="Request details">
+      <DetailGrid>
+        <DetailField label="Type">{formatSupportLabel(request.type)}</DetailField>
+        <DetailField label="Summary">{request.summary ?? '—'}</DetailField>
+
+        {isKnowHowRequest(request.type) ? (
+          <>
+            <DetailField label="Topic">{request.topic ?? '—'}</DetailField>
+            <DetailField label="Question" span={2}>
+              <span className="whitespace-pre-wrap">{request.question ?? '—'}</span>
             </DetailField>
-          ))}
-        </DetailGrid>
-      ) : !request.description ? (
-        <p className="text-sm text-muted-foreground">No additional fields were submitted.</p>
-      ) : null}
+          </>
+        ) : null}
+
+        {isCommissioningRequest(request.type) ? (
+          <>
+            <DetailField label="Charger model">{request.chargerModel ?? '—'}</DetailField>
+            <DetailField label="Serial number">{request.chargerSerialNumber ?? '—'}</DetailField>
+            <DetailField label="Address" span={2}>
+              {request.address ?? '—'}
+            </DetailField>
+            <DetailField label="Country">{request.country ?? '—'}</DetailField>
+            <DetailField label="Scheduled date">
+              {request.scheduledDate
+                ? new Date(request.scheduledDate).toLocaleString()
+                : '—'}
+            </DetailField>
+            <DetailField label="Details" span={2}>
+              <span className="whitespace-pre-wrap">{request.details ?? '—'}</span>
+            </DetailField>
+          </>
+        ) : null}
+      </DetailGrid>
     </DetailCard>
   );
 }
@@ -48,14 +51,12 @@ export function SupportRequestRequesterCard({ request }: { request: SupportReque
   return (
     <DetailCard title="Requester">
       <DetailGrid>
-        <DetailField label="Name">{request.requesterName ?? '—'}</DetailField>
-        <DetailField label="Email">{request.requesterEmail ?? '—'}</DetailField>
-        <DetailField label="Phone">{request.requesterPhone ?? '—'}</DetailField>
+        <DetailField label="Name">{request.requester?.name ?? '—'}</DetailField>
+        <DetailField label="Email">{request.requester?.email ?? '—'}</DetailField>
         <DetailField label="Company">{request.company?.name ?? '—'}</DetailField>
         <DetailField label="Submitted">
-          {new Date(request.submittedAt).toLocaleString()}
+          {new Date(request.createdAt).toLocaleString()}
         </DetailField>
-        <DetailField label="Type">{formatSupportLabel(request.type)}</DetailField>
       </DetailGrid>
     </DetailCard>
   );

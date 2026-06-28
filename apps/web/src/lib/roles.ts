@@ -87,3 +87,20 @@ export function redirectForUnauthorizedRoute(pathname: string, role: AppRole | u
   if (canAccessRoute(pathname, role)) return null;
   return defaultHomeForRole(role);
 }
+
+/** Human-readable reason shown while redirecting away from an unauthorized route. */
+export function unauthorizedRouteMessage(pathname: string, role: AppRole | undefined): string {
+  if (!role || canAccessRoute(pathname, role)) {
+    return 'Redirecting…';
+  }
+  if (isRequestorRole(role) && pathname.startsWith('/work-orders') && !isWorkOrderDetailRoute(pathname)) {
+    return 'The work order list is for administrators. Redirecting to your requests…';
+  }
+  if (isRequestorRole(role) && isAdminRoute(pathname)) {
+    return 'That page is for administrators. Redirecting to your home…';
+  }
+  if (isAdminRole(role) && isRequestorRoute(pathname)) {
+    return 'Redirecting to the admin dashboard…';
+  }
+  return 'You do not have access to this page. Redirecting…';
+}

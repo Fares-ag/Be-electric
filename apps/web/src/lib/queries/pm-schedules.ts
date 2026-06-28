@@ -225,3 +225,59 @@ export async function updatePmOccurrenceAssignees(
     .eq('id', id);
   if (error) throw error;
 }
+
+/** Count PM schedule occurrences that are past due and not completed/cancelled. */
+export async function countOverduePmOccurrences(todayIso = new Date().toISOString().slice(0, 10)): Promise<number> {
+  const { data, error } = await supabase
+    .from('pm_task_occurrences')
+    .select('status, dueDate')
+    .neq('status', 'completed')
+    .neq('status', 'cancelled');
+  if (error) throw error;
+  return (data ?? []).filter(
+    (row) => deriveOccurrenceStatus(String(row.status), String(row.dueDate), todayIso) === 'overdue'
+  ).length;
+}
+
+export type RecentPmOccurrenceCompletion = {
+  id: string;
+  scheduleId: string;
+  completedAt: string;
+  taskName: string;
+};
+
+export async function fetchRecentCompletedPmOccurrences(
+  limit = 15
+): Promise<RecentPmOccurrenceCompletion[]> {
+  const { data, error } = await supabase
+    .from('pm_task_occurrences')
+    .select('id, scheduleId, completedAt, schedule:pm_schedules(taskName)')
+    .eq('status', 'completed')
+    .not('completedAt', 'is', null)
+    .order('completedAt', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+
+  return (data ?? []).map((row) => ({
+    id: String(row.id),
+    scheduleId: String(row.scheduleId),
+    completedAt: String(row.completedAt),
+    taskName: String((row.schedule as { taskName?: string } | null)?.taskName ?? 'PM schedule'),
+  }));
+}
+
+export type PmOccurrenceAnalyticsRow = {
+  status: string;
+  dueDate: string;
+};
+
+export async function fetchPmOccurrencesForAnalytics(): Promise<PmOccurrenceAnalyticsRow[]> {
+  const { data, error } = await supabase
+    .from('pm_task_occurrences')
+    .select('status, dueDate');
+  if (error) throw error;
+  return (data ?? []).map((row) => ({
+    status: String(row.status),
+    dueDate: String(row.dueDate),
+  }));
+}

@@ -39,6 +39,7 @@ import {
   collectRequestPhotos,
   collectCompletionPhotos,
   getReopenCount,
+  isAllowedAdminStatusTransition,
   metaPhotoPaths,
   parseActivityHistory,
   parsePhotoPaths,
@@ -102,7 +103,7 @@ export default function WorkOrderDetailPage() {
   const [assignError, setAssignError] = useState<string | null>(null);
   const [pushWarning, setPushWarning] = useState<string | null>(null);
   const assignedIds = wo?.assignedTechnicianIds ?? [];
-  const { users: allUsers } = useUsersMap(!!wo);
+  const { users: allUsers } = useUsersMap(!!wo && isAdminOrManager);
   const assignedUsers = allUsers.filter((u) => assignedIds.includes(u.id));
 
   const updateAssignees = useMutation({
@@ -181,6 +182,7 @@ export default function WorkOrderDetailPage() {
   const [statusModalTarget, setStatusModalTarget] = useState<string | null>(null);
   const [statusReason, setStatusReason] = useState('');
   const [statusReasonError, setStatusReasonError] = useState<string | null>(null);
+  const [statusTransitionError, setStatusTransitionError] = useState<string | null>(null);
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({
@@ -358,6 +360,11 @@ export default function WorkOrderDetailPage() {
         canReopen={canReopen}
         statusPending={updateStatusMutation.isPending}
         onStatusChange={(val) => {
+          setStatusTransitionError(null);
+          if (!isAllowedAdminStatusTransition(wo.status, val)) {
+            setStatusTransitionError(`Cannot change status from ${wo.status} to ${val}.`);
+            return;
+          }
           if (STATUSES_REQUIRING_REASON.includes(val as typeof STATUSES_REQUIRING_REASON[number])) {
             setStatusModalTarget(val);
             setStatusReason('');
@@ -369,6 +376,11 @@ export default function WorkOrderDetailPage() {
         }}
         onReopenClick={() => setReopenOpen(true)}
       />
+      {statusTransitionError && (
+        <p className="mb-4 text-sm text-destructive" role="alert">
+          {statusTransitionError}
+        </p>
+      )}
 
       <WorkOrderStatusModal
         open={statusModalOpen}

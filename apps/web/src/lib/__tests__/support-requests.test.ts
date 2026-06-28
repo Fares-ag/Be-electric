@@ -4,7 +4,6 @@ import {
   formatSupportLabel,
   matchesSupportDateRange,
   matchesSupportSearch,
-  parseSubmittedFields,
   parseSupportAttachments,
   type SupportRequestListRow,
 } from '@/lib/support-requests';
@@ -12,37 +11,32 @@ import {
 const sampleRows: SupportRequestListRow[] = [
   {
     id: '1',
-    ticketNumber: 'SR-001',
-    type: 'technical',
-    status: 'open',
-    subject: 'Login issue',
-    requesterId: 'u1',
-    requesterName: 'Alex Requestor',
-    requesterEmail: 'alex@example.com',
+    type: 'knowHow',
+    status: 'submitted',
+    summary: 'How to reset charger',
+    createdBy: 'u1',
     companyId: 'c1',
-    submittedAt: '2024-06-15T10:00:00.000Z',
-    updatedAt: '2024-06-15T10:00:00.000Z',
+    createdAt: '2024-06-15T10:00:00.000Z',
     company: { name: 'Acme Energy' },
+    requester: { name: 'Alex Requestor', email: 'alex@example.com' },
   },
   {
     id: '2',
-    ticketNumber: 'SR-002',
-    type: 'billing',
+    type: 'commissioning',
     status: 'resolved',
-    subject: 'Invoice question',
-    requesterId: 'u2',
-    requesterName: 'Sam User',
-    requesterEmail: 'sam@example.com',
+    summary: 'Site commissioning request',
+    createdBy: 'u2',
     companyId: 'c2',
-    submittedAt: '2024-06-20T10:00:00.000Z',
-    updatedAt: '2024-06-21T10:00:00.000Z',
+    createdAt: '2024-06-20T10:00:00.000Z',
     company: { name: 'Beta Power' },
+    requester: { name: 'Sam User', email: 'sam@example.com' },
   },
 ];
 
 describe('support-requests', () => {
   it('formats labels for display', () => {
-    expect(formatSupportLabel('waiting_on_customer')).toBe('Waiting On Customer');
+    expect(formatSupportLabel('knowHow')).toBe('Know How');
+    expect(formatSupportLabel('in_progress')).toBe('In Progress');
   });
 
   it('parses attachment payloads', () => {
@@ -57,31 +51,26 @@ describe('support-requests', () => {
     ]);
   });
 
-  it('parses submitted field objects', () => {
-    expect(parseSubmittedFields({ appVersion: '1.2.3' })).toEqual({ appVersion: '1.2.3' });
-    expect(parseSubmittedFields(null)).toEqual({});
-  });
-
-  it('matches search text across ticket and requester fields', () => {
+  it('matches search text across summary and requester fields', () => {
     expect(matchesSupportSearch(sampleRows[0], 'alex')).toBe(true);
-    expect(matchesSupportSearch(sampleRows[0], 'invoice')).toBe(false);
+    expect(matchesSupportSearch(sampleRows[0], 'commissioning')).toBe(false);
   });
 
-  it('matches submitted date ranges', () => {
+  it('matches created date ranges', () => {
     expect(matchesSupportDateRange('2024-06-15T10:00:00.000Z', '2024-06-01', '2024-06-18')).toBe(true);
     expect(matchesSupportDateRange('2024-06-15T10:00:00.000Z', '2024-06-16', undefined)).toBe(false);
   });
 
   it('filters by status, company, type, and date', () => {
     const filtered = filterSupportRequests(sampleRows, {
-      status: 'open',
+      status: 'submitted',
       companyId: 'c1',
-      type: 'technical',
+      type: 'knowHow',
       dateFrom: '2024-06-01',
       dateTo: '2024-06-30',
-      search: 'login',
+      search: 'reset',
     });
     expect(filtered).toHaveLength(1);
-    expect(filtered[0]?.ticketNumber).toBe('SR-001');
+    expect(filtered[0]?.summary).toBe('How to reset charger');
   });
 });

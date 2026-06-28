@@ -177,18 +177,12 @@ export async function prefetchRoute(
         break;
       }
       case '/support-requests': {
+        const { fetchSupportRequestsList, SUPPORT_REQUESTS_LIST_QUERY_KEY } = await import(
+          '@/lib/queries/support-requests'
+        );
         await queryClient.prefetchQuery({
-          queryKey: ['support-requests'],
-          queryFn: async () => {
-            const { data, error } = await supabase
-              .from('support_requests')
-              .select(
-                'id, ticketNumber, type, status, subject, requesterId, requesterName, requesterEmail, companyId, submittedAt, updatedAt, company:companies(name)'
-              )
-              .order('submittedAt', { ascending: false });
-            if (error) throw error;
-            return data ?? [];
-          },
+          queryKey: SUPPORT_REQUESTS_LIST_QUERY_KEY,
+          queryFn: fetchSupportRequestsList,
           staleTime: 60 * 1000,
         });
         break;

@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/Card';
 import {
   isTechnicianRole,
   redirectForUnauthorizedRoute,
+  unauthorizedRouteMessage,
 } from '@/lib/roles';
 
 export function RouteGuard({ children }: { children: React.ReactNode }) {
@@ -45,8 +46,10 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
     const redirect = redirectForUnauthorizedRoute(pathname, user.role);
     if (redirect && redirect !== pathname) {
       return (
-        <div className="flex min-h-[40vh] items-center justify-center">
-          <p className="text-sm text-muted-foreground">Redirecting…</p>
+        <div className="flex min-h-[40vh] items-center justify-center px-4">
+          <p className="max-w-md text-center text-sm text-muted-foreground">
+            {unauthorizedRouteMessage(pathname, user.role)}
+          </p>
         </div>
       );
     }

@@ -1,23 +1,15 @@
 export const SUPPORT_REQUEST_STATUSES = [
-  'open',
+  'submitted',
   'in_progress',
-  'waiting_on_customer',
   'resolved',
   'closed',
 ] as const;
 
-export const SUPPORT_REQUEST_TYPES = [
-  'general',
-  'billing',
-  'technical',
-  'account',
-  'app_issue',
-  'other',
-] as const;
+/** Flutter requestor types — Know How and Commissioning only. */
+export const SUPPORT_REQUEST_TYPES = ['knowHow', 'commissioning'] as const;
 
 export type SupportRequestStatus = (typeof SUPPORT_REQUEST_STATUSES)[number];
 export type SupportRequestType = (typeof SUPPORT_REQUEST_TYPES)[number];
-export type SupportMessageKind = 'internal_note' | 'customer_reply' | 'status_change';
 
 export type SupportAttachment = {
   url: string;
@@ -28,40 +20,34 @@ export type SupportAttachment = {
 
 export type SupportRequestListRow = {
   id: string;
-  ticketNumber: string;
   type: string;
   status: string;
-  subject: string;
-  requesterId: string | null;
-  requesterName: string | null;
-  requesterEmail: string | null;
+  summary: string | null;
+  createdBy: string | null;
   companyId: string | null;
-  submittedAt: string;
-  updatedAt: string | null;
+  createdAt: string;
   company?: { name?: string | null } | null;
+  requester?: { name?: string | null; email?: string | null } | null;
 };
 
 export type SupportRequestDetail = SupportRequestListRow & {
-  description: string | null;
-  requesterPhone: string | null;
-  submittedFields: Record<string, unknown>;
+  topic: string | null;
+  question: string | null;
+  details: string | null;
+  chargerModel: string | null;
+  chargerSerialNumber: string | null;
+  address: string | null;
+  country: string | null;
+  scheduledDate: string | null;
+  staffReply: string | null;
   attachments: SupportAttachment[];
-  metadata: Record<string, unknown> | null;
-  createdAt: string;
-};
-
-export type SupportRequestMessage = {
-  id: string;
-  supportRequestId: string;
-  kind: SupportMessageKind;
-  body: string;
-  authorId: string | null;
-  authorName: string | null;
-  createdAt: string;
 };
 
 export function formatSupportLabel(value: string): string {
-  return value.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  return value
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 export function parseSupportAttachments(value: unknown): SupportAttachment[] {
@@ -83,21 +69,13 @@ export function parseSupportAttachments(value: unknown): SupportAttachment[] {
     .filter((item): item is SupportAttachment => Boolean(item?.url));
 }
 
-export function parseSubmittedFields(value: unknown): Record<string, unknown> {
-  if (value && typeof value === 'object' && !Array.isArray(value)) {
-    return value as Record<string, unknown>;
-  }
-  return {};
-}
-
 export function matchesSupportSearch(row: SupportRequestListRow, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
   return [
-    row.ticketNumber,
-    row.subject,
-    row.requesterName,
-    row.requesterEmail,
+    row.summary,
+    row.requester?.name,
+    row.requester?.email,
     row.type,
     row.status,
     row.company?.name,
@@ -107,11 +85,11 @@ export function matchesSupportSearch(row: SupportRequestListRow, query: string):
 }
 
 export function matchesSupportDateRange(
-  submittedAt: string,
+  createdAt: string,
   from?: string,
   to?: string
 ): boolean {
-  const ts = Date.parse(submittedAt);
+  const ts = Date.parse(createdAt);
   if (Number.isNaN(ts)) return true;
   if (from) {
     const fromTs = Date.parse(`${from}T00:00:00.000Z`);
@@ -139,8 +117,16 @@ export function filterSupportRequests(
     if (filters.status && row.status !== filters.status) return false;
     if (filters.companyId && row.companyId !== filters.companyId) return false;
     if (filters.type && row.type !== filters.type) return false;
-    if (!matchesSupportDateRange(row.submittedAt, filters.dateFrom, filters.dateTo)) return false;
+    if (!matchesSupportDateRange(row.createdAt, filters.dateFrom, filters.dateTo)) return false;
     if (!matchesSupportSearch(row, filters.search ?? '')) return false;
     return true;
   });
+}
+
+export function isKnowHowRequest(type: string): boolean {
+  return type === 'knowHow';
+}
+
+export function isCommissioningRequest(type: string): boolean {
+  return type === 'commissioning';
 }

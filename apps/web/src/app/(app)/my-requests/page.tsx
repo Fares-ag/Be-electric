@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/Button';
 import { StatusBadge } from '@/components/ui/Badge';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { DataTableShell, PageHeader } from '@/components/ui/PageStates';
-import { MAX_REOPEN_COUNT, getReopenCount } from '@/lib/work-order-detail';
+import { MAX_REOPEN_COUNT, canRequestorReopen, getReopenCount } from '@/lib/work-order-detail';
 import { ChevronRight } from 'lucide-react';
 
 type MyWorkOrderRow = {
@@ -120,9 +120,16 @@ export default function MyRequestsPage() {
   useEffect(() => setPage(1), [search, setPage]);
 
   function canReopen(wo: MyWorkOrderRow): boolean {
-    if (wo.status !== 'completed') return false;
-    const rawMeta = wo.metadata as Record<string, unknown> | undefined;
-    return getReopenCount(rawMeta) < MAX_REOPEN_COUNT;
+    if (!user?.id) return false;
+    return canRequestorReopen(
+      {
+        requestorId: user.id,
+        status: wo.status,
+        metadata: wo.metadata as Record<string, unknown> | null | undefined,
+      },
+      user.id,
+      true
+    );
   }
 
   return (
