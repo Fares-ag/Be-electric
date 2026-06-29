@@ -18,6 +18,8 @@ const FOCUSABLE =
 export function Modal({ open, onClose, title, children, className }: ModalProps) {
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     if (open) document.body.style.overflow = 'hidden';
@@ -31,12 +33,16 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
 
     const dialog = dialogRef.current;
     const previouslyFocused = document.activeElement as HTMLElement | null;
-    dialog?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
+    const body = dialog?.querySelector<HTMLElement>('[data-modal-body]');
+    const initialFocus =
+      body?.querySelector<HTMLElement>(FOCUSABLE) ??
+      dialog?.querySelector<HTMLElement>(FOCUSABLE);
+    initialFocus?.focus();
 
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') {
         e.preventDefault();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (e.key !== 'Tab' || !dialog) return;
@@ -62,7 +68,7 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
       document.removeEventListener('keydown', onKeyDown);
       previouslyFocused?.focus();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
@@ -71,7 +77,7 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         aria-hidden
-        onClick={onClose}
+        onClick={() => onCloseRef.current()}
       />
       <div
         ref={dialogRef}
@@ -91,7 +97,7 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
           <Button
             variant="ghost"
             size="sm"
-            onClick={onClose}
+            onClick={() => onCloseRef.current()}
             type="button"
             aria-label="Close dialog"
             className="text-muted-foreground hover:text-foreground"
@@ -99,7 +105,7 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
             ✕
           </Button>
         </div>
-        {children}
+        <div data-modal-body>{children}</div>
       </div>
     </div>
   );
