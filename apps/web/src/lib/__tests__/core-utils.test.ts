@@ -14,6 +14,8 @@ import {
   formatMaybeIso,
   getReopenCount,
   isAllowedAdminStatusTransition,
+  isActiveWorkOrderStatus,
+  isRequestorOpenStatus,
   metaPhotoPaths,
   parsePhotoPaths,
   parseReopenHistory,
@@ -68,6 +70,11 @@ describe('roles', () => {
   it('allows requestor on work order detail only', () => {
     expect(canAccessRoute('/work-orders', 'requestor')).toBe(false);
     expect(canAccessRoute('/work-orders/abc-123', 'requestor')).toBe(true);
+  });
+
+  it('allows all web roles on shared notification settings', () => {
+    expect(canAccessRoute('/notification-settings', 'admin')).toBe(true);
+    expect(canAccessRoute('/notification-settings', 'requestor')).toBe(true);
   });
 
   it('redirects unauthorized requestor to my-requests', () => {
@@ -193,6 +200,13 @@ describe('work-order-detail', () => {
     expect(isAllowedAdminStatusTransition('completed', 'closed')).toBe(true);
   });
 
+  it('treats reopened as active pipeline work', () => {
+    expect(isActiveWorkOrderStatus('reopened')).toBe(true);
+    expect(isActiveWorkOrderStatus('open')).toBe(false);
+    expect(isRequestorOpenStatus('reopened')).toBe(true);
+    expect(isRequestorOpenStatus('closed')).toBe(false);
+  });
+
   it('formats ISO timestamps for display', () => {
     expect(formatMaybeIso(null)).toBe('—');
     expect(formatMaybeIso('2024-01-15T10:00:00.000Z')).not.toBe('—');
@@ -219,17 +233,52 @@ describe('analytics-metrics', () => {
           completedAt: '2024-01-03T00:00:00.000Z',
           closedAt: null,
         },
+        {
+          id: '3',
+          status: 'reopened',
+          priority: 'medium',
+          createdAt: '2024-01-01T00:00:00.000Z',
+          completedAt: null,
+          closedAt: null,
+        },
       ],
       [{ id: 'pm1', status: 'pending', nextDueDate: '2020-01-01' }],
       '2024-06-01'
     );
 
-    expect(metrics.totalWorkOrders).toBe(2);
+    expect(metrics.totalWorkOrders).toBe(3);
     expect(metrics.openCount).toBe(1);
+    expect(metrics.inProgressCount).toBe(1);
     expect(metrics.completedCount).toBe(1);
-    expect(metrics.completionRate).toBe(50);
+    expect(metrics.completionRate).toBe(33);
     expect(metrics.overduePmCount).toBe(1);
     expect(metrics.mttrDays).toBeGreaterThan(0);
+  });
+
+  it('excludes cancelled work orders from completion rate', () => {
+    const metrics = computeAnalyticsMetrics(
+      [
+        {
+          id: '1',
+          status: 'completed',
+          priority: 'medium',
+          createdAt: '2024-01-01T00:00:00.000Z',
+          completedAt: '2024-01-03T00:00:00.000Z',
+          closedAt: null,
+        },
+        {
+          id: '2',
+          status: 'cancelled',
+          priority: 'medium',
+          createdAt: '2024-01-01T00:00:00.000Z',
+          completedAt: null,
+          closedAt: null,
+        },
+      ],
+      [],
+      '2024-06-01'
+    );
+    expect(metrics.completionRate).toBe(100);
   });
 
   it('derives PM occurrence status buckets for charts', () => {

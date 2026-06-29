@@ -65,6 +65,16 @@ export default function PMTasksPage() {
         }
       />
 
+      <Card className="border-primary/20 bg-primary/5">
+        <CardContent className="py-4 text-sm text-foreground">
+          <strong>New PM work uses PM Schedules.</strong> This list is read-only legacy data from before schedule-based
+          occurrences. Technicians on the mobile app may still complete legacy tasks until migration is finished.{' '}
+          <Link href="/pm-schedules" className="font-medium text-primary underline-offset-2 hover:underline">
+            Go to PM Schedules
+          </Link>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardContent className="p-0">
           <DataTableShell

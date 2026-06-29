@@ -352,6 +352,16 @@ export default function WorkOrderDetailPage() {
     );
   }
 
+  if (isRequestor && user?.id && wo.requestorId !== user.id) {
+    return (
+      <QueryErrorState
+        title="Access denied"
+        message="You can only view work orders you submitted."
+        onRetry={() => router.replace('/my-requests')}
+      />
+    );
+  }
+
   return (
     <div>
       <WorkOrderDetailHeader

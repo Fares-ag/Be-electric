@@ -8,6 +8,7 @@ import { SearchFilterBar } from '@/components/SearchFilterBar';
 import { usePagination } from '@/hooks/usePagination';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
+import { notificationRelatedHref } from '@/lib/notifications';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { DataTableShell, PageHeader } from '@/components/ui/PageStates';
@@ -24,13 +25,6 @@ type NotificationRow = {
   relatedType: string | null;
   createdAt: string;
 };
-
-function relatedHref(n: NotificationRow): string | null {
-  if (!n.relatedId || !n.relatedType) return null;
-  if (n.relatedType === 'work_order') return `/work-orders/${n.relatedId}`;
-  if (n.relatedType === 'parts_request') return '/parts-requests';
-  return null;
-}
 
 export default function NotificationsPage() {
   const user = useAuthStore((s) => s.user);
@@ -169,7 +163,7 @@ export default function NotificationsPage() {
               <>
                 <ul className="divide-y divide-border">
                   {paginatedItems.map((n) => {
-                    const href = relatedHref(n);
+                    const href = notificationRelatedHref(n, user?.role);
                     const content = (
                       <>
                         <p className={n.isRead ? 'text-foreground' : 'font-medium text-foreground'}>
@@ -193,7 +187,13 @@ export default function NotificationsPage() {
                       >
                         <div className="min-w-0 flex-1">
                           {href ? (
-                            <Link href={href} className="block hover:opacity-90">
+                            <Link
+                              href={href}
+                              className="block hover:opacity-90"
+                              onClick={() => {
+                                if (!n.isRead) markReadMutation.mutate(n.id);
+                              }}
+                            >
                               {content}
                             </Link>
                           ) : (

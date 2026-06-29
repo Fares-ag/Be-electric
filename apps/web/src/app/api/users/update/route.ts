@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/api/require-admin';
+import { validateUserForm } from '@/lib/users';
 
 /**
  * Updates a user in both public.users and Supabase Auth (user_metadata).
@@ -30,6 +31,18 @@ export async function POST(request: Request) {
 
   if (!id?.trim()) {
     return NextResponse.json({ error: 'User id is required' }, { status: 400 });
+  }
+
+  const validationError = validateUserForm(
+    { name, role: role ?? 'requestor', companyId },
+    'update'
+  );
+  if (validationError) {
+    return NextResponse.json({ error: validationError }, { status: 400 });
+  }
+
+  if (auth.userId === id.trim() && isActive === false) {
+    return NextResponse.json({ error: 'You cannot deactivate your own account' }, { status: 400 });
   }
 
   const supabase = createClient(

@@ -1,6 +1,8 @@
 import { supabase } from '@/lib/supabase';
 import {
   parseSupportAttachments,
+  isAllowedSupportStatusTransition,
+  formatSupportLabel,
   type SupportRequestDetail,
   type SupportRequestListRow,
   type SupportRequestStatus,
@@ -22,6 +24,19 @@ export async function fetchSupportRequestsList(): Promise<SupportRequestListRow[
     .order('createdAt', { ascending: false });
   if (error) throw error;
   return (data ?? []) as SupportRequestListRow[];
+}
+
+export async function fetchSupportRequestsForExport(): Promise<Record<string, unknown>[]> {
+  const rows = await fetchSupportRequestsList();
+  return rows.map((row) => ({
+    summary: row.summary ?? '',
+    type: row.type,
+    status: row.status,
+    requesterName: row.requester?.name ?? '',
+    requesterEmail: row.requester?.email ?? '',
+    companyName: row.company?.name ?? '',
+    createdAt: row.createdAt,
+  }));
 }
 
 export async function fetchSupportRequestDetail(id: string): Promise<SupportRequestDetail | null> {
@@ -51,7 +66,16 @@ export async function fetchSupportRequestDetail(id: string): Promise<SupportRequ
 export async function updateSupportRequestStatus(params: {
   id: string;
   status: SupportRequestStatus;
+  currentStatus?: string | null;
 }): Promise<void> {
+  if (
+    params.currentStatus &&
+    !isAllowedSupportStatusTransition(params.currentStatus, params.status)
+  ) {
+    throw new Error(
+      `Cannot change status from ${formatSupportLabel(params.currentStatus)} to ${formatSupportLabel(params.status)}.`
+    );
+  }
   const { error } = await supabase
     .from('support_requests')
     .update({ status: params.status })

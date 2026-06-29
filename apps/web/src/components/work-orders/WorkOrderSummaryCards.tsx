@@ -50,7 +50,7 @@ export function WorkOrderLocationCard({
   return (
     <DetailCard title="Where / tenant">
       <DetailGrid>
-        <DetailField label="Charger (asset)" span={2}>
+        <DetailField label="Charger" span={2}>
           {assetName}
           {assetId && (
             <span className="ml-1 text-xs text-muted-foreground">({String(assetId).slice(0, 8)}…)</span>

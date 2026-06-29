@@ -90,6 +90,20 @@ export const WORK_ORDER_STATUSES = [
   'reopened',
 ] as const;
 
+/** Work actively being handled (admin "Active" list filter). */
+export const ACTIVE_WORK_ORDER_STATUSES = ['assigned', 'inProgress', 'reopened'] as const;
+
+/** Requestor-facing open pipeline (not yet completed/closed). */
+export const REQUESTOR_OPEN_STATUSES = ['open', 'assigned', 'inProgress', 'reopened'] as const;
+
+export function isActiveWorkOrderStatus(status: string | null | undefined): boolean {
+  return status != null && (ACTIVE_WORK_ORDER_STATUSES as readonly string[]).includes(status);
+}
+
+export function isRequestorOpenStatus(status: string | null | undefined): boolean {
+  return status != null && (REQUESTOR_OPEN_STATUSES as readonly string[]).includes(status);
+}
+
 /** Admin/manager status changes allowed from each current status (includes current for display). */
 export const ADMIN_STATUS_TRANSITIONS: Record<string, readonly string[]> = {
   open: ['open', 'assigned', 'inProgress', 'cancelled'],

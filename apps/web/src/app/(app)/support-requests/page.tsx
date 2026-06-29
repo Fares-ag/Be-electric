@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronRight } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/Card';
@@ -24,8 +25,10 @@ import {
 } from '@/lib/support-requests';
 
 export default function SupportRequestsPage() {
+  const searchParams = useSearchParams();
+  const statusFromUrl = searchParams.get('status') ?? '';
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState(statusFromUrl);
   const [companyFilter, setCompanyFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [dateFrom, setDateFrom] = useState('');
@@ -45,6 +48,10 @@ export default function SupportRequestsPage() {
       return (data ?? []) as { id: string; name: string }[];
     },
   });
+
+  useEffect(() => {
+    setStatusFilter(statusFromUrl);
+  }, [statusFromUrl]);
 
   const filtered = useMemo(
     () =>
@@ -75,6 +82,30 @@ export default function SupportRequestsPage() {
         title="Support Inbox"
         description="Review and respond to support requests submitted through the mobile app."
       />
+
+      <div className="flex flex-wrap gap-2">
+        <Link
+          href="/support-requests"
+          className={`rounded-full px-3 py-1 text-sm ${
+            !statusFilter ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground hover:bg-muted/80'
+          }`}
+        >
+          All
+        </Link>
+        {SUPPORT_REQUEST_STATUSES.map((status) => (
+          <Link
+            key={status}
+            href={`/support-requests?status=${status}`}
+            className={`rounded-full px-3 py-1 text-sm ${
+              statusFilter === status
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-muted text-foreground hover:bg-muted/80'
+            }`}
+          >
+            {formatSupportLabel(status)}
+          </Link>
+        ))}
+      </div>
 
       <SearchFilterBar
         search={search}

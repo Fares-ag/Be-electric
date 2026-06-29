@@ -1,4 +1,10 @@
-const STORAGE_KEY = 'beelectric.notification-preferences.v1';
+const STORAGE_KEY_PREFIX = 'beelectric.notification-preferences.v1';
+const LEGACY_STORAGE_KEY = 'beelectric.notification-preferences.v1';
+
+function storageKey(userId?: string | null): string {
+  const id = userId?.trim();
+  return id ? `${STORAGE_KEY_PREFIX}.${id}` : LEGACY_STORAGE_KEY;
+}
 
 export type NotificationPreferences = {
   emailOnAssigned: boolean;
@@ -24,10 +30,18 @@ export function normalizeNotificationPreferences(
   };
 }
 
-export function loadNotificationPreferences(): NotificationPreferences {
+export function loadNotificationPreferences(userId?: string | null): NotificationPreferences {
   if (typeof window === 'undefined') return DEFAULT_NOTIFICATION_PREFERENCES;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const key = storageKey(userId);
+    let raw = localStorage.getItem(key);
+    if (!raw && userId?.trim()) {
+      raw = localStorage.getItem(LEGACY_STORAGE_KEY);
+      if (raw) {
+        localStorage.setItem(key, raw);
+        localStorage.removeItem(LEGACY_STORAGE_KEY);
+      }
+    }
     if (!raw) return DEFAULT_NOTIFICATION_PREFERENCES;
     return normalizeNotificationPreferences(JSON.parse(raw) as Partial<NotificationPreferences>);
   } catch {
@@ -35,7 +49,10 @@ export function loadNotificationPreferences(): NotificationPreferences {
   }
 }
 
-export function saveNotificationPreferences(prefs: NotificationPreferences): void {
+export function saveNotificationPreferences(
+  prefs: NotificationPreferences,
+  userId?: string | null
+): void {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs));
+  localStorage.setItem(storageKey(userId), JSON.stringify(prefs));
 }

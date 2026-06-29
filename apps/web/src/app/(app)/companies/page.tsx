@@ -7,6 +7,12 @@ import { supabase } from '@/lib/supabase';
 import { Pagination } from '@/components/Pagination';
 import { SearchFilterBar } from '@/components/SearchFilterBar';
 import { usePagination } from '@/hooks/usePagination';
+import { useFormSubmitLock } from '@/hooks/useFormSubmitLock';
+import {
+  companyDeleteBlockReason,
+  countRowsByCompanyId,
+  validateCompanyForm,
+} from '@/lib/companies';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Modal, ModalActions } from '@/components/ui/Modal';
@@ -32,7 +38,7 @@ export default function CompaniesPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Company | null>(null);
   const [form, setForm] = useState(emptyForm);
-  const [submitting, setSubmitting] = useState(false);
+  const { submitting, runSubmit } = useFormSubmitLock();
   const [formError, setFormError] = useState<string | null>(null);
 
   const { data: companies, isLoading, error: queryError, refetch } = useQuery({
@@ -49,15 +55,17 @@ export default function CompaniesPage() {
     queryKey: ['assets', 'charger-count-by-company'],
     staleTime: 60 * 1000,
     queryFn: async () => {
-      const { data } = await supabase
-        .from('assets')
-        .select('companyId');
-      const list = (data ?? []) as { companyId: string | null }[];
-      return list.reduce<Record<string, number>>((acc, a) => {
-        const id = a.companyId ?? '_none';
-        acc[id] = (acc[id] ?? 0) + 1;
-        return acc;
-      }, {});
+      const { data } = await supabase.from('assets').select('companyId');
+      return countRowsByCompanyId((data ?? []) as { companyId: string | null }[]);
+    },
+  });
+
+  const { data: userCountByCompany } = useQuery({
+    queryKey: ['users', 'count-by-company'],
+    staleTime: 60 * 1000,
+    queryFn: async () => {
+      const { data } = await supabase.from('users').select('companyId');
+      return countRowsByCompanyId((data ?? []) as { companyId: string | null }[]);
     },
   });
 
@@ -93,6 +101,7 @@ export default function CompaniesPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['companies'] });
+      queryClient.invalidateQueries({ queryKey: ['assets', 'charger-count-by-company'] });
       setModalOpen(false);
       setForm(emptyForm);
       setEditing(null);
@@ -116,6 +125,7 @@ export default function CompaniesPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['companies'] });
+      queryClient.invalidateQueries({ queryKey: ['assets', 'charger-count-by-company'] });
       setModalOpen(false);
       setForm(emptyForm);
       setEditing(null);
@@ -128,7 +138,10 @@ export default function CompaniesPage() {
       const { error: e } = await supabase.from('companies').delete().eq('id', id);
       if (e) throw e;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['companies'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['companies'] });
+      queryClient.invalidateQueries({ queryKey: ['assets', 'charger-count-by-company'] });
+    },
     onError: (err: Error) => setFormError(err.message),
   });
 
@@ -153,21 +166,35 @@ export default function CompaniesPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (submitting) return;
-    setFormError(null);
-    setSubmitting(true);
-    if (editing) {
-      updateMutation.mutate(
-        { ...editing, ...form },
-        { onSettled: () => setSubmitting(false) }
-      );
-    } else {
-      createMutation.mutate(form, { onSettled: () => setSubmitting(false) });
-    }
+    void runSubmit(async () => {
+      setFormError(null);
+      const validationError = validateCompanyForm({
+        name: form.name,
+        contactEmail: form.contactEmail,
+      });
+      if (validationError) {
+        setFormError(validationError);
+        return;
+      }
+      if (editing) {
+        await updateMutation.mutateAsync({ ...editing, ...form });
+      } else {
+        await createMutation.mutateAsync(form);
+      }
+    });
   };
 
   const handleDelete = (c: Company) => {
-    if (window.confirm(`Delete company "${c.name}"?`)) {
+    setFormError(null);
+    const blockReason = companyDeleteBlockReason({
+      users: userCountByCompany?.[c.id] ?? 0,
+      assets: chargerCountByCompany?.[c.id] ?? 0,
+    });
+    if (blockReason) {
+      setFormError(blockReason);
+      return;
+    }
+    if (window.confirm(`Delete company "${c.name}"? This cannot be undone.`)) {
       deleteMutation.mutate(c.id);
     }
   };
@@ -190,6 +217,11 @@ export default function CompaniesPage() {
           </>
         }
       />
+      {formError && !modalOpen ? (
+        <p className="text-sm text-destructive bg-destructive/10 p-2 rounded" role="alert">
+          {formError}
+        </p>
+      ) : null}
       <Card>
         <CardContent className="p-0">
           <DataTableShell

@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/api/require-admin';
+import { validateUserForm } from '@/lib/users';
 
 /**
  * Creates a user in Supabase Auth AND in public.users so they appear in the app
@@ -32,6 +33,19 @@ export async function POST(request: Request) {
 
   if (!email?.trim()) {
     return NextResponse.json({ error: 'Email is required' }, { status: 400 });
+  }
+
+  const validationError = validateUserForm(
+    {
+      name: name ?? email,
+      email,
+      role: role ?? 'requestor',
+      companyId,
+    },
+    'create'
+  );
+  if (validationError) {
+    return NextResponse.json({ error: validationError }, { status: 400 });
   }
 
   if (password?.trim() && password.trim().length < 6) {

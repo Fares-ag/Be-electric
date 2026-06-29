@@ -25,6 +25,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'User id is required' }, { status: 400 });
   }
 
+  if (auth.userId === id.trim()) {
+    return NextResponse.json({ error: 'You cannot delete your own account' }, { status: 400 });
+  }
+
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     serviceRoleKey,

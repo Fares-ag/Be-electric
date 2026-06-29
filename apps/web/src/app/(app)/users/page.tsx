@@ -5,8 +5,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Pagination } from '@/components/Pagination';
 import { SearchFilterBar } from '@/components/SearchFilterBar';
 import { usePagination } from '@/hooks/usePagination';
+import { useFormSubmitLock } from '@/hooks/useFormSubmitLock';
 import { supabase } from '@/lib/supabase';
 import { USERS_LIST_QUERY_KEY, fetchUsersList, type UsersListEntry } from '@/lib/queries/users';
+import { validateUserForm } from '@/lib/users';
+import { useAuthStore } from '@/stores/auth-store';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Modal, ModalActions } from '@/components/ui/Modal';
@@ -26,10 +29,11 @@ const emptyForm = {
 
 export default function UsersPage() {
   const queryClient = useQueryClient();
+  const currentUser = useAuthStore((s) => s.user);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<UserRow | null>(null);
   const [form, setForm] = useState(emptyForm);
-  const [submitting, setSubmitting] = useState(false);
+  const { submitting, runSubmit } = useFormSubmitLock();
   const [error, setError] = useState<string | null>(null);
   const [createdTempPassword, setCreatedTempPassword] = useState<string | null>(null);
   const [createdWithCustomPassword, setCreatedWithCustomPassword] = useState(false);
@@ -194,25 +198,44 @@ export default function UsersPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (submitting) return;
-    setError(null);
-    setSubmitting(true);
-    if (editing) {
-      updateMutation.mutate(
-        { ...editing, ...form },
-        { onSettled: () => setSubmitting(false) }
+    void runSubmit(async () => {
+      setError(null);
+      const validationError = validateUserForm(
+        {
+          name: form.name,
+          email: form.email,
+          role: form.role,
+          companyId: form.companyId.trim() || null,
+        },
+        editing ? 'update' : 'create'
       );
-    } else {
-      createMutation.mutate(form, { onSettled: () => setSubmitting(false) });
-    }
+      if (validationError) {
+        setError(validationError);
+        return;
+      }
+      if (editing?.id === currentUser?.id && !form.isActive) {
+        setError('You cannot deactivate your own account');
+        return;
+      }
+      if (editing) {
+        await updateMutation.mutateAsync({ ...editing, ...form });
+      } else {
+        await createMutation.mutateAsync(form);
+      }
+    });
   };
 
   const handleDelete = (u: UserRow) => {
+    if (u.id === currentUser?.id) {
+      setError('You cannot delete your own account');
+      return;
+    }
     if (window.confirm(`Remove "${u.name}"? This will delete them from Supabase Auth and the app.`)) {
       deleteMutation.mutate(u.id);
     }
   };
 
+  const isEditingSelf = editing?.id === currentUser?.id;
   const isAdd = !editing;
 
   return (
@@ -282,7 +305,12 @@ export default function UsersPage() {
                               variant="destructive"
                               size="sm"
                               onClick={() => handleDelete(u)}
-                              disabled={deleteMutation.isPending}
+                              disabled={deleteMutation.isPending || u.id === currentUser?.id}
+                              title={
+                                u.id === currentUser?.id
+                                  ? 'You cannot delete your own account'
+                                  : undefined
+                              }
                             >
                               Delete
                             </Button>
@@ -412,7 +440,9 @@ export default function UsersPage() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Company</label>
+            <label className="block text-sm font-medium text-foreground mb-1">
+              Company{form.role === 'requestor' ? ' *' : ''}
+            </label>
             <select
               value={form.companyId}
               onChange={(e) => setForm((f) => ({ ...f, companyId: e.target.value }))}
@@ -440,11 +470,15 @@ export default function UsersPage() {
               type="checkbox"
               id="isActive"
               checked={form.isActive}
+              disabled={isEditingSelf}
               onChange={(e) => setForm((f) => ({ ...f, isActive: e.target.checked }))}
-              className="rounded border-border"
+              className="rounded border-border disabled:opacity-60"
             />
             <label htmlFor="isActive" className="text-sm font-medium text-foreground">Active</label>
           </div>
+          {isEditingSelf ? (
+            <p className="text-xs text-muted-foreground">You cannot deactivate your own account.</p>
+          ) : null}
           <ModalActions>
             <Button type="button" variant="outline" onClick={() => setModalOpen(false)}>
               Cancel

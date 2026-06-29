@@ -64,6 +64,12 @@ export default function RequestMaintenancePage() {
       setError(`Please add at least ${MIN_PHOTOS} photos.`);
       return;
     }
+    if (isRequestor && !companyId) {
+      setError(
+        'Your account is not linked to a company. Contact your administrator before submitting requests.'
+      );
+      return;
+    }
     if (!user) return;
 
     await runSubmit(async () => {

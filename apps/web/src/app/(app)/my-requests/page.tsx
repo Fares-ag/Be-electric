@@ -1,11 +1,13 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { Pagination } from '@/components/Pagination';
 import { SearchFilterBar } from '@/components/SearchFilterBar';
 import { usePagination } from '@/hooks/usePagination';
+import { useFormSubmitLock } from '@/hooks/useFormSubmitLock';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
 import { Card, CardContent } from '@/components/ui/Card';
@@ -13,7 +15,12 @@ import { Button } from '@/components/ui/Button';
 import { StatusBadge } from '@/components/ui/Badge';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { DataTableShell, PageHeader } from '@/components/ui/PageStates';
-import { MAX_REOPEN_COUNT, canRequestorReopen, getReopenCount } from '@/lib/work-order-detail';
+import {
+  MAX_REOPEN_COUNT,
+  canRequestorReopen,
+  getReopenCount,
+  isRequestorOpenStatus,
+} from '@/lib/work-order-detail';
 import { ChevronRight } from 'lucide-react';
 
 type MyWorkOrderRow = {
@@ -31,6 +38,9 @@ type MyWorkOrderRow = {
 export default function MyRequestsPage() {
   const user = useAuthStore((s) => s.user);
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
+  const statusFilter = searchParams.get('status') ?? undefined;
+  const { submitting: reopenSubmitting, runSubmit: runReopenSubmit } = useFormSubmitLock();
 
   const { data: workOrders, isLoading, error: queryError, refetch } = useQuery({
     queryKey: ['my-work-orders', user?.id],
@@ -104,7 +114,14 @@ export default function MyRequestsPage() {
 
   const [search, setSearch] = useState('');
   const filtered = useMemo(() => {
-    const list = workOrders ?? [];
+    let list = workOrders ?? [];
+    if (statusFilter === 'active') {
+      list = list.filter((wo) => isRequestorOpenStatus(wo.status));
+    } else if (statusFilter === 'completed') {
+      list = list.filter((wo) => wo.status === 'completed' || wo.status === 'closed');
+    } else if (statusFilter) {
+      list = list.filter((wo) => wo.status === statusFilter);
+    }
     if (!search.trim()) return list;
     const q = search.trim().toLowerCase();
     return list.filter(
@@ -112,12 +129,12 @@ export default function MyRequestsPage() {
         String(wo.ticketNumber ?? '').toLowerCase().includes(q) ||
         String(wo.problemDescription ?? '').toLowerCase().includes(q)
     );
-  }, [workOrders, search]);
+  }, [workOrders, search, statusFilter]);
 
   const { page, setPage, pageSize, setPageSize, paginatedItems, totalItems } =
     usePagination(filtered);
 
-  useEffect(() => setPage(1), [search, setPage]);
+  useEffect(() => setPage(1), [search, statusFilter, setPage]);
 
   function canReopen(wo: MyWorkOrderRow): boolean {
     if (!user?.id) return false;
@@ -145,6 +162,35 @@ export default function MyRequestsPage() {
           />
         }
       />
+
+      <div className="flex flex-wrap gap-2">
+        <Link href="/my-requests">
+          <Button variant={!statusFilter ? 'primary' : 'outline'} size="sm">
+            All
+          </Button>
+        </Link>
+        <Link href="/my-requests?status=active">
+          <Button variant={statusFilter === 'active' ? 'primary' : 'outline'} size="sm">
+            Open
+          </Button>
+        </Link>
+        <Link href="/my-requests?status=completed">
+          <Button variant={statusFilter === 'completed' ? 'primary' : 'outline'} size="sm">
+            Completed
+          </Button>
+        </Link>
+        <Link href="/my-requests?status=reopened">
+          <Button variant={statusFilter === 'reopened' ? 'primary' : 'outline'} size="sm">
+            Reopened
+          </Button>
+        </Link>
+      </div>
+
+      {statusFilter === 'active' && (
+        <p className="text-sm text-muted-foreground">
+          Showing open, assigned, in progress, and reopened requests.
+        </p>
+      )}
 
       <Card>
         <CardContent className="p-0">
@@ -328,10 +374,14 @@ export default function MyRequestsPage() {
                   Cancel
                 </Button>
                 <Button
-                  onClick={() => reopenMutation.mutate()}
-                  disabled={reopenReason.trim().length < 10 || reopenMutation.isPending}
+                  onClick={() =>
+                    void runReopenSubmit(async () => {
+                      await reopenMutation.mutateAsync();
+                    })
+                  }
+                  disabled={reopenReason.trim().length < 10 || reopenSubmitting}
                 >
-                  {reopenMutation.isPending ? 'Reopening…' : 'Reopen'}
+                  {reopenSubmitting ? 'Reopening…' : 'Reopen'}
                 </Button>
               </ModalActions>
             </>

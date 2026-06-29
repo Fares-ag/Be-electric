@@ -130,3 +130,23 @@ export function isKnowHowRequest(type: string): boolean {
 export function isCommissioningRequest(type: string): boolean {
   return type === 'commissioning';
 }
+
+/** Admin status workflow aligned with Flutter requestor visibility. */
+export const SUPPORT_STATUS_TRANSITIONS: Record<SupportRequestStatus, readonly SupportRequestStatus[]> = {
+  submitted: ['submitted', 'in_progress', 'resolved', 'closed'],
+  in_progress: ['in_progress', 'resolved', 'closed'],
+  resolved: ['resolved', 'closed', 'in_progress'],
+  closed: ['closed', 'in_progress'],
+};
+
+export function allowedSupportStatuses(current: string | null | undefined): SupportRequestStatus[] {
+  if (!current) return [...SUPPORT_REQUEST_STATUSES];
+  const allowed = SUPPORT_STATUS_TRANSITIONS[current as SupportRequestStatus];
+  return allowed ? [...allowed] : [...SUPPORT_REQUEST_STATUSES];
+}
+
+export function isAllowedSupportStatusTransition(from: string, to: string): boolean {
+  if (from === to) return true;
+  const allowed = SUPPORT_STATUS_TRANSITIONS[from as SupportRequestStatus];
+  return allowed ? allowed.includes(to as SupportRequestStatus) : false;
+}

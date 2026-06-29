@@ -5,7 +5,6 @@ import { useAuthStore } from '@/stores/auth-store';
 import { Card } from '@/components/ui/Card';
 import { PageHeader } from '@/components/ui/PageStates';
 import { LEGAL_URLS } from '@/lib/legal-urls';
-import { isAdminRole } from '@/lib/roles';
 
 export default function SettingsPage() {
   const user = useAuthStore((s) => s.user);
@@ -36,20 +35,18 @@ export default function SettingsPage() {
         </dl>
       </Card>
 
-      {!isAdminRole(user?.role) ? (
-        <Card className="p-6">
-          <h2 className="text-base font-semibold text-foreground">Notifications</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Configure how you receive updates about your maintenance requests.
-          </p>
-          <Link
-            href="/notification-settings"
-            className="mt-4 inline-flex text-sm font-medium text-primary underline underline-offset-2 hover:text-primary-hover"
-          >
-            Open notification settings
-          </Link>
-        </Card>
-      ) : null}
+      <Card className="p-6">
+        <h2 className="text-base font-semibold text-foreground">Notifications</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Configure how you receive updates about maintenance activity.
+        </p>
+        <Link
+          href="/notification-settings"
+          className="mt-4 inline-flex text-sm font-medium text-primary underline underline-offset-2 hover:text-primary-hover"
+        >
+          Open notification settings
+        </Link>
+      </Card>
 
       <Card className="p-6">
         <h2 className="text-base font-semibold text-foreground">Legal & support</h2>

@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 type AdminCheckRow = { is_admin: boolean; is_manager: boolean };
 
 export type RequireAdminResult =
-  | { ok: true; email: string; supabaseAuth: SupabaseClient }
+  | { ok: true; email: string; userId: string; supabaseAuth: SupabaseClient }
   | { ok: false; response: NextResponse };
 
 export async function requireAdmin(request: Request): Promise<RequireAdminResult> {
@@ -28,7 +28,7 @@ export async function requireAdmin(request: Request): Promise<RequireAdminResult
     data: { user },
     error: userError,
   } = await supabaseAuth.auth.getUser();
-  if (userError || !user?.email) {
+  if (userError || !user?.email || !user.id) {
     return { ok: false, response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
   }
 
@@ -50,5 +50,5 @@ export async function requireAdmin(request: Request): Promise<RequireAdminResult
     };
   }
 
-  return { ok: true, email: user.email, supabaseAuth };
+  return { ok: true, email: user.email, userId: user.id, supabaseAuth };
 }

@@ -1,3 +1,4 @@
+import { ACTIVE_WORK_ORDER_STATUSES } from '@/lib/work-order-detail';
 import { supabase } from '@/lib/supabase';
 
 export const WORK_ORDERS_LIST_QUERY_KEY = ['work-orders'] as const;
@@ -25,7 +26,7 @@ const EXPORT_SELECT =
 export async function fetchWorkOrdersList(statusFilter?: string): Promise<WorkOrderListRow[]> {
   let q = supabase.from('work_orders').select(LIST_SELECT).order('createdAt', { ascending: false });
   if (statusFilter === 'active') {
-    q = q.in('status', ['assigned', 'inProgress']);
+    q = q.in('status', [...ACTIVE_WORK_ORDER_STATUSES]);
   } else if (statusFilter) {
     q = q.eq('status', statusFilter);
   }
@@ -48,7 +49,7 @@ export const WORK_ORDER_EXPORT_HEADERS = [
 export async function fetchWorkOrdersForExport(statusFilter?: string): Promise<Record<string, unknown>[]> {
   let q = supabase.from('work_orders').select(EXPORT_SELECT).order('createdAt', { ascending: false });
   if (statusFilter === 'active') {
-    q = q.in('status', ['assigned', 'inProgress']);
+    q = q.in('status', [...ACTIVE_WORK_ORDER_STATUSES]);
   } else if (statusFilter) {
     q = q.eq('status', statusFilter);
   }

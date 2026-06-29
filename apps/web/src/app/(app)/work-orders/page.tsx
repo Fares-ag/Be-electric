@@ -109,6 +109,11 @@ export default function WorkOrdersPage() {
               All
             </Button>
           </Link>
+          <Link href="/work-orders?status=active">
+            <Button variant={statusFilter === 'active' ? 'primary' : 'outline'} size="sm">
+              Active
+            </Button>
+          </Link>
           {STATUS_FILTERS.map((s) => (
             <Link key={s} href={`/work-orders?status=${s}`}>
               <Button variant={statusFilter === s ? 'primary' : 'outline'} size="sm">
@@ -120,7 +125,7 @@ export default function WorkOrdersPage() {
       </SearchFilterBar>
       {statusFilter === 'active' && (
         <p className="text-sm text-muted-foreground">
-          Showing assigned and in-progress work orders.
+          Showing assigned, in progress, and reopened work orders.
         </p>
       )}
 

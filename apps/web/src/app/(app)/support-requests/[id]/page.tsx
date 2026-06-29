@@ -44,7 +44,12 @@ export default function SupportRequestDetailPage() {
   };
 
   const statusMutation = useMutation({
-    mutationFn: (status: SupportRequestStatus) => updateSupportRequestStatus({ id, status }),
+    mutationFn: (status: SupportRequestStatus) =>
+      updateSupportRequestStatus({
+        id,
+        status,
+        currentStatus: request?.status,
+      }),
     onSuccess: () => {
       setStatusError(null);
       invalidate();

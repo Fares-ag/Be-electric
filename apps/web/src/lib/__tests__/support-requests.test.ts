@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  allowedSupportStatuses,
   filterSupportRequests,
   formatSupportLabel,
+  isAllowedSupportStatusTransition,
   matchesSupportDateRange,
   matchesSupportSearch,
   parseSupportAttachments,
@@ -72,5 +74,20 @@ describe('support-requests', () => {
     });
     expect(filtered).toHaveLength(1);
     expect(filtered[0]?.summary).toBe('How to reset charger');
+  });
+
+  it('limits support status options by current status', () => {
+    expect(allowedSupportStatuses('submitted')).toEqual([
+      'submitted',
+      'in_progress',
+      'resolved',
+      'closed',
+    ]);
+    expect(allowedSupportStatuses('closed')).toEqual(['closed', 'in_progress']);
+  });
+
+  it('blocks invalid support status transitions', () => {
+    expect(isAllowedSupportStatusTransition('submitted', 'in_progress')).toBe(true);
+    expect(isAllowedSupportStatusTransition('closed', 'resolved')).toBe(false);
   });
 });

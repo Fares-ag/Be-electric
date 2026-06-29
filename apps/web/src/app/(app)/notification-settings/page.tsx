@@ -37,8 +37,11 @@ export default function NotificationSettingsPage() {
   const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
-    setPrefs(loadNotificationPreferences());
-  }, []);
+    if (!user?.id) return;
+    setPrefs(loadNotificationPreferences(user.id));
+    setDirty(false);
+    setSaved(false);
+  }, [user?.id]);
 
   function updatePref(key: keyof NotificationPreferences, value: boolean) {
     setPrefs((p) => ({ ...p, [key]: value }));
@@ -48,7 +51,8 @@ export default function NotificationSettingsPage() {
 
   function handleSave(e: React.FormEvent) {
     e.preventDefault();
-    saveNotificationPreferences(prefs);
+    if (!user?.id) return;
+    saveNotificationPreferences(prefs, user.id);
     setDirty(false);
     setSaved(true);
   }

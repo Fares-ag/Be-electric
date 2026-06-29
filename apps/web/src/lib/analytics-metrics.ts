@@ -1,3 +1,5 @@
+import { ACTIVE_WORK_ORDER_STATUSES } from '@/lib/work-order-detail';
+
 export type AnalyticsWorkOrder = {
   id: string;
   status: string;
@@ -92,13 +94,14 @@ export function computeAnalyticsMetrics(
   const totalWorkOrders = workOrders.length;
   const openCount = workOrders.filter((wo) => wo.status === 'open').length;
   const inProgressCount = workOrders.filter((wo) =>
-    ['assigned', 'inProgress'].includes(wo.status)
+    (ACTIVE_WORK_ORDER_STATUSES as readonly string[]).includes(wo.status)
   ).length;
   const completedCount = workOrders.filter((wo) =>
     ['completed', 'closed'].includes(wo.status)
   ).length;
+  const nonCancelled = workOrders.filter((wo) => wo.status !== 'cancelled');
   const completionRate =
-    totalWorkOrders > 0 ? Math.round((completedCount / totalWorkOrders) * 100) : 0;
+    nonCancelled.length > 0 ? Math.round((completedCount / nonCancelled.length) * 100) : 0;
 
   const completedWithDate = workOrders.filter(
     (wo) => (wo.completedAt || wo.closedAt) && wo.createdAt

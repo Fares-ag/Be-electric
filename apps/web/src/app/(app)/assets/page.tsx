@@ -8,12 +8,14 @@ import { supabase } from '@/lib/supabase';
 import { Pagination } from '@/components/Pagination';
 import { SearchFilterBar } from '@/components/SearchFilterBar';
 import { usePagination } from '@/hooks/usePagination';
+import { useFormSubmitLock } from '@/hooks/useFormSubmitLock';
+import { ASSET_STATUSES, validateAssetForm } from '@/lib/assets';
+import { manufacturerFromChargerName } from '@/lib/charger-manufacturer';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { StatusBadge } from '@/components/ui/Badge';
 import { DataTableShell, PageHeader } from '@/components/ui/PageStates';
-import { manufacturerFromChargerName } from '@/lib/charger-manufacturer';
 
 type Asset = {
   id: string;
@@ -46,7 +48,7 @@ export default function AssetsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Asset | null>(null);
   const [form, setForm] = useState(emptyForm);
-  const [submitting, setSubmitting] = useState(false);
+  const { submitting, runSubmit } = useFormSubmitLock();
   const [formError, setFormError] = useState<string | null>(null);
 
   const { data: assets, isLoading, error: queryError, refetch } = useQuery({
@@ -115,6 +117,7 @@ export default function AssetsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['assets'] });
+      queryClient.invalidateQueries({ queryKey: ['assets', 'charger-count-by-company'] });
       setModalOpen(false);
       setForm(emptyForm);
       setEditing(null);
@@ -143,6 +146,7 @@ export default function AssetsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['assets'] });
+      queryClient.invalidateQueries({ queryKey: ['assets', 'charger-count-by-company'] });
       setModalOpen(false);
       setForm(emptyForm);
       setEditing(null);
@@ -155,13 +159,19 @@ export default function AssetsPage() {
       const { error: e } = await supabase.from('assets').delete().eq('id', id);
       if (e) throw e;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['assets'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['assets'] });
+      queryClient.invalidateQueries({ queryKey: ['assets', 'charger-count-by-company'] });
+    },
     onError: (err: Error) => setFormError(err.message),
   });
 
   const openAdd = () => {
     setEditing(null);
-    setForm(emptyForm);
+    setForm({
+      ...emptyForm,
+      companyId: companyIdFromUrl ?? '',
+    });
     setFormError(null);
     setModalOpen(true);
   };
@@ -184,17 +194,22 @@ export default function AssetsPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (submitting) return;
-    setFormError(null);
-    setSubmitting(true);
-    if (editing) {
-      updateMutation.mutate(
-        { ...editing, ...form },
-        { onSettled: () => setSubmitting(false) }
-      );
-    } else {
-      createMutation.mutate(form, { onSettled: () => setSubmitting(false) });
-    }
+    void runSubmit(async () => {
+      setFormError(null);
+      const validationError = validateAssetForm({
+        name: form.name,
+        status: form.status,
+      });
+      if (validationError) {
+        setFormError(validationError);
+        return;
+      }
+      if (editing) {
+        await updateMutation.mutateAsync({ ...editing, ...form });
+      } else {
+        await createMutation.mutateAsync(form);
+      }
+    });
   };
 
   const handleDelete = (a: Asset) => {
@@ -350,9 +365,11 @@ export default function AssetsPage() {
               onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
               className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
             >
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-              <option value="maintenance">Maintenance</option>
+              {ASSET_STATUSES.map((status) => (
+                <option key={status} value={status}>
+                  {status.charAt(0).toUpperCase() + status.slice(1)}
+                </option>
+              ))}
             </select>
           </div>
           <div>

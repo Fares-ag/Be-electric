@@ -6,8 +6,12 @@ import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { LoadingSpinner, PageHeader, QueryErrorState } from '@/components/ui/PageStates';
-import { Wrench, AlertTriangle, Package, Activity } from 'lucide-react';
-import { parseActivityHistory, type WorkOrderActivityEntry } from '@/lib/work-order-detail';
+import { Wrench, AlertTriangle, Package, Activity, LifeBuoy } from 'lucide-react';
+import {
+  ACTIVE_WORK_ORDER_STATUSES,
+  parseActivityHistory,
+  type WorkOrderActivityEntry,
+} from '@/lib/work-order-detail';
 import { countOverduePmOccurrences, fetchRecentCompletedPmOccurrences } from '@/lib/queries/pm-schedules';
 
 type WorkOrderRow = {
@@ -38,7 +42,7 @@ export default function DashboardPage() {
       const { data, error } = await supabase
         .from('work_orders')
         .select('id, status')
-        .in('status', ['open', 'assigned', 'inProgress']);
+        .in('status', ['open', ...ACTIVE_WORK_ORDER_STATUSES]);
       if (error) throw error;
       return (data ?? []) as { id: string; status: string }[];
     },
@@ -59,6 +63,19 @@ export default function DashboardPage() {
         .select('id, name, currentStock, minStock');
       if (error) throw error;
       return (data ?? []) as { currentStock: number; minStock: number | null }[];
+    },
+  });
+
+  const supportQuery = useQuery({
+    queryKey: ['support-requests-submitted-count'],
+    staleTime: 60 * 1000,
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from('support_requests')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'submitted');
+      if (error) throw error;
+      return count ?? 0;
     },
   });
 
@@ -83,9 +100,17 @@ export default function DashboardPage() {
   });
 
   const isLoading =
-    summaryQuery.isLoading || pmQuery.isLoading || inventoryQuery.isLoading || activityQuery.isLoading;
+    summaryQuery.isLoading ||
+    pmQuery.isLoading ||
+    inventoryQuery.isLoading ||
+    supportQuery.isLoading ||
+    activityQuery.isLoading;
   const queryError =
-    summaryQuery.error ?? pmQuery.error ?? inventoryQuery.error ?? activityQuery.error;
+    summaryQuery.error ??
+    pmQuery.error ??
+    inventoryQuery.error ??
+    supportQuery.error ??
+    activityQuery.error;
 
   const recentActivity = useMemo(() => {
     const items: FeedItem[] = [];
@@ -137,16 +162,25 @@ export default function DashboardPage() {
 
   const openCount = workOrders?.filter((wo) => wo.status === 'open').length ?? 0;
   const inProgressCount =
-    workOrders?.filter((wo) => wo.status === 'assigned' || wo.status === 'inProgress').length ?? 0;
+    workOrders?.filter((wo) =>
+      (ACTIVE_WORK_ORDER_STATUSES as readonly string[]).includes(wo.status)
+    ).length ?? 0;
   const overdueCount = pmTasks ?? 0;
   const lowStockCount =
     inventory?.filter((i) => i.minStock != null && i.currentStock <= i.minStock).length ?? 0;
+  const supportSubmittedCount = supportQuery.data ?? 0;
 
   const cards = [
     { label: 'Open Work Orders', value: openCount, href: '/work-orders?status=open', icon: Wrench },
     { label: 'In Progress', value: inProgressCount, href: '/work-orders?status=active', icon: Wrench },
-    { label: 'Overdue PM Occurrences', value: overdueCount, href: '/pm-schedules', icon: AlertTriangle },
-    { label: 'Low Stock Items', value: lowStockCount, href: '/inventory', icon: Package },
+    { label: 'Overdue PM Occurrences', value: overdueCount, href: '/pm-schedules?status=overdue', icon: AlertTriangle },
+    { label: 'Low Stock Items', value: lowStockCount, href: '/inventory?filter=lowStock', icon: Package },
+    {
+      label: 'Support Inbox (New)',
+      value: supportSubmittedCount,
+      href: '/support-requests?status=submitted',
+      icon: LifeBuoy,
+    },
   ];
 
   function labelFor(item: FeedItem): string {
@@ -192,6 +226,7 @@ export default function DashboardPage() {
           summaryQuery.refetch();
           pmQuery.refetch();
           inventoryQuery.refetch();
+          supportQuery.refetch();
           activityQuery.refetch();
         }}
       />
@@ -200,9 +235,13 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6 sm:space-y-8">
-      <PageHeader title="Dashboard" description="Operational overview and recent activity." />
+      <PageHeader title="Dashboard" description="Operational overview and recent activity." actions={
+        <Link href="/analytics" className="text-sm font-medium text-primary underline underline-offset-2 hover:text-primary-hover">
+          View analytics
+        </Link>
+      } />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {cards.map(({ href, label, value, icon: Icon }) => (
           <Link key={href} href={href}>
             <Card className="cursor-pointer transition-all duration-200 hover:border-primary/30">

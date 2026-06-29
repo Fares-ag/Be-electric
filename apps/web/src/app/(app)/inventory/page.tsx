@@ -1,8 +1,11 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
+import { isLowStockItem, type InventoryItemRow } from '@/lib/inventory';
 import { Pagination } from '@/components/Pagination';
 import { SearchFilterBar } from '@/components/SearchFilterBar';
 import { usePagination } from '@/hooks/usePagination';
@@ -11,17 +14,7 @@ import { Button } from '@/components/ui/Button';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { DataTableShell, PageHeader } from '@/components/ui/PageStates';
 
-type InventoryItem = {
-  id: string;
-  name: string;
-  category: string | null;
-  currentStock: number;
-  minStock: number;
-  unit: string | null;
-  sku: string | null;
-  location: string | null;
-  description: string | null;
-};
+type InventoryItem = InventoryItemRow;
 
 const emptyForm = {
   name: '',
@@ -35,6 +28,8 @@ const emptyForm = {
 };
 
 export default function InventoryPage() {
+  const searchParams = useSearchParams();
+  const stockFilter = searchParams.get('filter') ?? undefined;
   const queryClient = useQueryClient();
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<InventoryItem | null>(null);
@@ -158,13 +153,14 @@ export default function InventoryPage() {
     if (window.confirm(`Delete item "${item.name}"?`)) deleteMutation.mutate(item.id);
   };
 
-  const stock = (i: InventoryItem) => (i as Record<string, unknown>).quantity ?? i.currentStock;
-  const minS = (i: InventoryItem) => (i as Record<string, unknown>).minimumStock ?? i.minStock;
-  const lowStock = items?.filter((i) => minS(i) != null && Number(stock(i)) <= Number(minS(i))) ?? [];
+  const lowStock = items?.filter(isLowStockItem) ?? [];
 
   const [search, setSearch] = useState('');
   const filtered = useMemo(() => {
-    const list = items ?? [];
+    let list = items ?? [];
+    if (stockFilter === 'lowStock') {
+      list = list.filter(isLowStockItem);
+    }
     if (!search.trim()) return list;
     const q = search.trim().toLowerCase();
     return list.filter(
@@ -174,12 +170,12 @@ export default function InventoryPage() {
         (i.sku ?? '').toLowerCase().includes(q) ||
         (i.location ?? '').toLowerCase().includes(q)
     );
-  }, [items, search]);
+  }, [items, search, stockFilter]);
 
   const { page, setPage, pageSize, setPageSize, paginatedItems, totalItems } =
     usePagination(filtered);
 
-  useEffect(() => setPage(1), [search, setPage]);
+  useEffect(() => setPage(1), [search, stockFilter, setPage]);
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -202,6 +198,25 @@ export default function InventoryPage() {
           </>
         }
       />
+
+      <div className="flex flex-wrap gap-2">
+        <Link href="/inventory">
+          <Button variant={!stockFilter ? 'primary' : 'outline'} size="sm">
+            All items
+          </Button>
+        </Link>
+        <Link href="/inventory?filter=lowStock">
+          <Button variant={stockFilter === 'lowStock' ? 'primary' : 'outline'} size="sm">
+            Low stock
+          </Button>
+        </Link>
+      </div>
+      {stockFilter === 'lowStock' && (
+        <p className="text-sm text-muted-foreground">
+          Showing items at or below minimum stock level.
+        </p>
+      )}
+
       <Card>
         <CardContent className="p-0">
           <DataTableShell
@@ -238,9 +253,9 @@ export default function InventoryPage() {
                   </thead>
                   <tbody>
                     {paginatedItems.map((i) => {
-                      const qty = Number(stock(i));
-                      const min = minS(i) != null ? Number(minS(i)) : null;
-                      const isLow = min != null && qty <= min;
+                      const qty = i.currentStock ?? 0;
+                      const min = i.minStock;
+                      const isLow = isLowStockItem(i);
                       return (
                         <tr key={i.id}>
                           <td className="font-medium">{i.name}</td>

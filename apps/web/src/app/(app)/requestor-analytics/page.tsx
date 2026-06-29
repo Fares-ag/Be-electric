@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
+import { isRequestorOpenStatus } from '@/lib/work-order-detail';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { LoadingSpinner, PageHeader, QueryErrorState } from '@/components/ui/PageStates';
@@ -31,10 +32,7 @@ export default function RequestorAnalyticsPage() {
     const total = workOrders?.length ?? 0;
     const completed =
       workOrders?.filter((wo) => wo.status === 'completed' || wo.status === 'closed').length ?? 0;
-    const open =
-      workOrders?.filter(
-        (wo) => wo.status === 'open' || wo.status === 'assigned' || wo.status === 'inProgress'
-      ).length ?? 0;
+    const open = workOrders?.filter((wo) => isRequestorOpenStatus(wo.status)).length ?? 0;
     const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
     return { total, completed, open, completionRate };
   }, [workOrders]);
@@ -66,24 +64,30 @@ export default function RequestorAnalyticsPage() {
       />
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 md:grid-cols-4">
-        <Card className="p-0">
-          <CardContent className="p-5">
-            <p className="text-sm font-medium text-muted-foreground">Total Requests</p>
-            <p className="mt-1 text-2xl font-bold text-foreground md:text-3xl">{stats.total}</p>
-          </CardContent>
-        </Card>
-        <Card className="p-0">
-          <CardContent className="p-5">
-            <p className="text-sm font-medium text-muted-foreground">Completed</p>
-            <p className="mt-1 text-2xl font-bold text-foreground md:text-3xl">{stats.completed}</p>
-          </CardContent>
-        </Card>
-        <Card className="p-0">
-          <CardContent className="p-5">
-            <p className="text-sm font-medium text-muted-foreground">Open</p>
-            <p className="mt-1 text-2xl font-bold text-foreground md:text-3xl">{stats.open}</p>
-          </CardContent>
-        </Card>
+        <Link href="/my-requests">
+          <Card className="cursor-pointer p-0 transition-all hover:border-primary/30">
+            <CardContent className="p-5">
+              <p className="text-sm font-medium text-muted-foreground">Total Requests</p>
+              <p className="mt-1 text-2xl font-bold text-foreground md:text-3xl">{stats.total}</p>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link href="/my-requests?status=completed">
+          <Card className="cursor-pointer p-0 transition-all hover:border-primary/30">
+            <CardContent className="p-5">
+              <p className="text-sm font-medium text-muted-foreground">Completed</p>
+              <p className="mt-1 text-2xl font-bold text-foreground md:text-3xl">{stats.completed}</p>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link href="/my-requests?status=active">
+          <Card className="cursor-pointer p-0 transition-all hover:border-primary/30">
+            <CardContent className="p-5">
+              <p className="text-sm font-medium text-muted-foreground">Open</p>
+              <p className="mt-1 text-2xl font-bold text-foreground md:text-3xl">{stats.open}</p>
+            </CardContent>
+          </Card>
+        </Link>
         <Card className="p-0">
           <CardContent className="p-5">
             <p className="text-sm font-medium text-muted-foreground">Completion rate</p>

@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react';
 import { DetailCard } from '@/components/ui/DetailCard';
 import { Button } from '@/components/ui/Button';
-import { SUPPORT_REQUEST_STATUSES, formatSupportLabel } from '@/lib/support-requests';
-
+import { useFormSubmitLock } from '@/hooks/useFormSubmitLock';
+import { formatSupportLabel, allowedSupportStatuses } from '@/lib/support-requests';
 type Props = {
   staffReply: string | null;
   pending: boolean;
@@ -18,22 +18,25 @@ export function SupportRequestStaffReplyPanel({
 }: Props) {
   const [reply, setReply] = useState(staffReply ?? '');
   const [error, setError] = useState<string | null>(null);
+  const { submitting, runSubmit } = useFormSubmitLock();
 
   useEffect(() => {
     setReply(staffReply ?? '');
   }, [staffReply]);
 
   async function submit() {
-    setError(null);
-    if (reply.trim().length < 2) {
-      setError('Please enter at least 2 characters.');
-      return;
-    }
-    try {
-      await onSaveStaffReply(reply.trim());
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to save staff reply');
-    }
+    await runSubmit(async () => {
+      setError(null);
+      if (reply.trim().length < 2) {
+        setError('Please enter at least 2 characters.');
+        return;
+      }
+      try {
+        await onSaveStaffReply(reply.trim());
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Failed to save staff reply');
+      }
+    });
   }
 
   return (
@@ -61,8 +64,8 @@ export function SupportRequestStaffReplyPanel({
         </p>
       ) : null}
       <div className="mt-3">
-        <Button type="button" disabled={pending} onClick={() => void submit()}>
-          Save staff reply
+        <Button type="button" disabled={pending || submitting} onClick={() => void submit()}>
+          {submitting ? 'Saving…' : 'Save staff reply'}
         </Button>
       </div>
     </DetailCard>
@@ -78,6 +81,8 @@ export function SupportRequestStatusSelect({
   pending: boolean;
   onChange: (status: string) => void;
 }) {
+  const statusOptions = allowedSupportStatuses(status);
+
   return (
     <label className="flex flex-col gap-1 text-sm">
       <span className="font-medium text-foreground">Status</span>
@@ -87,7 +92,7 @@ export function SupportRequestStatusSelect({
         onChange={(e) => onChange(e.target.value)}
         className="rounded-lg border border-border bg-background px-3 py-2 text-sm"
       >
-        {SUPPORT_REQUEST_STATUSES.map((value) => (
+        {statusOptions.map((value) => (
           <option key={value} value={value}>
             {formatSupportLabel(value)}
           </option>

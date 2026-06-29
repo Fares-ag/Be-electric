@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -25,6 +25,7 @@ import {
 
 export default function PmScheduleDetailPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const scheduleId = params.id as string;
   const [assetFilter, setAssetFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -70,6 +71,12 @@ export default function PmScheduleDetailPage() {
     usePagination(filtered);
 
   useEffect(() => setPage(1), [assetFilter, statusFilter, dateFrom, dateTo, setPage]);
+
+  useEffect(() => {
+    if (searchParams.get('status') === 'overdue') {
+      setStatusFilter('overdue');
+    }
+  }, [searchParams]);
 
   if (isLoading) return <LoadingSpinner label="Loading PM schedule" />;
 

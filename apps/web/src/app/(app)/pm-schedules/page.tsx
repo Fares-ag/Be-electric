@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/Card';
@@ -13,6 +13,7 @@ import { Pagination } from '@/components/Pagination';
 import { SearchFilterBar } from '@/components/SearchFilterBar';
 import { DataTableShell, PageHeader } from '@/components/ui/PageStates';
 import { usePagination } from '@/hooks/usePagination';
+import { useFormSubmitLock } from '@/hooks/useFormSubmitLock';
 import { useUsersMap } from '@/hooks/useUsersMap';
 import { useAuthStore } from '@/stores/auth-store';
 import { supabase } from '@/lib/supabase';
@@ -54,6 +55,8 @@ const emptyWizard = {
 
 export default function PmSchedulesPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const statusFilter = searchParams.get('status') ?? undefined;
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const [search, setSearch] = useState('');
@@ -61,6 +64,7 @@ export default function PmSchedulesPage() {
   const [wizardStep, setWizardStep] = useState(0);
   const [form, setForm] = useState(emptyWizard);
   const [formError, setFormError] = useState<string | null>(null);
+  const { submitting: wizardSubmitting, runSubmit: runWizardSubmit } = useFormSubmitLock();
 
   const { data: schedules, isLoading, error, refetch } = useQuery({
     queryKey: PM_SCHEDULES_LIST_QUERY_KEY,
@@ -147,7 +151,10 @@ export default function PmSchedulesPage() {
   });
 
   const filtered = useMemo(() => {
-    const list = schedules ?? [];
+    let list = schedules ?? [];
+    if (statusFilter === 'overdue') {
+      list = list.filter((s) => (s.overdueCount ?? 0) > 0);
+    }
     if (!search.trim()) return list;
     const q = search.trim().toLowerCase();
     return list.filter(
@@ -156,12 +163,12 @@ export default function PmSchedulesPage() {
         (s.company?.name ?? '').toLowerCase().includes(q) ||
         s.frequency.toLowerCase().includes(q)
     );
-  }, [schedules, search]);
+  }, [schedules, search, statusFilter]);
 
   const { page, setPage, pageSize, setPageSize, paginatedItems, totalItems } =
     usePagination(filtered);
 
-  useEffect(() => setPage(1), [search, setPage]);
+  useEffect(() => setPage(1), [search, statusFilter, setPage]);
 
   const toggleAsset = (assetId: string) => {
     setForm((f) => ({
@@ -259,6 +266,24 @@ export default function PmSchedulesPage() {
         .
       </p>
 
+      <div className="flex flex-wrap gap-2">
+        <Link href="/pm-schedules">
+          <Button variant={!statusFilter ? 'primary' : 'outline'} size="sm">
+            All schedules
+          </Button>
+        </Link>
+        <Link href="/pm-schedules?status=overdue">
+          <Button variant={statusFilter === 'overdue' ? 'primary' : 'outline'} size="sm">
+            Has overdue
+          </Button>
+        </Link>
+      </div>
+      {statusFilter === 'overdue' && (
+        <p className="text-sm text-muted-foreground">
+          Showing schedules with at least one overdue occurrence. Open a schedule to complete individual due dates.
+        </p>
+      )}
+
       <Card>
         <CardContent className="p-0">
           <DataTableShell
@@ -284,6 +309,7 @@ export default function PmSchedulesPage() {
                       <th>Window</th>
                       <th>Company</th>
                       <th>Occurrences</th>
+                      <th>Overdue</th>
                       <th>Next due</th>
                       <th className="w-12" />
                     </tr>
@@ -300,12 +326,23 @@ export default function PmSchedulesPage() {
                         <td className="text-sm">{schedule.company?.name ?? '—'}</td>
                         <td className="text-sm">{schedule.occurrenceCount ?? 0}</td>
                         <td className="text-sm">
+                          {(schedule.overdueCount ?? 0) > 0 ? (
+                            <span className="font-medium text-amber-700">{schedule.overdueCount}</span>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                        <td className="text-sm">
                           {schedule.nextDueDate
                             ? new Date(schedule.nextDueDate).toLocaleDateString()
                             : '—'}
                         </td>
                         <td>
-                          <Link href={`/pm-schedules/${schedule.id}`}>
+                          <Link
+                            href={`/pm-schedules/${schedule.id}${
+                              (schedule.overdueCount ?? 0) > 0 ? '?status=overdue' : ''
+                            }`}
+                          >
                             <Button variant="ghost" size="sm" className="gap-1">
                               View
                               <ChevronRight className="h-4 w-4" />
@@ -598,17 +635,19 @@ export default function PmSchedulesPage() {
           ) : (
             <Button
               type="button"
-              disabled={createMutation.isPending}
+              disabled={wizardSubmitting || createMutation.isPending}
               onClick={() => {
-                const err = validateStep(4);
-                if (err) {
-                  setFormError(err);
-                  return;
-                }
-                createMutation.mutate();
+                void runWizardSubmit(async () => {
+                  const err = validateStep(4);
+                  if (err) {
+                    setFormError(err);
+                    return;
+                  }
+                  await createMutation.mutateAsync();
+                });
               }}
             >
-              {createMutation.isPending ? 'Creating…' : 'Confirm & create'}
+              {wizardSubmitting || createMutation.isPending ? 'Creating…' : 'Confirm & create'}
             </Button>
           )}
         </ModalActions>

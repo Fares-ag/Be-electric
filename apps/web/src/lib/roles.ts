@@ -37,11 +37,10 @@ export const REQUESTOR_ROUTE_PREFIXES = [
   '/request',
   '/my-requests',
   '/requestor-analytics',
-  '/notification-settings',
 ] as const;
 
 /** Accessible by any authenticated web role (except technician gate). */
-export const SHARED_ROUTE_PREFIXES = ['/notifications'] as const;
+export const SHARED_ROUTE_PREFIXES = ['/notifications', '/notification-settings'] as const;
 
 function matchesPrefix(pathname: string, prefixes: readonly string[]): boolean {
   return prefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`));

@@ -23,6 +23,7 @@ export type PmScheduleListRow = {
   createdAt: string;
   company?: { name?: string | null } | null;
   occurrenceCount?: number;
+  overdueCount?: number;
   nextDueDate?: string | null;
 };
 
@@ -87,12 +88,16 @@ export async function fetchPmSchedulesList(): Promise<PmScheduleListRow[]> {
   if (occError) throw occError;
 
   const counts = new Map<string, number>();
+  const overdueCounts = new Map<string, number>();
   const nextDue = new Map<string, string>();
   for (const row of occSummary ?? []) {
     const sid = row.scheduleId as string;
     counts.set(sid, (counts.get(sid) ?? 0) + 1);
     const due = row.dueDate as string;
     const status = row.status as string;
+    if (deriveOccurrenceStatus(status, due) === 'overdue') {
+      overdueCounts.set(sid, (overdueCounts.get(sid) ?? 0) + 1);
+    }
     if (status === 'completed' || status === 'cancelled') continue;
     const current = nextDue.get(sid);
     if (!current || due < current) nextDue.set(sid, due);
@@ -101,6 +106,7 @@ export async function fetchPmSchedulesList(): Promise<PmScheduleListRow[]> {
   return schedules.map((s) => ({
     ...s,
     occurrenceCount: counts.get(s.id) ?? 0,
+    overdueCount: overdueCounts.get(s.id) ?? 0,
     nextDueDate: nextDue.get(s.id) ?? null,
   }));
 }
@@ -280,4 +286,36 @@ export async function fetchPmOccurrencesForAnalytics(): Promise<PmOccurrenceAnal
     status: String(row.status),
     dueDate: String(row.dueDate),
   }));
+}
+
+const PM_OCCURRENCE_EXPORT_SELECT =
+  'dueDate, status, completedAt, asset:assets(name), schedule:pm_schedules(taskName, frequency, company:companies(name))';
+
+export async function fetchPmOccurrencesForExport(
+  todayIso = new Date().toISOString().slice(0, 10)
+): Promise<Record<string, unknown>[]> {
+  const { data, error } = await supabase
+    .from('pm_task_occurrences')
+    .select(PM_OCCURRENCE_EXPORT_SELECT)
+    .order('dueDate', { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map((row) => {
+    const r = row as Record<string, unknown>;
+    const schedule = r.schedule as {
+      taskName?: string;
+      company?: { name?: string | null };
+    } | null;
+    const asset = r.asset as { name?: string | null } | null;
+    const storedStatus = String(r.status ?? '');
+    const dueDate = String(r.dueDate ?? '');
+    return {
+      taskName: schedule?.taskName ?? '',
+      dueDate,
+      derivedStatus: deriveOccurrenceStatus(storedStatus, dueDate, todayIso),
+      storedStatus,
+      chargerName: asset?.name ?? '',
+      companyName: schedule?.company?.name ?? '',
+      completedAt: r.completedAt ?? '',
+    };
+  });
 }

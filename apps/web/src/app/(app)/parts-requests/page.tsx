@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Pagination } from '@/components/Pagination';
 import { SearchFilterBar } from '@/components/SearchFilterBar';
@@ -8,6 +9,7 @@ import { usePagination } from '@/hooks/usePagination';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
+import { isAdminRole } from '@/lib/roles';
 import { useUsersMap } from '@/hooks/useUsersMap';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -43,9 +45,15 @@ async function notifyPartsRequest(
   });
 }
 
+const PARTS_STATUS_FILTERS = ['pending', 'approved', 'rejected'] as const;
+
 export default function PartsRequestsPage() {
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
+  const statusFromUrl = searchParams.get('status') ?? '';
   const currentUser = useAuthStore((s) => s.user);
+  const canModerate = isAdminRole(currentUser?.role);
+  const [statusFilter, setStatusFilter] = useState(statusFromUrl);
 
   const { usersMap } = useUsersMap();
 
@@ -121,8 +129,16 @@ export default function PartsRequestsPage() {
 
   const pending = requests?.filter((r) => r.status === 'pending') ?? [];
   const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    setStatusFilter(statusFromUrl);
+  }, [statusFromUrl]);
+
   const filtered = useMemo(() => {
-    const list = requests ?? [];
+    let list = requests ?? [];
+    if (statusFilter) {
+      list = list.filter((r) => r.status === statusFilter);
+    }
     if (!search.trim()) return list;
     const q = search.trim().toLowerCase();
     return list.filter(
@@ -131,12 +147,12 @@ export default function PartsRequestsPage() {
         (usersMap.get(r.requestedBy)?.name ?? '').toLowerCase().includes(q) ||
         r.status.toLowerCase().includes(q)
     );
-  }, [requests, search, usersMap]);
+  }, [requests, search, statusFilter, usersMap]);
 
   const { page, setPage, pageSize, setPageSize, paginatedItems, totalItems } =
     usePagination(filtered);
 
-  useEffect(() => setPage(1), [search, setPage]);
+  useEffect(() => setPage(1), [search, statusFilter, setPage]);
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -156,6 +172,22 @@ export default function PartsRequestsPage() {
           </>
         }
       />
+
+      <div className="flex flex-wrap gap-2">
+        <Link href="/parts-requests">
+          <Button variant={!statusFilter ? 'primary' : 'outline'} size="sm">
+            All
+          </Button>
+        </Link>
+        {PARTS_STATUS_FILTERS.map((status) => (
+          <Link key={status} href={`/parts-requests?status=${status}`}>
+            <Button variant={statusFilter === status ? 'primary' : 'outline'} size="sm">
+              {status.charAt(0).toUpperCase() + status.slice(1)}
+            </Button>
+          </Link>
+        ))}
+      </div>
+
       <Card>
         <CardContent className="p-0">
           <DataTableShell
@@ -219,7 +251,7 @@ export default function PartsRequestsPage() {
                             <StatusBadge status={r.status} />
                           </td>
                           <td>
-                            {r.status === 'pending' && (
+                            {canModerate && r.status === 'pending' && (
                               <div className="flex gap-2">
                                 <Button
                                   size="sm"

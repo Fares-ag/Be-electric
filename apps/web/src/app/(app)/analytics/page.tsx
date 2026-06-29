@@ -18,6 +18,7 @@ import {
 import { AnalyticsCharts } from './AnalyticsCharts';
 import { Wrench, CheckCircle, Clock, AlertTriangle, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
+import { Button } from '@/components/ui/Button';
 
 export default function AnalyticsPage() {
   const woQuery = useQuery({
@@ -95,6 +96,13 @@ export default function AnalyticsPage() {
       <PageHeader
         title="Analytics"
         description="Work order and preventive maintenance performance."
+        actions={
+          <Link href="/reports">
+            <Button type="button" variant="outline" size="sm">
+              Export reports
+            </Button>
+          </Link>
+        }
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -132,7 +140,7 @@ export default function AnalyticsPage() {
           <CardContent>
             <p className="font-display text-2xl font-bold text-foreground">{completionRate}%</p>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              {completedCount} of {totalWorkOrders} closed/completed
+              {completedCount} completed or closed · rate excludes cancelled
             </p>
           </CardContent>
         </Card>
@@ -154,14 +162,16 @@ export default function AnalyticsPage() {
         <Link href="/work-orders?status=active">
           <Card className="cursor-pointer transition-all hover:border-primary/30">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">In Progress</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Active Work Orders
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <p className="font-display text-2xl font-bold text-foreground">{inProgressCount}</p>
             </CardContent>
           </Card>
         </Link>
-        <Link href="/pm-schedules">
+        <Link href="/pm-schedules?status=overdue">
           <Card className="cursor-pointer transition-all hover:border-primary/30">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
