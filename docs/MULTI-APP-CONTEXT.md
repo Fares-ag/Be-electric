@@ -105,10 +105,12 @@ New PM work uses **`pm_schedules`** (template) and **`pm_task_occurrences`** (on
 
 1. **Query `pm_task_occurrences`** instead of `pm_tasks` for assigned work lists.
 2. **Filter**: `auth.uid()::text = ANY("assignedTechnicianIds")` (RLS enforces this).
-3. **Complete** an occurrence: `UPDATE` status to `completed`, set `completedAt`, optional `completionPhotoPath`.
-4. **Overdue**: derive client-side — `status = 'pending'` and `dueDate < today` → show as overdue (stored status stays `pending` in v1).
-5. **Read schedule context**: join `pm_schedules` on `scheduleId` for task name, description, frequency.
-6. RPC **`create_pm_schedule_with_occurrences`** is admin-only (web); mobile does not call it.
+3. **Complete** an occurrence: `UPDATE` status to `completed`, set `completedAt`, optional `completionPhotoPath`, `completionNotes`, and `completedById`.
+4. **Cancel / reschedule** (admin): set `status = 'cancelled'` with `cancelReason`, `cancelledAt`, `cancelledById`, or change `dueDate` (unique per schedule × asset × date).
+5. **Overdue**: derive client-side — `status = 'pending'` and `dueDate < today` → show as overdue (stored status stays `pending` in v1).
+6. **Upcoming**: derive client-side — not completed/cancelled and `dueDate >= today` → show as upcoming; admin **Upcoming tasks** view lists these across schedules (`/pm-schedules?view=upcoming`).
+7. **Read schedule context**: join `pm_schedules` on `scheduleId` for task name, description, frequency, optional `metadata.checklist` (string array).
+8. RPC **`create_pm_schedule_with_occurrences`** is admin-only (web); mobile does not call it.
 
 ### RLS summary
 

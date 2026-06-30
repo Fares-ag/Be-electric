@@ -22,6 +22,7 @@ export const ADMIN_ROUTE_PREFIXES = [
   '/pm-schedules',
   '/assets',
   '/users',
+  '/orphan-assignments',
   '/companies',
   '/inventory',
   '/parts-requests',

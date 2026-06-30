@@ -1,31 +1,52 @@
 import { supabase } from './supabase';
+import {
+  STORAGE_BUCKETS,
+  pmOccurrenceCompletionPath,
+  pmTaskCompletionPath,
+  requestPhotoStoragePath,
+} from './storage-config';
 
-const BUCKET = 'work-order-photos';
 const MAX_SIZE_MB = 2;
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
-export async function uploadWorkOrderPhoto(
-  file: File,
-  workOrderId: string,
-  type: 'request' | 'completion'
-): Promise<string> {
+function validateImageFile(file: File): void {
   if (file.size > MAX_SIZE_MB * 1024 * 1024) {
     throw new Error(`Image must be under ${MAX_SIZE_MB}MB`);
   }
   if (!ALLOWED_TYPES.includes(file.type)) {
     throw new Error('Only JPEG, PNG, and WebP images are allowed');
   }
-  const ext = file.name.split('.').pop() || 'jpg';
-  const path = `${workOrderId}/${type}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+}
 
-  const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
+function fileExtension(file: File): string {
+  return file.name.split('.').pop() || 'jpg';
+}
+
+async function uploadToBucket(path: string, file: File): Promise<string> {
+  const { error } = await supabase.storage.from(STORAGE_BUCKETS.primary).upload(path, file, {
     cacheControl: '3600',
     upsert: false,
   });
   if (error) throw error;
 
-  const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
+  const { data } = supabase.storage.from(STORAGE_BUCKETS.primary).getPublicUrl(path);
   return data.publicUrl;
+}
+
+export async function uploadWorkOrderPhoto(
+  file: File,
+  workOrderId: string,
+  type: 'request' | 'completion',
+  index = 0
+): Promise<string> {
+  validateImageFile(file);
+  const ext = fileExtension(file);
+  const path =
+    type === 'request'
+      ? requestPhotoStoragePath(workOrderId, index, ext)
+      : `work_orders/completion_photos/completion_${workOrderId}_${Date.now()}_${index}.${ext}`;
+
+  return uploadToBucket(path, file);
 }
 
 export async function uploadRequestPhotos(
@@ -33,8 +54,8 @@ export async function uploadRequestPhotos(
   workOrderId: string
 ): Promise<string[]> {
   const urls: string[] = [];
-  for (const file of files) {
-    const url = await uploadWorkOrderPhoto(file, workOrderId, 'request');
+  for (let i = 0; i < files.length; i++) {
+    const url = await uploadWorkOrderPhoto(files[i], workOrderId, 'request', i);
     urls.push(url);
   }
   return urls;
@@ -44,41 +65,13 @@ export async function uploadPmOccurrenceCompletionPhoto(
   file: File,
   occurrenceId: string
 ): Promise<string> {
-  if (file.size > MAX_SIZE_MB * 1024 * 1024) {
-    throw new Error(`Image must be under ${MAX_SIZE_MB}MB`);
-  }
-  if (!ALLOWED_TYPES.includes(file.type)) {
-    throw new Error('Only JPEG, PNG, and WebP images are allowed');
-  }
-  const ext = file.name.split('.').pop() || 'jpg';
-  const path = `pm-occurrences/${occurrenceId}/completion/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
-
-  const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
-    cacheControl: '3600',
-    upsert: false,
-  });
-  if (error) throw error;
-
-  const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
-  return data.publicUrl;
+  validateImageFile(file);
+  const ext = fileExtension(file);
+  return uploadToBucket(pmOccurrenceCompletionPath(occurrenceId, ext), file);
 }
 
 export async function uploadPmTaskCompletionPhoto(file: File, taskId: string): Promise<string> {
-  if (file.size > MAX_SIZE_MB * 1024 * 1024) {
-    throw new Error(`Image must be under ${MAX_SIZE_MB}MB`);
-  }
-  if (!ALLOWED_TYPES.includes(file.type)) {
-    throw new Error('Only JPEG, PNG, and WebP images are allowed');
-  }
-  const ext = file.name.split('.').pop() || 'jpg';
-  const path = `pm-tasks/${taskId}/completion/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
-
-  const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
-    cacheControl: '3600',
-    upsert: false,
-  });
-  if (error) throw error;
-
-  const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
-  return data.publicUrl;
+  validateImageFile(file);
+  const ext = fileExtension(file);
+  return uploadToBucket(pmTaskCompletionPath(taskId, ext), file);
 }

@@ -90,4 +90,14 @@ describe('support-requests', () => {
     expect(isAllowedSupportStatusTransition('submitted', 'in_progress')).toBe(true);
     expect(isAllowedSupportStatusTransition('closed', 'resolved')).toBe(false);
   });
+
+  it('resolves relative attachment paths to public storage URLs', () => {
+    process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://example.supabase.co';
+    const attachments = parseSupportAttachments([
+      { url: 'support_requests/doc.pdf', fileName: 'doc.pdf' },
+      'https://cdn.example/photo.jpg',
+    ]);
+    expect(attachments[0]?.url).toContain('/work-order-photos/support_requests/');
+    expect(attachments[1]?.url).toBe('https://cdn.example/photo.jpg');
+  });
 });

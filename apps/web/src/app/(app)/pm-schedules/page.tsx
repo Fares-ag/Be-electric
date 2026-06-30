@@ -20,14 +20,20 @@ import { supabase } from '@/lib/supabase';
 import {
   PM_FREQUENCIES,
   formatPmFrequency,
+  matchesOccurrenceStatusFilter,
   previewOccurrences,
   scheduleEndDateFromDurationYears,
   type PmFrequency,
 } from '@/lib/pm-schedule';
+import { PmOccurrenceStatusLegend } from '@/components/pm/PmOccurrenceStatusLegend';
+import { PmScheduleCallouts } from '@/components/pm/PmScheduleCallouts';
+import { DismissibleHint } from '@/components/ui/DismissibleHint';
 import {
   PM_SCHEDULES_LIST_QUERY_KEY,
+  UPCOMING_PM_OCCURRENCES_QUERY_KEY,
   createScheduleWithOccurrences,
   fetchPmSchedulesList,
+  fetchUpcomingPmOccurrences,
 } from '@/lib/queries/pm-schedules';
 
 const WIZARD_STEPS = [
@@ -57,6 +63,8 @@ export default function PmSchedulesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const statusFilter = searchParams.get('status') ?? undefined;
+  const viewFilter = searchParams.get('view') ?? undefined;
+  const showUpcomingTasks = viewFilter === 'upcoming';
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const [search, setSearch] = useState('');
@@ -70,7 +78,27 @@ export default function PmSchedulesPage() {
     queryKey: PM_SCHEDULES_LIST_QUERY_KEY,
     staleTime: 60 * 1000,
     queryFn: fetchPmSchedulesList,
+    enabled: !showUpcomingTasks,
   });
+
+  const {
+    data: upcomingOccurrences,
+    isLoading: upcomingLoading,
+    error: upcomingError,
+    refetch: refetchUpcoming,
+  } = useQuery({
+    queryKey: UPCOMING_PM_OCCURRENCES_QUERY_KEY,
+    staleTime: 60 * 1000,
+    queryFn: () => fetchUpcomingPmOccurrences(),
+    enabled: showUpcomingTasks,
+  });
+
+  const { users: allUsers } = useUsersMap(showUpcomingTasks || wizardOpen);
+  const userNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const user of allUsers) map.set(user.id, user.name);
+    return map;
+  }, [allUsers]);
 
   const { data: companies } = useQuery({
     queryKey: ['companies'],
@@ -96,7 +124,6 @@ export default function PmSchedulesPage() {
     },
   });
 
-  const { users: allUsers } = useUsersMap(wizardOpen);
   const technicians = allUsers.filter(
     (u) => u.role === 'technician' || u.role === 'manager' || u.role === 'admin'
   );
@@ -155,6 +182,9 @@ export default function PmSchedulesPage() {
     if (statusFilter === 'overdue') {
       list = list.filter((s) => (s.overdueCount ?? 0) > 0);
     }
+    if (statusFilter === 'upcoming') {
+      list = list.filter((s) => (s.upcomingCount ?? 0) > 0);
+    }
     if (!search.trim()) return list;
     const q = search.trim().toLowerCase();
     return list.filter(
@@ -165,10 +195,44 @@ export default function PmSchedulesPage() {
     );
   }, [schedules, search, statusFilter]);
 
+  const filteredUpcoming = useMemo(() => {
+    let list = upcomingOccurrences ?? [];
+    if (!search.trim()) return list;
+    const q = search.trim().toLowerCase();
+    return list.filter((row) => {
+      const taskName = row.schedule?.taskName ?? '';
+      const company = row.schedule?.company?.name ?? row.asset?.company?.name ?? '';
+      const charger = row.asset?.name ?? '';
+      return (
+        taskName.toLowerCase().includes(q) ||
+        company.toLowerCase().includes(q) ||
+        charger.toLowerCase().includes(q)
+      );
+    });
+  }, [upcomingOccurrences, search]);
+
+  const pmListTotals = useMemo(() => {
+    const list = schedules ?? [];
+    return {
+      overdue: list.reduce((sum, s) => sum + (s.overdueCount ?? 0), 0),
+      upcoming: list.reduce((sum, s) => sum + (s.upcomingCount ?? 0), 0),
+    };
+  }, [schedules]);
+
   const { page, setPage, pageSize, setPageSize, paginatedItems, totalItems } =
     usePagination(filtered);
 
+  const {
+    page: upcomingPage,
+    setPage: setUpcomingPage,
+    pageSize: upcomingPageSize,
+    setPageSize: setUpcomingPageSize,
+    paginatedItems: paginatedUpcoming,
+    totalItems: totalUpcomingItems,
+  } = usePagination(filteredUpcoming);
+
   useEffect(() => setPage(1), [search, statusFilter, setPage]);
+  useEffect(() => setUpcomingPage(1), [search, setUpcomingPage]);
 
   const toggleAsset = (assetId: string) => {
     setForm((f) => ({
@@ -244,7 +308,7 @@ export default function PmSchedulesPage() {
     <div className="space-y-4 sm:space-y-6">
       <PageHeader
         title="PM Schedules"
-        description="Create preventive maintenance schedules and materialize due dates per charger."
+        description="A schedule is the recurring template; each due date per charger is an occurrence technicians complete in the field."
         actions={
           <>
             <SearchFilterBar
@@ -258,17 +322,41 @@ export default function PmSchedulesPage() {
         }
       />
 
-      <p className="text-sm text-muted-foreground">
-        Legacy single-row PM tasks remain available on{' '}
-        <Link href="/pm-tasks" className="text-primary underline-offset-2 hover:underline">
-          PM Tasks (legacy)
-        </Link>
-        .
-      </p>
+      <DismissibleHint hintKey="pm-schedules-overview" title="How PM works in Beelectric">
+        <ul className="list-inside list-disc space-y-1">
+          <li>
+            <strong className="font-medium text-foreground">Schedule</strong> — the template (task,
+            frequency, chargers, technicians).
+          </li>
+          <li>
+            <strong className="font-medium text-foreground">Occurrence</strong> — one due date for one
+            charger; open a schedule to manage or complete individual dates.
+          </li>
+          <li>
+            <strong className="font-medium text-foreground">PM Tasks (legacy)</strong> — older one-off
+            rows; use schedules for new preventive maintenance.{' '}
+            <Link href="/pm-tasks" className="text-primary underline-offset-2 hover:underline">
+              View legacy PM Tasks
+            </Link>
+          </li>
+        </ul>
+      </DismissibleHint>
+
+      {!showUpcomingTasks && !isLoading && !error && (
+        <PmScheduleCallouts
+          overdueCount={pmListTotals.overdue}
+          upcomingCount={pmListTotals.upcoming}
+          onCreateClick={openWizard}
+        />
+      )}
+
+      {showUpcomingTasks && (
+        <PmOccurrenceStatusLegend className="rounded-lg border border-border bg-muted/20 px-4 py-3" />
+      )}
 
       <div className="flex flex-wrap gap-2">
         <Link href="/pm-schedules">
-          <Button variant={!statusFilter ? 'primary' : 'outline'} size="sm">
+          <Button variant={!statusFilter && !showUpcomingTasks ? 'primary' : 'outline'} size="sm">
             All schedules
           </Button>
         </Link>
@@ -277,13 +365,115 @@ export default function PmSchedulesPage() {
             Has overdue
           </Button>
         </Link>
+        <Link href="/pm-schedules?status=upcoming">
+          <Button variant={statusFilter === 'upcoming' ? 'primary' : 'outline'} size="sm">
+            Has upcoming
+          </Button>
+        </Link>
+        <Link href="/pm-schedules?view=upcoming">
+          <Button variant={showUpcomingTasks ? 'primary' : 'outline'} size="sm">
+            Upcoming tasks
+          </Button>
+        </Link>
       </div>
       {statusFilter === 'overdue' && (
         <p className="text-sm text-muted-foreground">
           Showing schedules with at least one overdue occurrence. Open a schedule to complete individual due dates.
         </p>
       )}
+      {statusFilter === 'upcoming' && !showUpcomingTasks && (
+        <p className="text-sm text-muted-foreground">
+          Showing schedules with at least one upcoming occurrence (due today or later).
+        </p>
+      )}
+      {showUpcomingTasks && (
+        <p className="text-sm text-muted-foreground">
+          All future PM task occurrences across schedules, sorted by due date.
+        </p>
+      )}
 
+      {showUpcomingTasks ? (
+        <Card>
+          <CardContent className="p-0">
+            <DataTableShell
+              isLoading={upcomingLoading}
+              error={upcomingError}
+              isEmpty={!upcomingLoading && !upcomingError && (upcomingOccurrences?.length ?? 0) === 0}
+              emptyTitle="No upcoming PM tasks"
+              emptyDescription="Create a schedule or check overdue items that need attention."
+              onRetry={() => refetchUpcoming()}
+            >
+              {filteredUpcoming.length === 0 && (upcomingOccurrences?.length ?? 0) > 0 ? (
+                <div className="px-6 py-12 text-center">
+                  <p className="font-medium text-foreground">No matching tasks</p>
+                  <p className="mt-1 text-sm text-muted-foreground">Try a different search term.</p>
+                </div>
+              ) : (
+                <div className="table-scroll overflow-x-auto">
+                  <table className="table-modern">
+                    <thead>
+                      <tr>
+                        <th>Task</th>
+                        <th>Due date</th>
+                        <th>Charger</th>
+                        <th>Company</th>
+                        <th>Assigned</th>
+                        <th>Status</th>
+                        <th className="w-12" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paginatedUpcoming.map((row) => {
+                        const assigneeNames = (row.assignedTechnicianIds ?? [])
+                          .map((id) => userNameById.get(id))
+                          .filter(Boolean);
+                        return (
+                          <tr key={row.id}>
+                            <td className="font-medium text-foreground">
+                              {row.schedule?.taskName ?? '—'}
+                            </td>
+                            <td className="text-sm">
+                              {new Date(row.dueDate).toLocaleDateString()}
+                            </td>
+                            <td className="text-sm">{row.asset?.name ?? row.assetId}</td>
+                            <td className="text-sm">
+                              {row.schedule?.company?.name ?? row.asset?.company?.name ?? '—'}
+                            </td>
+                            <td className="text-sm text-muted-foreground">
+                              {assigneeNames.length > 0 ? assigneeNames.join(', ') : '—'}
+                            </td>
+                            <td>
+                              <StatusBadge status={row.derivedStatus ?? row.status} />
+                            </td>
+                            <td>
+                              <Link
+                                href={`/pm-schedules/${row.scheduleId}/occurrences/${row.id}`}
+                              >
+                                <Button variant="ghost" size="sm" aria-label="View occurrence">
+                                  <ChevronRight className="h-4 w-4" />
+                                </Button>
+                              </Link>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {totalUpcomingItems > 0 && (
+                <Pagination
+                  page={upcomingPage}
+                  pageSize={upcomingPageSize}
+                  totalItems={totalUpcomingItems}
+                  onPageChange={setUpcomingPage}
+                  onPageSizeChange={setUpcomingPageSize}
+                />
+              )}
+            </DataTableShell>
+          </CardContent>
+        </Card>
+      ) : (
       <Card>
         <CardContent className="p-0">
           <DataTableShell
@@ -310,6 +500,7 @@ export default function PmSchedulesPage() {
                       <th>Company</th>
                       <th>Occurrences</th>
                       <th>Overdue</th>
+                      <th>Upcoming</th>
                       <th>Next due</th>
                       <th className="w-12" />
                     </tr>
@@ -328,6 +519,13 @@ export default function PmSchedulesPage() {
                         <td className="text-sm">
                           {(schedule.overdueCount ?? 0) > 0 ? (
                             <span className="font-medium text-amber-700">{schedule.overdueCount}</span>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                        <td className="text-sm">
+                          {(schedule.upcomingCount ?? 0) > 0 ? (
+                            <span className="font-medium text-blue-700">{schedule.upcomingCount}</span>
                           ) : (
                             '—'
                           )}
@@ -367,6 +565,7 @@ export default function PmSchedulesPage() {
           />
         )}
       </Card>
+      )}
 
       <Modal
         open={wizardOpen}

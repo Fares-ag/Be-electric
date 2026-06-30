@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
 import { uploadRequestPhotos } from '@/lib/storage';
+import { upsertWorkOrderViaRpc } from '@/lib/work-order-create';
 import { useFormSubmitLock } from '@/hooks/useFormSubmitLock';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -75,32 +76,25 @@ export default function RequestMaintenancePage() {
     await runSubmit(async () => {
       const workOrderId = crypto.randomUUID();
       const ticketNumber = `WO-${Date.now()}`;
-      let photoPath: string | null = null;
 
-      const urls = await uploadRequestPhotos(photos, workOrderId);
-      if (urls.length > 0) {
-        photoPath = urls.length === 1 ? urls[0] : JSON.stringify(urls);
-      }
+      const photoUrls = await uploadRequestPhotos(photos, workOrderId);
 
-      const { error: insertError } = await supabase.from('work_orders').insert({
-        id: workOrderId,
-        ticketNumber,
-        problemDescription: description,
-        requestorId: user.id,
-        requestorName: user.name,
-        companyId: companyId || null,
-        status: 'open',
-        priority,
-        category: null,
-        location: location || null,
-        assetId: assetId || null,
-        notes: notes || null,
-        photoPath,
-        assignedTechnicianIds: [],
-      });
-
-      if (insertError) {
-        setError(insertError.message);
+      try {
+        await upsertWorkOrderViaRpc({
+          id: workOrderId,
+          ticketNumber,
+          problemDescription: description.trim(),
+          priority,
+          requestorId: user.id,
+          requestorName: user.name,
+          companyId: companyId || null,
+          assetId: assetId || null,
+          location: location.trim() || null,
+          notes: notes.trim() || null,
+          photoUrls,
+        });
+      } catch (rpcError) {
+        setError(rpcError instanceof Error ? rpcError.message : 'Failed to submit request');
         return;
       }
 

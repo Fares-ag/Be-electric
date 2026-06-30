@@ -1,7 +1,8 @@
 -- Fix upsert_work_order RPC:
--- 1. Remove incorrect ::uuid casts for assetId and companyId — those tables use string IDs.
--- 2. Accept and persist photoPath, metadata, location, category, and notes from the Flutter payload.
--- 3. On conflict: merge metadata (new fields win) instead of ignoring it.
+-- SUPERSEDED: Later migrations replace this function entirely:
+--   20260627130000, 20260627140000, 20260629140000, 20260701120000
+-- Do not re-apply in isolation. Kept for migration history (already applied on hosted DB).
+-- Original intent: remove ::uuid casts for companyId/assetId; persist photoPath/metadata.
 
 CREATE OR REPLACE FUNCTION public.upsert_work_order(p_row jsonb)
 RETURNS void

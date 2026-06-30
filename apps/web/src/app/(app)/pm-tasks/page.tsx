@@ -10,7 +10,10 @@ import { supabase } from '@/lib/supabase';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { StatusBadge } from '@/components/ui/Badge';
+import { DismissibleHint } from '@/components/ui/DismissibleHint';
+import { ListTableRow } from '@/components/ui/ListTableRow';
 import { DataTableShell, PageHeader } from '@/components/ui/PageStates';
+import { ClipboardList } from 'lucide-react';
 
 /** Legacy pm_tasks list — new schedules use /pm-schedules (Option A). Do not create rows here. */
 export default function PMTasksPage() {
@@ -45,6 +48,8 @@ export default function PMTasksPage() {
 
   useEffect(() => setPage(1), [search, setPage]);
 
+  const showEmptySearch = !isLoading && !queryError && (pmTasks?.length ?? 0) > 0 && filtered.length === 0;
+
   return (
     <div className="space-y-4 sm:space-y-6">
       <PageHeader
@@ -65,15 +70,16 @@ export default function PMTasksPage() {
         }
       />
 
-      <Card className="border-primary/20 bg-primary/5">
-        <CardContent className="py-4 text-sm text-foreground">
-          <strong>New PM work uses PM Schedules.</strong> This list is read-only legacy data from before schedule-based
-          occurrences. Technicians on the mobile app may still complete legacy tasks until migration is finished.{' '}
-          <Link href="/pm-schedules" className="font-medium text-primary underline-offset-2 hover:underline">
+      <DismissibleHint hintKey="pm-tasks-legacy" title="Legacy PM tasks">
+        <p>
+          <strong className="font-medium text-foreground">New PM work uses PM Schedules</strong> — one schedule
+          generates many occurrences per charger. This list is read-only legacy data; technicians may still
+          complete old tasks in the mobile app until migration finishes.{' '}
+          <Link href="/pm-schedules" className="text-primary underline-offset-2 hover:underline">
             Go to PM Schedules
           </Link>
-        </CardContent>
-      </Card>
+        </p>
+      </DismissibleHint>
 
       <Card>
         <CardContent className="p-0">
@@ -83,12 +89,27 @@ export default function PMTasksPage() {
             isEmpty={!isLoading && !queryError && (pmTasks?.length ?? 0) === 0}
             emptyTitle="No legacy PM tasks"
             emptyDescription="Use PM Schedules to create new preventive maintenance work."
+            emptyAction={
+              <Link href="/pm-schedules">
+                <Button>Create PM Schedule</Button>
+              </Link>
+            }
+            emptyIcon={ClipboardList}
+            emptyIconClassName="bg-blue-100 text-blue-700"
             onRetry={() => refetch()}
           >
-            {filtered.length === 0 && (pmTasks?.length ?? 0) > 0 ? (
-              <div className="px-6 py-12 text-center">
+            {showEmptySearch ? (
+              <div className="flex flex-col items-center px-6 py-14 text-center">
+                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-blue-100 text-blue-700">
+                  <ClipboardList className="h-7 w-7" aria-hidden />
+                </div>
                 <p className="font-medium text-foreground">No matching PM tasks</p>
-                <p className="mt-1 text-sm text-muted-foreground">Try a different search term.</p>
+                <p className="mt-1 max-w-sm text-sm text-muted-foreground">Try a different search term.</p>
+                {search.trim() && (
+                  <Button variant="outline" className="mt-4" onClick={() => setSearch('')}>
+                    Clear search
+                  </Button>
+                )}
               </div>
             ) : (
               <div className="table-scroll overflow-x-auto">
@@ -101,12 +122,14 @@ export default function PMTasksPage() {
                       <th>Next Due</th>
                       <th>Charger</th>
                       <th>Assigned</th>
-                      <th className="w-24" />
+                      <th className="w-12">
+                        <span className="sr-only">Actions</span>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {paginatedItems.map((t: Record<string, unknown>) => (
-                      <tr key={t.id as string}>
+                      <ListTableRow key={t.id as string} href={`/pm-tasks/${t.id as string}`}>
                         <td className="font-medium">{t.taskName as string}</td>
                         <td>
                           <StatusBadge status={t.status as string} />
@@ -123,14 +146,7 @@ export default function PMTasksPage() {
                             ? `${(t.assignedTechnicianIds as string[]).length} technician(s)`
                             : '—'}
                         </td>
-                        <td>
-                          <Link href={`/pm-tasks/${t.id}`}>
-                            <Button variant="outline" size="sm">
-                              View
-                            </Button>
-                          </Link>
-                        </td>
-                      </tr>
+                      </ListTableRow>
                     ))}
                   </tbody>
                 </table>

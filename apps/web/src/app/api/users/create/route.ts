@@ -4,10 +4,8 @@ import { requireAdmin } from '@/lib/api/require-admin';
 import { validateUserForm } from '@/lib/users';
 
 /**
- * Creates a user in Supabase Auth AND in public.users so they appear in the app
- * and in Supabase Dashboard → Authentication → Users.
- * Requires: caller must be an admin/manager (verified via Bearer token).
- * Uses the service role key (server-only) for user creation.
+ * Creates a user in Supabase Auth AND in public.users via insert_user RPC.
+ * Auth user is created with service role; profile row uses admin JWT (handbook parity).
  */
 export async function POST(request: Request) {
   const auth = await requireAdmin(request);
@@ -55,7 +53,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const supabase = createClient(
+  const supabaseService = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     serviceRoleKey,
     { auth: { autoRefreshToken: false, persistSession: false } }
@@ -65,7 +63,7 @@ export async function POST(request: Request) {
     ? password.trim()
     : generateTempPassword();
 
-  const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
+  const { data: authUser, error: authError } = await supabaseService.auth.admin.createUser({
     email: email.trim().toLowerCase(),
     password: finalPassword,
     email_confirm: true,
@@ -85,19 +83,15 @@ export async function POST(request: Request) {
 
   const id = authUser.user.id;
 
-  const { error: profileError } = await supabase.from('users').upsert(
-    {
-      id,
-      email: email.trim().toLowerCase(),
-      name: (name ?? email).trim(),
-      role: role ?? 'requestor',
-      isActive: true,
-      companyId: companyId?.trim() || null,
-      department: department?.trim() || null,
-      updatedAt: new Date().toISOString(),
-    },
-    { onConflict: 'id' }
-  );
+  const { error: profileError } = await auth.supabaseAuth.rpc('insert_user', {
+    p_id: id,
+    p_email: email.trim().toLowerCase(),
+    p_name: (name ?? email).trim(),
+    p_role: role ?? 'requestor',
+    p_is_active: true,
+    p_company_id: companyId?.trim() || null,
+    p_department: department?.trim() || null,
+  });
 
   if (profileError) {
     return NextResponse.json(

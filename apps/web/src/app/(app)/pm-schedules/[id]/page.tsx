@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { StatusBadge } from '@/components/ui/Badge';
@@ -13,20 +13,31 @@ import { usePagination } from '@/hooks/usePagination';
 import { useUsersMap } from '@/hooks/useUsersMap';
 import {
   PM_OCCURRENCE_STATUSES,
+  buildOccurrenceMonthBuckets,
   formatPmFrequency,
+  matchesOccurrenceStatusFilter,
+  parseScheduleChecklist,
+  summarizeOccurrenceStats,
   type PmOccurrenceStatus,
 } from '@/lib/pm-schedule';
+import { PmOccurrenceMonthStrip } from '@/components/pm/PmOccurrenceMonthStrip';
+import { PmOccurrenceStatusLegend } from '@/components/pm/PmOccurrenceStatusLegend';
+import { PmOccurrenceSummaryChips } from '@/components/pm/PmOccurrenceSummaryChips';
 import {
+  PM_SCHEDULES_LIST_QUERY_KEY,
+  UPCOMING_PM_OCCURRENCES_QUERY_KEY,
   fetchPmScheduleDetail,
   fetchPmScheduleOccurrences,
   pmScheduleDetailQueryKey,
   pmScheduleOccurrencesQueryKey,
+  updatePmScheduleAssignees,
 } from '@/lib/queries/pm-schedules';
 
 export default function PmScheduleDetailPage() {
   const params = useParams();
   const searchParams = useSearchParams();
   const scheduleId = params.id as string;
+  const queryClient = useQueryClient();
   const [assetFilter, setAssetFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [dateFrom, setDateFrom] = useState('');
@@ -38,15 +49,49 @@ export default function PmScheduleDetailPage() {
     queryFn: () => fetchPmScheduleDetail(scheduleId),
   });
 
-  const { data: occurrences, isLoading: occLoading } = useQuery({
+  const {
+    data: occurrences,
+    isLoading: occLoading,
+    error: occError,
+    refetch: refetchOccurrences,
+  } = useQuery({
     queryKey: pmScheduleOccurrencesQueryKey(scheduleId),
     staleTime: 60 * 1000,
     queryFn: () => fetchPmScheduleOccurrences(scheduleId),
   });
 
+  const invalidateScheduleQueries = () => {
+    queryClient.invalidateQueries({ queryKey: pmScheduleDetailQueryKey(scheduleId) });
+    queryClient.invalidateQueries({ queryKey: pmScheduleOccurrencesQueryKey(scheduleId) });
+    queryClient.invalidateQueries({ queryKey: PM_SCHEDULES_LIST_QUERY_KEY });
+    queryClient.invalidateQueries({ queryKey: UPCOMING_PM_OCCURRENCES_QUERY_KEY });
+  };
+
+  const updateAssigneesMutation = useMutation({
+    mutationFn: (technicianIds: string[]) =>
+      updatePmScheduleAssignees(scheduleId, technicianIds),
+    onSuccess: invalidateScheduleQueries,
+  });
+
   const assignedIds = schedule?.assignedTechnicianIds ?? [];
-  const { users: allUsers } = useUsersMap(!!schedule);
+  const { users: allUsers } = useUsersMap(!!schedule || !!occurrences?.length);
   const assignedUsers = allUsers.filter((u) => assignedIds.includes(u.id));
+  const userNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const user of allUsers) map.set(user.id, user.name);
+    return map;
+  }, [allUsers]);
+
+  const addTechnician = (userId: string) => {
+    if (assignedIds.includes(userId)) return;
+    updateAssigneesMutation.mutate([...assignedIds, userId]);
+  };
+
+  const removeTechnician = (userId: string) => {
+    updateAssigneesMutation.mutate(assignedIds.filter((id) => id !== userId));
+  };
+
+  const checklist = parseScheduleChecklist(schedule?.metadata);
 
   const assetOptions = useMemo(() => {
     const map = new Map<string, string>();
@@ -59,13 +104,30 @@ export default function PmScheduleDetailPage() {
   const filtered = useMemo(() => {
     return (occurrences ?? []).filter((row) => {
       if (assetFilter && row.assetId !== assetFilter) return false;
-      const displayStatus = row.derivedStatus ?? row.status;
-      if (statusFilter && displayStatus !== statusFilter) return false;
+      if (statusFilter && !matchesOccurrenceStatusFilter(statusFilter, row.status, row.dueDate)) {
+        return false;
+      }
       if (dateFrom && row.dueDate < dateFrom) return false;
       if (dateTo && row.dueDate > dateTo) return false;
       return true;
     });
   }, [occurrences, assetFilter, statusFilter, dateFrom, dateTo]);
+
+  const occurrenceStats = useMemo(
+    () =>
+      summarizeOccurrenceStats(
+        (occurrences ?? []).map((row) => ({ status: row.status, dueDate: row.dueDate }))
+      ),
+    [occurrences]
+  );
+
+  const monthBuckets = useMemo(
+    () =>
+      buildOccurrenceMonthBuckets(
+        (occurrences ?? []).map((row) => ({ status: row.status, dueDate: row.dueDate }))
+      ),
+    [occurrences]
+  );
 
   const { page, setPage, pageSize, setPageSize, paginatedItems, totalItems } =
     usePagination(filtered);
@@ -73,8 +135,9 @@ export default function PmScheduleDetailPage() {
   useEffect(() => setPage(1), [assetFilter, statusFilter, dateFrom, dateTo, setPage]);
 
   useEffect(() => {
-    if (searchParams.get('status') === 'overdue') {
-      setStatusFilter('overdue');
+    const status = searchParams.get('status');
+    if (status === 'overdue' || status === 'upcoming') {
+      setStatusFilter(status);
     }
   }, [searchParams]);
 
@@ -97,14 +160,22 @@ export default function PmScheduleDetailPage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        breadcrumbs={[{ label: 'PM Schedules', href: '/pm-schedules' }]}
         title={schedule.taskName}
         description="Schedule template — technicians complete individual occurrences."
         actions={
-          <Link href="/pm-schedules">
-            <Button variant="outline" size="sm">
-              Back to schedules
-            </Button>
-          </Link>
+          <>
+            <Link href="/pm-schedules?view=upcoming">
+              <Button variant="outline" size="sm">
+                Upcoming tasks
+              </Button>
+            </Link>
+            <Link href="/pm-schedules">
+              <Button variant="outline" size="sm">
+                Back to schedules
+              </Button>
+            </Link>
+          </>
         }
       />
 
@@ -138,8 +209,19 @@ export default function PmScheduleDetailPage() {
             {schedule.description && (
               <p className="border-t border-border pt-3 text-muted-foreground">{schedule.description}</p>
             )}
+            {checklist.length > 0 && (
+              <div className="border-t border-border pt-3">
+                <p className="font-medium text-foreground mb-2">Checklist</p>
+                <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
+                  {checklist.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <p className="border-t border-border pt-3 text-xs text-muted-foreground">
-              Schedules are read-only after creation in v1. Edit/delete is not supported yet.
+              Task name, frequency, and window are read-only after creation. You can still reassign
+              technicians below — changes apply to all open occurrences.
             </p>
           </CardContent>
         </Card>
@@ -148,26 +230,83 @@ export default function PmScheduleDetailPage() {
           <CardHeader>
             <CardTitle>Assigned technicians</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
             {assignedUsers.length > 0 ? (
-              <ul className="space-y-1 text-sm">
+              <ul className="space-y-1.5">
                 {assignedUsers.map((u) => (
-                  <li key={u.id}>{u.name}</li>
+                  <li
+                    key={u.id}
+                    className="flex items-center justify-between rounded-md bg-muted/50 px-2 py-1.5 text-sm"
+                  >
+                    <span>{u.name}</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-muted-foreground hover:text-destructive"
+                      onClick={() => removeTechnician(u.id)}
+                      disabled={updateAssigneesMutation.isPending}
+                    >
+                      Remove
+                    </Button>
+                  </li>
                 ))}
               </ul>
             ) : (
               <p className="text-sm text-muted-foreground">No technicians assigned at schedule level.</p>
             )}
+            {allUsers.length > 0 && (
+              <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
+                {allUsers
+                  .filter((u) => !assignedIds.includes(u.id))
+                  .slice(0, 8)
+                  .map((u) => (
+                    <Button
+                      key={u.id}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => addTechnician(u.id)}
+                      disabled={updateAssigneesMutation.isPending}
+                    >
+                      + {u.name}
+                    </Button>
+                  ))}
+              </div>
+            )}
+            {updateAssigneesMutation.isError && (
+              <p className="text-sm text-destructive">
+                {updateAssigneesMutation.error instanceof Error
+                  ? updateAssigneesMutation.error.message
+                  : 'Failed to update assignees'}
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>
+
+      {!occLoading && !occError && (occurrences?.length ?? 0) > 0 && (
+        <Card>
+          <CardContent className="space-y-4 p-4 sm:p-6">
+            <PmOccurrenceSummaryChips
+              stats={occurrenceStats}
+              activeFilter={statusFilter}
+              onFilterChange={setStatusFilter}
+            />
+            <PmOccurrenceMonthStrip buckets={monthBuckets} />
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
           <CardTitle>Occurrences</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 p-0 sm:p-6 sm:pt-0">
-          <div className="flex flex-wrap gap-3 px-6 pt-6 sm:px-0 sm:pt-0">
+          <div className="px-6 pt-6 sm:px-0 sm:pt-0">
+            <PmOccurrenceStatusLegend className="mb-4 rounded-lg border border-border bg-muted/20 px-3 py-3" />
+          </div>
+          <div className="flex flex-wrap gap-3 px-6 sm:px-0">
             <label className="flex min-w-[140px] flex-col gap-1 text-xs text-muted-foreground">
               Charger
               <select
@@ -220,6 +359,16 @@ export default function PmScheduleDetailPage() {
 
           {occLoading ? (
             <LoadingSpinner label="Loading occurrences" />
+          ) : occError ? (
+            <QueryErrorState
+              title="Could not load occurrences"
+              message={
+                occError instanceof Error
+                  ? occError.message
+                  : 'Occurrences failed to load. Check your connection or Supabase migrations.'
+              }
+              onRetry={() => refetchOccurrences()}
+            />
           ) : (
             <>
               <div className="table-scroll overflow-x-auto">
@@ -229,34 +378,56 @@ export default function PmScheduleDetailPage() {
                       <th>Charger</th>
                       <th>Due date</th>
                       <th>Status</th>
+                      <th>Assigned</th>
+                      <th>Completed</th>
                       <th className="w-24" />
                     </tr>
                   </thead>
                   <tbody>
-                    {paginatedItems.map((row) => (
-                      <tr key={row.id}>
-                        <td>{row.asset?.name ?? row.assetId}</td>
-                        <td>{new Date(row.dueDate).toLocaleDateString()}</td>
-                        <td>
-                          <StatusBadge status={(row.derivedStatus ?? row.status) as PmOccurrenceStatus} />
-                        </td>
-                        <td>
-                          <Link href={`/pm-schedules/${scheduleId}/occurrences/${row.id}`}>
-                            <Button variant="outline" size="sm">
-                              View
-                            </Button>
-                          </Link>
-                        </td>
-                      </tr>
-                    ))}
+                    {paginatedItems.map((row) => {
+                      const assigneeNames = (row.assignedTechnicianIds ?? [])
+                        .map((id) => userNameById.get(id))
+                        .filter(Boolean);
+                      return (
+                        <tr key={row.id}>
+                          <td>{row.asset?.name ?? row.assetId}</td>
+                          <td>{new Date(row.dueDate).toLocaleDateString()}</td>
+                          <td>
+                            <StatusBadge
+                              status={(row.derivedStatus ?? row.status) as PmOccurrenceStatus}
+                            />
+                          </td>
+                          <td className="text-sm text-muted-foreground">
+                            {assigneeNames.length > 0 ? assigneeNames.join(', ') : '—'}
+                          </td>
+                          <td className="text-sm text-muted-foreground">
+                            {row.completedAt
+                              ? new Date(row.completedAt).toLocaleDateString()
+                              : '—'}
+                          </td>
+                          <td>
+                            <Link href={`/pm-schedules/${scheduleId}/occurrences/${row.id}`}>
+                              <Button variant="outline" size="sm">
+                                View
+                              </Button>
+                            </Link>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
-              {filtered.length === 0 && (
+              {(occurrences?.length ?? 0) === 0 ? (
+                <p className="px-6 pb-6 text-center text-sm text-muted-foreground">
+                  No occurrences exist for this schedule. If you expected due dates, recreate the
+                  schedule or check that chargers were selected in the wizard.
+                </p>
+              ) : filtered.length === 0 ? (
                 <p className="px-6 pb-6 text-center text-sm text-muted-foreground">
                   No occurrences match the current filters.
                 </p>
-              )}
+              ) : null}
               {totalItems > 0 && (
                 <Pagination
                   page={page}

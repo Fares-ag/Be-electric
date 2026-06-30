@@ -6,6 +6,7 @@ export const PM_OCCURRENCE_EXPORT_HEADERS = [
   'chargerName',
   'companyName',
   'completedAt',
+  'completionNotes',
 ] as const;
 
 export const SUPPORT_REQUEST_EXPORT_HEADERS = [

@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { fetchAllPages } from '@/lib/supabase-pagination';
+import { updateWorkOrderAssignees } from '@/lib/work-order-assignees';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUsersMap } from '@/hooks/useUsersMap';
 import { Button } from '@/components/ui/Button';
@@ -110,15 +112,7 @@ export default function WorkOrderDetailPage() {
     mutationFn: async (technicianIds: string[]) => {
       setAssignError(null);
       setPushWarning(null);
-      const { error } = await supabase
-        .from('work_orders')
-        .update({
-          assignedTechnicianIds: technicianIds,
-          assignedAt: technicianIds.length > 0 ? new Date().toISOString() : null,
-          updatedAt: new Date().toISOString(),
-        })
-        .eq('id', id);
-      if (error) throw error;
+      await updateWorkOrderAssignees(id, technicianIds);
       if (technicianIds.length > 0) {
         const ticketNumber = wo?.ticketNumber ?? id;
         const { data: { session } } = await supabase.auth.getSession();

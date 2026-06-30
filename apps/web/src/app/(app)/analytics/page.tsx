@@ -2,19 +2,18 @@
 
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabase';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { LoadingSpinner, PageHeader, QueryErrorState } from '@/components/ui/PageStates';
 import {
   computeAnalyticsMetrics,
   computePmOccurrenceStatusData,
-  type AnalyticsWorkOrder,
 } from '@/lib/analytics-metrics';
 import { deriveOccurrenceStatus } from '@/lib/pm-schedule';
 import {
   countOverduePmOccurrences,
   fetchPmOccurrencesForAnalytics,
 } from '@/lib/queries/pm-schedules';
+import { fetchWorkOrdersForAnalytics } from '@/lib/queries/work-orders';
 import { AnalyticsCharts } from './AnalyticsCharts';
 import { Wrench, CheckCircle, Clock, AlertTriangle, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
@@ -23,13 +22,7 @@ import { Button } from '@/components/ui/Button';
 export default function AnalyticsPage() {
   const woQuery = useQuery({
     queryKey: ['analytics-work-orders'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('work_orders')
-        .select('id, status, priority, createdAt, completedAt, closedAt');
-      if (error) throw error;
-      return (data ?? []) as AnalyticsWorkOrder[];
-    },
+    queryFn: fetchWorkOrdersForAnalytics,
     staleTime: 60 * 1000,
   });
 

@@ -2,6 +2,12 @@ import { create } from 'zustand';
 import { supabase } from '@/lib/supabase';
 import type { User } from '@beelectric/supabase';
 import { setAuthFlash } from '@/lib/auth-flash';
+import {
+  fetchUserProfileByEmail,
+  fetchUserProfileById,
+  profileRowToUser,
+  validateProfileForAuth,
+} from '@/lib/auth/profile';
 
 interface AuthState {
   user: User | null;
@@ -13,23 +19,8 @@ interface AuthState {
   fetchUser: (
     authId: string,
     fallback?: { email?: string; name?: string }
-  ) => Promise<void>;
+  ) => Promise<{ error: string | null }>;
   init: () => Promise<void>;
-}
-
-function toUser(row: Record<string, unknown> | null): User | null {
-  if (!row || !row.id) return null;
-  return {
-    id: String(row.id),
-    email: String(row.email ?? ''),
-    name: String(row.name ?? row.email ?? 'User'),
-    role: (row.role as User['role']) ?? 'requestor',
-    department: row.department ? String(row.department) : null,
-    companyId: row.companyId ?? row.company_id ? String(row.companyId ?? row.company_id) : null,
-    isActive: row.isActive !== false && row.is_active !== false,
-    createdAt: String(row.createdAt ?? row.created_at ?? new Date().toISOString()),
-    updatedAt: row.updatedAt ?? row.updated_at ? String(row.updatedAt ?? row.updated_at) : undefined,
-  };
 }
 
 async function createFallbackUser(
@@ -62,24 +53,50 @@ async function getAdminRoleByEmail(email: string): Promise<'admin' | 'manager' |
   return null;
 }
 
-/** Fetches user row only (no admin role override). */
-async function getUserByAuthIdOnly(authId: string): Promise<User | null> {
-  const { data, error } = await supabase.rpc('get_user_by_id', { p_id: authId });
-  if (error) {
-    if (process.env.NODE_ENV === 'development') {
-      console.warn('[auth] users table fetch failed:', error.message);
-    }
-    return null;
-  }
-  const row = data?.[0] ?? null;
-  return toUser(row as Record<string, unknown> | null);
-}
+async function resolveProfileUser(
+  authId: string,
+  fallback?: { email?: string; name?: string }
+): Promise<{ user: User | null; error: string | null }> {
+  const email = fallback?.email?.trim();
 
-async function getUserByAuthId(authId: string, _knownEmail?: string): Promise<User | null> {
-  // Use role from public.users when present. admin_users is only used in createFallbackUser
-  // when there is no row in users (e.g. first login or admin-only account).
-  const dbUser = await getUserByAuthIdOnly(authId);
-  return dbUser ?? null;
+  if (email) {
+    try {
+      const row = await fetchUserProfileByEmail(email);
+      const validation = validateProfileForAuth(row, authId);
+      if (!validation.ok) {
+        return { user: null, error: validation.message };
+      }
+      return { user: profileRowToUser(row), error: null };
+    } catch (e) {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[auth] get_user_by_email failed:', e);
+      }
+    }
+  }
+
+  try {
+    const row = await fetchUserProfileById(authId);
+    const validation = validateProfileForAuth(row, authId);
+    if (validation.ok) {
+      return { user: profileRowToUser(row), error: null };
+    }
+    if (row && !validation.ok) {
+      return { user: null, error: validation.message };
+    }
+  } catch (e) {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('[auth] get_user_by_id failed:', e);
+    }
+  }
+
+  if (fallback?.email) {
+    const adminRole = await getAdminRoleByEmail(fallback.email);
+    if (adminRole) {
+      return { user: await createFallbackUser(authId, fallback), error: null };
+    }
+  }
+
+  return { user: null, error: 'No profile found. Contact your administrator.' };
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -103,16 +120,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         name: data.user.user_metadata?.name ?? data.user.email?.split('@')[0],
       };
       set({ authUser });
-      await get().fetchUser(data.user.id, {
+      const { error: profileError } = await get().fetchUser(data.user.id, {
         email: data.user.email ?? undefined,
         name: authUser.name,
       });
-      const user = get().user;
-      if (user && !user.isActive) {
+      if (profileError) {
         await get().signOut();
-        return {
-          error: new Error('Your account has been deactivated. Contact your administrator.'),
-        };
+        return { error: new Error(profileError) };
       }
     }
     return { error: null };
@@ -124,10 +138,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   fetchUser: async (authId, fallback) => {
-    const knownEmail = fallback?.email;
-    const dbUser = await getUserByAuthId(authId, knownEmail);
-    const user = dbUser ?? (fallback ? await createFallbackUser(authId, fallback) : null);
+    const { user, error } = await resolveProfileUser(authId, fallback);
     set({ user });
+    return { error };
   },
 
   init: async () => {
@@ -144,13 +157,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             session.user.user_metadata?.name ?? session.user.email?.split('@')[0],
         };
         set({ authUser });
-        await get().fetchUser(session.user.id, {
+        const { error: profileError } = await get().fetchUser(session.user.id, {
           email: session.user.email ?? undefined,
           name: authUser.name,
         });
-        const user = get().user;
-        if (user && !user.isActive) {
-          setAuthFlash('Your account has been deactivated. Contact your administrator.');
+        if (profileError) {
+          setAuthFlash(profileError);
           await get().signOut();
         }
       } else {

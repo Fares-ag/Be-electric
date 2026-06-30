@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Pagination } from '@/components/Pagination';
 import { SearchFilterBar } from '@/components/SearchFilterBar';
@@ -10,6 +12,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
 import { isAdminRole } from '@/lib/roles';
 import {
+  PURCHASE_ORDER_STATUSES,
   allowedPurchaseOrderStatuses,
   formatPurchaseOrderLabel,
   isAllowedPurchaseOrderStatusTransition,
@@ -20,10 +23,14 @@ import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { StatusBadge } from '@/components/ui/Badge';
+import { FilterChipLink } from '@/components/ui/FilterChipLink';
 import { DataTableShell, PageHeader } from '@/components/ui/PageStates';
+import { ShoppingCart } from 'lucide-react';
 
 export default function PurchaseOrdersPage() {
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
+  const statusFilter = searchParams.get('status') ?? '';
   const user = useAuthStore((s) => s.user);
   const canManage = isAdminRole(user?.role);
   const [modalOpen, setModalOpen] = useState(false);
@@ -92,8 +99,20 @@ export default function PurchaseOrdersPage() {
   });
 
   const [search, setSearch] = useState('');
+
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const po of pos ?? []) {
+      counts[po.status] = (counts[po.status] ?? 0) + 1;
+    }
+    return counts;
+  }, [pos]);
+
   const filtered = useMemo(() => {
-    const list = pos ?? [];
+    let list = pos ?? [];
+    if (statusFilter) {
+      list = list.filter((po) => po.status === statusFilter);
+    }
     if (!search.trim()) return list;
     const q = search.trim().toLowerCase();
     return list.filter(
@@ -101,12 +120,15 @@ export default function PurchaseOrdersPage() {
         String(po.orderNumber ?? po.id).toLowerCase().includes(q) ||
         po.status.toLowerCase().includes(q)
     );
-  }, [pos, search]);
+  }, [pos, search, statusFilter]);
 
   const { page, setPage, pageSize, setPageSize, paginatedItems, totalItems } =
     usePagination(filtered);
 
-  useEffect(() => setPage(1), [search, setPage]);
+  useEffect(() => setPage(1), [search, statusFilter, setPage]);
+
+  const hasActiveFilters = !!search.trim() || !!statusFilter;
+  const showEmptySearch = !isLoading && !queryError && (pos?.length ?? 0) > 0 && filtered.length === 0;
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -120,6 +142,7 @@ export default function PurchaseOrdersPage() {
     <div className="space-y-4 sm:space-y-6">
       <PageHeader
         title="Purchase Orders"
+        description="Track procurement from draft through submitted, ordered, and received."
         actions={
           <>
             <SearchFilterBar
@@ -143,6 +166,23 @@ export default function PurchaseOrdersPage() {
           </>
         }
       />
+
+      <div className="flex flex-wrap gap-2">
+        <FilterChipLink href="/purchase-orders" active={!statusFilter} count={pos?.length}>
+          All
+        </FilterChipLink>
+        {PURCHASE_ORDER_STATUSES.map((status) => (
+          <FilterChipLink
+            key={status}
+            href={`/purchase-orders?status=${status}`}
+            active={statusFilter === status}
+            count={statusCounts[status] ?? 0}
+          >
+            <StatusBadge status={status} />
+          </FilterChipLink>
+        ))}
+      </div>
+
       <Card>
         <CardContent className="p-0">
           <DataTableShell
@@ -165,12 +205,24 @@ export default function PurchaseOrdersPage() {
                 </Button>
               ) : undefined
             }
+            emptyIcon={ShoppingCart}
+            emptyIconClassName="bg-amber-100 text-amber-800"
             onRetry={() => refetch()}
           >
-            {filtered.length === 0 && (pos?.length ?? 0) > 0 ? (
-              <div className="px-6 py-12 text-center">
+            {showEmptySearch ? (
+              <div className="flex flex-col items-center px-6 py-14 text-center">
+                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-amber-100 text-amber-800">
+                  <ShoppingCart className="h-7 w-7" aria-hidden />
+                </div>
                 <p className="font-medium text-foreground">No matching purchase orders</p>
-                <p className="mt-1 text-sm text-muted-foreground">Try a different search term.</p>
+                <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                  Try a different search term or status filter.
+                </p>
+                {hasActiveFilters && (
+                  <Link href="/purchase-orders" className="mt-4">
+                    <Button variant="outline">Clear filters</Button>
+                  </Link>
+                )}
               </div>
             ) : (
               <div className="table-scroll overflow-x-auto">
@@ -185,7 +237,7 @@ export default function PurchaseOrdersPage() {
                   </thead>
                   <tbody>
                     {paginatedItems.map((po) => (
-                      <tr key={po.id}>
+                      <tr key={po.id} className="transition-colors hover:bg-muted/40">
                         <td className="font-medium">{po.orderNumber ?? po.id.slice(0, 8)}</td>
                         <td>
                           <StatusBadge status={po.status} />

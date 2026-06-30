@@ -77,6 +77,11 @@ describe('roles', () => {
     expect(canAccessRoute('/notification-settings', 'requestor')).toBe(true);
   });
 
+  it('allows admin on orphan assignments cleanup', () => {
+    expect(canAccessRoute('/orphan-assignments', 'admin')).toBe(true);
+    expect(canAccessRoute('/orphan-assignments', 'requestor')).toBe(false);
+  });
+
   it('redirects unauthorized requestor to my-requests', () => {
     expect(redirectForUnauthorizedRoute('/users', 'requestor')).toBe('/my-requests');
   });
@@ -128,11 +133,13 @@ describe('work-order-detail', () => {
 
   it('builds public URLs for storage paths in metadata', () => {
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://example.supabase.co';
-    const urls = metaPhotoPaths(
-      { photoPaths: ['wo-1/request/photo.jpg'] },
+    const legacy = metaPhotoPaths({ photoPaths: ['wo-1/request/photo.jpg'] }, ['photoPaths']);
+    expect(legacy[0]).toContain('work-order-photos/wo-1/request/photo.jpg');
+    const handbook = metaPhotoPaths(
+      { photoPaths: ['work_orders/request_photos/request_wo-1_0.jpg'] },
       ['photoPaths']
     );
-    expect(urls[0]).toContain('work-order-photos/wo-1/request/photo.jpg');
+    expect(handbook[0]).toContain('files/work_orders/request_photos/');
   });
 
   it('collects Flutter request photos from metadata.photoPaths and photoPath', () => {
@@ -292,7 +299,7 @@ describe('analytics-metrics', () => {
       '2024-06-01'
     );
     const byName = Object.fromEntries(data.map((d) => [d.name, d.value]));
-    expect(byName.pending).toBe(1);
+    expect(byName.upcoming).toBe(1);
     expect(byName.overdue).toBe(1);
     expect(byName.completed).toBe(1);
   });

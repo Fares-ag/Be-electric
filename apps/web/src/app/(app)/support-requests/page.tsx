@@ -4,12 +4,14 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronRight } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { StatusBadge } from '@/components/ui/Badge';
 import { Pagination } from '@/components/Pagination';
 import { SearchFilterBar } from '@/components/SearchFilterBar';
+import { FilterChipLink } from '@/components/ui/FilterChipLink';
+import { ListTableRow } from '@/components/ui/ListTableRow';
+import { DismissibleHint } from '@/components/ui/DismissibleHint';
 import { DataTableShell, PageHeader } from '@/components/ui/PageStates';
 import { usePagination } from '@/hooks/usePagination';
 import { supabase } from '@/lib/supabase';
@@ -23,12 +25,12 @@ import {
   filterSupportRequests,
   formatSupportLabel,
 } from '@/lib/support-requests';
+import { LifeBuoy } from 'lucide-react';
 
 export default function SupportRequestsPage() {
   const searchParams = useSearchParams();
   const statusFromUrl = searchParams.get('status') ?? '';
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState(statusFromUrl);
   const [companyFilter, setCompanyFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [dateFrom, setDateFrom] = useState('');
@@ -49,9 +51,16 @@ export default function SupportRequestsPage() {
     },
   });
 
-  useEffect(() => {
-    setStatusFilter(statusFromUrl);
-  }, [statusFromUrl]);
+  const statusFilter = statusFromUrl;
+
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const request of requests ?? []) {
+      const status = request.status ?? 'submitted';
+      counts[status] = (counts[status] ?? 0) + 1;
+    }
+    return counts;
+  }, [requests]);
 
   const filtered = useMemo(
     () =>
@@ -75,35 +84,37 @@ export default function SupportRequestsPage() {
 
   const hasData = !isLoading && !error && (requests?.length ?? 0) > 0;
   const showEmptySearch = hasData && filtered.length === 0;
+  const hasAdvancedFilters =
+    !!search.trim() || !!companyFilter || !!typeFilter || !!dateFrom || !!dateTo;
 
   return (
     <div className="space-y-4 sm:space-y-6">
       <PageHeader
         title="Support Inbox"
-        description="Review and respond to support requests submitted through the mobile app."
+        description="Know How and Commissioning requests from the mobile app — reply here so requestors see your answer."
       />
 
+      <DismissibleHint hintKey="support-inbox-overview" title="Support inbox workflow">
+        <p>
+          Requests arrive from the requestor mobile app. Filter by{' '}
+          <strong className="font-medium text-foreground">Submitted</strong> to see what needs review,
+          open a row to read details and send a staff reply. Status chips show counts at a glance.
+        </p>
+      </DismissibleHint>
+
       <div className="flex flex-wrap gap-2">
-        <Link
-          href="/support-requests"
-          className={`rounded-full px-3 py-1 text-sm ${
-            !statusFilter ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground hover:bg-muted/80'
-          }`}
-        >
+        <FilterChipLink href="/support-requests" active={!statusFilter} count={requests?.length}>
           All
-        </Link>
+        </FilterChipLink>
         {SUPPORT_REQUEST_STATUSES.map((status) => (
-          <Link
+          <FilterChipLink
             key={status}
             href={`/support-requests?status=${status}`}
-            className={`rounded-full px-3 py-1 text-sm ${
-              statusFilter === status
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-muted text-foreground hover:bg-muted/80'
-            }`}
+            active={statusFilter === status}
+            count={statusCounts[status] ?? 0}
           >
-            {formatSupportLabel(status)}
-          </Link>
+            <StatusBadge status={status}>{formatSupportLabel(status)}</StatusBadge>
+          </FilterChipLink>
         ))}
       </div>
 
@@ -113,21 +124,6 @@ export default function SupportRequestsPage() {
         placeholder="Search summary, requester, email..."
       >
         <div className="flex w-full flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-end">
-          <label className="flex min-w-[140px] flex-col gap-1 text-xs text-muted-foreground">
-            Status
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
-            >
-              <option value="">All statuses</option>
-              {SUPPORT_REQUEST_STATUSES.map((status) => (
-                <option key={status} value={status}>
-                  {formatSupportLabel(status)}
-                </option>
-              ))}
-            </select>
-          </label>
           <label className="flex min-w-[160px] flex-col gap-1 text-xs text-muted-foreground">
             Company
             <select
@@ -186,15 +182,30 @@ export default function SupportRequestsPage() {
             error={error}
             isEmpty={!isLoading && !error && (requests?.length ?? 0) === 0}
             emptyTitle="No support requests yet"
-            emptyDescription="New support submissions will appear here for staff review."
+            emptyDescription="When requestors submit Know How or Commissioning requests in the mobile app, they appear here."
+            emptyAction={
+              <Link href="/dashboard">
+                <Button variant="outline">Back to command center</Button>
+              </Link>
+            }
+            emptyIcon={LifeBuoy}
+            emptyIconClassName="bg-teal-100 text-teal-800"
             onRetry={() => refetch()}
           >
             {showEmptySearch ? (
-              <div className="px-6 py-12 text-center">
+              <div className="flex flex-col items-center px-6 py-14 text-center">
+                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-teal-100 text-teal-800">
+                  <LifeBuoy className="h-7 w-7" aria-hidden />
+                </div>
                 <p className="font-medium text-foreground">No matching support requests</p>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <p className="mt-1 max-w-sm text-sm text-muted-foreground">
                   Try different search terms or filters.
                 </p>
+                {(hasAdvancedFilters || statusFilter) && (
+                  <Link href="/support-requests" className="mt-4">
+                    <Button variant="outline">Clear all filters</Button>
+                  </Link>
+                )}
               </div>
             ) : (
               <div className="table-scroll overflow-x-auto">
@@ -207,12 +218,14 @@ export default function SupportRequestsPage() {
                       <th>Requester</th>
                       <th>Company</th>
                       <th>Submitted</th>
-                      <th className="w-12" />
+                      <th className="w-12">
+                        <span className="sr-only">Actions</span>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {paginatedItems.map((request) => (
-                      <tr key={request.id}>
+                      <ListTableRow key={request.id} href={`/support-requests/${request.id}`}>
                         <td className="max-w-xs truncate font-medium text-foreground">
                           {request.summary ?? '—'}
                         </td>
@@ -227,15 +240,7 @@ export default function SupportRequestsPage() {
                         <td className="text-sm text-muted-foreground">
                           {new Date(request.createdAt).toLocaleString()}
                         </td>
-                        <td>
-                          <Link href={`/support-requests/${request.id}`}>
-                            <Button variant="ghost" size="sm" className="gap-1">
-                              View
-                              <ChevronRight className="h-4 w-4" aria-hidden />
-                            </Button>
-                          </Link>
-                        </td>
-                      </tr>
+                      </ListTableRow>
                     ))}
                   </tbody>
                 </table>

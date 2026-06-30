@@ -15,7 +15,9 @@ import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { StatusBadge } from '@/components/ui/Badge';
+import { FilterChipLink } from '@/components/ui/FilterChipLink';
 import { DataTableShell, PageHeader } from '@/components/ui/PageStates';
+import { Package } from 'lucide-react';
 
 type Asset = {
   id: string;
@@ -45,6 +47,7 @@ export default function AssetsPage() {
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const companyIdFromUrl = searchParams.get('companyId');
+  const statusFromUrl = searchParams.get('status') ?? '';
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Asset | null>(null);
   const [form, setForm] = useState(emptyForm);
@@ -73,10 +76,24 @@ export default function AssetsPage() {
   });
 
   const [search, setSearch] = useState('');
+  const statusFilter = statusFromUrl;
+
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const asset of assets ?? []) {
+      const status = asset.status ?? 'active';
+      counts[status] = (counts[status] ?? 0) + 1;
+    }
+    return counts;
+  }, [assets]);
+
   const filtered = useMemo(() => {
     let list = assets ?? [];
     if (companyIdFromUrl) {
       list = list.filter((a) => (a.companyId ?? null) === companyIdFromUrl);
+    }
+    if (statusFilter) {
+      list = list.filter((a) => (a.status ?? 'active') === statusFilter);
     }
     if (!search.trim()) return list;
     const q = search.trim().toLowerCase();
@@ -87,7 +104,10 @@ export default function AssetsPage() {
         (a.company?.name ?? '').toLowerCase().includes(q) ||
         (a.assetType ?? '').toLowerCase().includes(q)
     );
-  }, [assets, search, companyIdFromUrl]);
+  }, [assets, search, companyIdFromUrl, statusFilter]);
+
+  const hasActiveFilters = !!search.trim() || !!companyIdFromUrl || !!statusFilter;
+  const showEmptySearch = !isLoading && !queryError && (assets?.length ?? 0) > 0 && filtered.length === 0;
 
   const filteredByCompanyName = companyIdFromUrl
     ? companies?.find((c) => c.id === companyIdFromUrl)?.name
@@ -96,7 +116,7 @@ export default function AssetsPage() {
   const { page, setPage, pageSize, setPageSize, paginatedItems, totalItems } =
     usePagination(filtered);
 
-  useEffect(() => setPage(1), [search, companyIdFromUrl, setPage]);
+  useEffect(() => setPage(1), [search, companyIdFromUrl, statusFilter, setPage]);
 
   const createMutation = useMutation({
     mutationFn: async (payload: typeof emptyForm) => {
@@ -220,6 +240,7 @@ export default function AssetsPage() {
     <div className="space-y-4 sm:space-y-6">
       <PageHeader
         title="Chargers"
+        description="EV chargers linked to companies — used for work orders, PM schedules, and field assignments."
         actions={
           <>
             <SearchFilterBar
@@ -243,6 +264,30 @@ export default function AssetsPage() {
           </Link>
         </p>
       )}
+      <div className="flex flex-wrap gap-2">
+        <FilterChipLink
+          href={companyIdFromUrl ? `/assets?companyId=${companyIdFromUrl}` : '/assets'}
+          active={!statusFilter}
+          count={assets?.length}
+        >
+          All
+        </FilterChipLink>
+        {ASSET_STATUSES.map((status) => {
+          const href = companyIdFromUrl
+            ? `/assets?companyId=${companyIdFromUrl}&status=${status}`
+            : `/assets?status=${status}`;
+          return (
+            <FilterChipLink
+              key={status}
+              href={href}
+              active={statusFilter === status}
+              count={statusCounts[status] ?? 0}
+            >
+              <StatusBadge status={status} />
+            </FilterChipLink>
+          );
+        })}
+      </div>
       <Card>
         <CardContent className="p-0">
           <DataTableShell
@@ -256,12 +301,24 @@ export default function AssetsPage() {
                 Add Charger
               </Button>
             }
+            emptyIcon={Package}
+            emptyIconClassName="bg-blue-100 text-blue-700"
             onRetry={() => refetch()}
           >
-            {filtered.length === 0 && (assets?.length ?? 0) > 0 ? (
-              <div className="px-6 py-12 text-center">
+            {showEmptySearch ? (
+              <div className="flex flex-col items-center px-6 py-14 text-center">
+                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-blue-100 text-blue-700">
+                  <Package className="h-7 w-7" aria-hidden />
+                </div>
                 <p className="font-medium text-foreground">No matching chargers</p>
-                <p className="mt-1 text-sm text-muted-foreground">Try a different search or company filter.</p>
+                <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                  Try a different search term or status filter.
+                </p>
+                {hasActiveFilters && (
+                  <Link href="/assets" className="mt-4">
+                    <Button variant="outline">Clear filters</Button>
+                  </Link>
+                )}
               </div>
             ) : (
               <div className="table-scroll overflow-x-auto">
@@ -278,7 +335,7 @@ export default function AssetsPage() {
                   </thead>
                   <tbody>
                     {paginatedItems.map((a) => (
-                      <tr key={a.id}>
+                      <tr key={a.id} className="transition-colors hover:bg-muted/40">
                         <td className="font-medium">{a.name}</td>
                         <td>{a.company?.name ?? '—'}</td>
                         <td>{a.location ?? '—'}</td>

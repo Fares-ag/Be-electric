@@ -1,3 +1,5 @@
+import { toPhotoUrl } from '@/lib/storage-urls';
+
 export const SUPPORT_REQUEST_STATUSES = [
   'submitted',
   'in_progress',
@@ -54,11 +56,11 @@ export function parseSupportAttachments(value: unknown): SupportAttachment[] {
   if (!Array.isArray(value)) return [];
   return value
     .map((item) => {
-      if (typeof item === 'string') return { url: item };
+      if (typeof item === 'string') return { url: toPhotoUrl(item) };
       if (item && typeof item === 'object' && 'url' in item) {
         const row = item as Record<string, unknown>;
         return {
-          url: String(row.url),
+          url: toPhotoUrl(String(row.url)),
           fileName: row.fileName != null ? String(row.fileName) : undefined,
           contentType: row.contentType != null ? String(row.contentType) : undefined,
           size: typeof row.size === 'number' ? row.size : undefined,

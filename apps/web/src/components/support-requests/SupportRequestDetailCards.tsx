@@ -62,34 +62,4 @@ export function SupportRequestRequesterCard({ request }: { request: SupportReque
   );
 }
 
-export function SupportRequestAttachmentsCard({
-  attachments,
-}: {
-  attachments: SupportRequestDetail['attachments'];
-}) {
-  return (
-    <DetailCard title="Attachments">
-      {attachments.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No attachments uploaded.</p>
-      ) : (
-        <ul className="space-y-2">
-          {attachments.map((file, index) => (
-            <li key={`${file.url}-${index}`}>
-              <a
-                href={file.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm text-primary underline underline-offset-2 hover:text-primary-hover"
-              >
-                {file.fileName ?? `Attachment ${index + 1}`}
-              </a>
-              {file.contentType ? (
-                <span className="ml-2 text-xs text-muted-foreground">{file.contentType}</span>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      )}
-    </DetailCard>
-  );
-}
+export { SupportRequestAttachmentsCard } from '@/components/support-requests/SupportRequestAttachmentsCard';

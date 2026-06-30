@@ -13,6 +13,7 @@ export const STATUS_VARIANT: Record<string, string> = {
   reopened: 'reopened',
   // PM task
   pending: 'pending',
+  upcoming: 'open',
   overdue: 'overdue',
   // Parts request
   approved: 'approved',

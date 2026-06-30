@@ -12,7 +12,10 @@ import { usePagination } from '@/hooks/usePagination';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Modal, ModalActions } from '@/components/ui/Modal';
+import { FilterChipLink } from '@/components/ui/FilterChipLink';
+import { DismissibleHint } from '@/components/ui/DismissibleHint';
 import { DataTableShell, PageHeader } from '@/components/ui/PageStates';
+import { Boxes } from 'lucide-react';
 
 type InventoryItem = InventoryItemRow;
 
@@ -177,10 +180,14 @@ export default function InventoryPage() {
 
   useEffect(() => setPage(1), [search, stockFilter, setPage]);
 
+  const hasActiveFilters = !!search.trim() || stockFilter === 'lowStock';
+  const showEmptySearch = !isLoading && !queryError && (items?.length ?? 0) > 0 && filtered.length === 0;
+
   return (
     <div className="space-y-4 sm:space-y-6">
       <PageHeader
         title="Inventory"
+        description="Spare parts and consumables — low-stock items link from the dashboard KPI."
         actions={
           <>
             <SearchFilterBar
@@ -199,17 +206,28 @@ export default function InventoryPage() {
         }
       />
 
-      <div className="flex flex-wrap gap-2">
-        <Link href="/inventory">
-          <Button variant={!stockFilter ? 'primary' : 'outline'} size="sm">
-            All items
-          </Button>
-        </Link>
-        <Link href="/inventory?filter=lowStock">
-          <Button variant={stockFilter === 'lowStock' ? 'primary' : 'outline'} size="sm">
+      <DismissibleHint hintKey="inventory-overview" title="Inventory quick guide">
+        <p>
+          Set a <strong className="font-medium text-foreground">minimum stock</strong> on each item — when
+          quantity falls at or below it, the item appears in{' '}
+          <Link href="/inventory?filter=lowStock" className="text-primary underline-offset-2 hover:underline">
             Low stock
-          </Button>
-        </Link>
+          </Link>{' '}
+          and on the dashboard KPI. Update quantities after parts are used or received.
+        </p>
+      </DismissibleHint>
+
+      <div className="flex flex-wrap gap-2">
+        <FilterChipLink href="/inventory" active={!stockFilter} count={items?.length}>
+          All items
+        </FilterChipLink>
+        <FilterChipLink
+          href="/inventory?filter=lowStock"
+          active={stockFilter === 'lowStock'}
+          count={lowStock.length}
+        >
+          Low stock
+        </FilterChipLink>
       </div>
       {stockFilter === 'lowStock' && (
         <p className="text-sm text-muted-foreground">
@@ -230,12 +248,24 @@ export default function InventoryPage() {
                 Add Item
               </Button>
             }
+            emptyIcon={Boxes}
+            emptyIconClassName="bg-amber-100 text-amber-800"
             onRetry={() => refetch()}
           >
-            {filtered.length === 0 && (items?.length ?? 0) > 0 ? (
-              <div className="px-6 py-12 text-center">
+            {showEmptySearch ? (
+              <div className="flex flex-col items-center px-6 py-14 text-center">
+                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-amber-100 text-amber-800">
+                  <Boxes className="h-7 w-7" aria-hidden />
+                </div>
                 <p className="font-medium text-foreground">No matching items</p>
-                <p className="mt-1 text-sm text-muted-foreground">Try a different search term.</p>
+                <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                  Try a different search term or stock filter.
+                </p>
+                {hasActiveFilters && (
+                  <Link href="/inventory" className="mt-4">
+                    <Button variant="outline">Clear filters</Button>
+                  </Link>
+                )}
               </div>
             ) : (
               <div className="table-scroll overflow-x-auto">
@@ -257,7 +287,7 @@ export default function InventoryPage() {
                       const min = i.minStock;
                       const isLow = isLowStockItem(i);
                       return (
-                        <tr key={i.id}>
+                        <tr key={i.id} className="transition-colors hover:bg-muted/40">
                           <td className="font-medium">{i.name}</td>
                           <td>{i.category ?? '—'}</td>
                           <td className={isLow ? 'font-medium text-amber-600' : ''}>{String(qty)}</td>

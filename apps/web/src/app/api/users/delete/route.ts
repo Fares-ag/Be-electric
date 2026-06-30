@@ -29,13 +29,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'You cannot delete your own account' }, { status: 400 });
   }
 
-  const supabase = createClient(
+  const supabaseService = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     serviceRoleKey,
     { auth: { autoRefreshToken: false, persistSession: false } }
   );
 
-  const { error: authError } = await supabase.auth.admin.deleteUser(id.trim());
+  const { error: authError } = await supabaseService.auth.admin.deleteUser(id.trim());
   if (authError) {
     return NextResponse.json(
       { error: `Auth delete failed: ${authError.message}` },
@@ -43,7 +43,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const { error: profileError } = await supabase.rpc('delete_user_by_id', {
+  const { error: profileError } = await auth.supabaseAuth.rpc('delete_user_by_id', {
     p_id: id.trim(),
   });
   if (profileError) {

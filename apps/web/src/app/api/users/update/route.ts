@@ -45,13 +45,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'You cannot deactivate your own account' }, { status: 400 });
   }
 
-  const supabase = createClient(
+  const supabaseService = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     serviceRoleKey,
     { auth: { autoRefreshToken: false, persistSession: false } }
   );
 
-  const { error: authError } = await supabase.auth.admin.updateUserById(id.trim(), {
+  const { error: authError } = await supabaseService.auth.admin.updateUserById(id.trim(), {
     user_metadata: {
       name: (name ?? '').trim(),
       role: role ?? 'requestor',
@@ -64,7 +64,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const { error: profileError } = await supabase.rpc('update_user', {
+  const { error: profileError } = await auth.supabaseAuth.rpc('update_user', {
     p_id: id.trim(),
     p_name: (name ?? '').trim(),
     p_role: role ?? 'requestor',

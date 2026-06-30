@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Pagination } from '@/components/Pagination';
 import { SearchFilterBar } from '@/components/SearchFilterBar';
@@ -11,7 +12,10 @@ import { useAuthStore } from '@/stores/auth-store';
 import { notificationRelatedHref } from '@/lib/notifications';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { FilterChipLink } from '@/components/ui/FilterChipLink';
+import { DismissibleHint } from '@/components/ui/DismissibleHint';
 import { DataTableShell, PageHeader } from '@/components/ui/PageStates';
+import { Bell } from 'lucide-react';
 
 type NotificationRow = {
   id: string;
@@ -29,6 +33,8 @@ type NotificationRow = {
 export default function NotificationsPage() {
   const user = useAuthStore((s) => s.user);
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
+  const readFilter = searchParams.get('read') ?? '';
 
   const { data: notifications, isLoading, error: queryError, refetch } = useQuery({
     queryKey: ['notifications', user?.id],
@@ -70,8 +76,17 @@ export default function NotificationsPage() {
   }, [user?.id, queryClient]);
 
   const [search, setSearch] = useState('');
+
+  const unreadCount = (notifications ?? []).filter((n) => !n.isRead).length;
+  const readCount = (notifications ?? []).filter((n) => n.isRead).length;
+
   const filtered = useMemo(() => {
-    const list = notifications ?? [];
+    let list = notifications ?? [];
+    if (readFilter === 'unread') {
+      list = list.filter((n) => !n.isRead);
+    } else if (readFilter === 'read') {
+      list = list.filter((n) => n.isRead);
+    }
     if (!search.trim()) return list;
     const q = search.trim().toLowerCase();
     return list.filter(
@@ -79,14 +94,15 @@ export default function NotificationsPage() {
         n.title.toLowerCase().includes(q) ||
         (n.message ?? '').toLowerCase().includes(q)
     );
-  }, [notifications, search]);
+  }, [notifications, search, readFilter]);
 
   const { page, setPage, pageSize, setPageSize, paginatedItems, totalItems } =
     usePagination(filtered);
 
-  useEffect(() => setPage(1), [search, setPage]);
+  useEffect(() => setPage(1), [search, readFilter, setPage]);
 
-  const unreadCount = (notifications ?? []).filter((n) => !n.isRead).length;
+  const hasActiveFilters = !!search.trim() || !!readFilter;
+  const showEmptySearch = !isLoading && !queryError && (notifications?.length ?? 0) > 0 && filtered.length === 0;
 
   const markReadMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -120,7 +136,7 @@ export default function NotificationsPage() {
     <div className="space-y-4 sm:space-y-6">
       <PageHeader
         title="Notifications"
-        description={unreadCount > 0 ? `${unreadCount} unread` : undefined}
+        description="In-app alerts for assignments, status changes, and support replies."
         actions={
           <>
             <SearchFilterBar
@@ -144,6 +160,26 @@ export default function NotificationsPage() {
         }
       />
 
+      <DismissibleHint hintKey="notifications-overview" title="About notifications">
+        <p>
+          Click a notification to open the related work order, PM occurrence, or support request. Unread items
+          are highlighted — use <strong className="font-medium text-foreground">Mark all read</strong> when
+          you have caught up.
+        </p>
+      </DismissibleHint>
+
+      <div className="flex flex-wrap gap-2">
+        <FilterChipLink href="/notifications" active={!readFilter} count={notifications?.length}>
+          All
+        </FilterChipLink>
+        <FilterChipLink href="/notifications?read=unread" active={readFilter === 'unread'} count={unreadCount}>
+          Unread
+        </FilterChipLink>
+        <FilterChipLink href="/notifications?read=read" active={readFilter === 'read'} count={readCount}>
+          Read
+        </FilterChipLink>
+      </div>
+
       <Card>
         <CardContent className="p-0">
           <DataTableShell
@@ -152,12 +188,24 @@ export default function NotificationsPage() {
             isEmpty={!isLoading && !queryError && (notifications?.length ?? 0) === 0}
             emptyTitle="No notifications"
             emptyDescription="Updates about your requests and assignments will appear here."
+            emptyIcon={Bell}
+            emptyIconClassName="bg-blue-100 text-blue-700"
             onRetry={() => refetch()}
           >
-            {filtered.length === 0 && (notifications?.length ?? 0) > 0 ? (
-              <div className="px-6 py-12 text-center">
+            {showEmptySearch ? (
+              <div className="flex flex-col items-center px-6 py-14 text-center">
+                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-blue-100 text-blue-700">
+                  <Bell className="h-7 w-7" aria-hidden />
+                </div>
                 <p className="font-medium text-foreground">No matching notifications</p>
-                <p className="mt-1 text-sm text-muted-foreground">Try a different search term.</p>
+                <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                  Try a different search term or read filter.
+                </p>
+                {hasActiveFilters && (
+                  <Link href="/notifications" className="mt-4">
+                    <Button variant="outline">Clear filters</Button>
+                  </Link>
+                )}
               </div>
             ) : (
               <>
@@ -183,7 +231,7 @@ export default function NotificationsPage() {
                     return (
                       <li
                         key={n.id}
-                        className={`flex items-start justify-between gap-2 px-4 py-3 ${n.isRead ? 'opacity-80' : 'bg-accent/30'}`}
+                        className={`flex items-start justify-between gap-2 px-4 py-3 transition-colors hover:bg-muted/40 ${n.isRead ? 'opacity-80' : 'bg-accent/30'}`}
                       >
                         <div className="min-w-0 flex-1">
                           {href ? (

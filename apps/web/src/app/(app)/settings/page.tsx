@@ -1,13 +1,22 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { useAuthStore } from '@/stores/auth-store';
 import { Card } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
 import { PageHeader } from '@/components/ui/PageStates';
 import { LEGAL_URLS } from '@/lib/legal-urls';
+import { resetAllUiHints } from '@/lib/ui-hints';
 
 export default function SettingsPage() {
   const user = useAuthStore((s) => s.user);
+  const [hintsReset, setHintsReset] = useState(false);
+
+  function handleResetHints() {
+    resetAllUiHints();
+    setHintsReset(true);
+  }
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -46,6 +55,22 @@ export default function SettingsPage() {
         >
           Open notification settings
         </Link>
+      </Card>
+
+      <Card className="p-6 space-y-3">
+        <h2 className="text-base font-semibold text-foreground">Admin tips</h2>
+        <p className="text-sm text-muted-foreground">
+          Bring back dismissible onboarding hints across the admin portal (dashboard, PM, support, inventory,
+          parts, notifications, and legacy PM tasks).
+        </p>
+        <Button type="button" variant="outline" size="sm" onClick={handleResetHints}>
+          Show tips again
+        </Button>
+        {hintsReset ? (
+          <p className="text-sm text-green-700" role="status">
+            Tips will appear the next time you open those pages.
+          </p>
+        ) : null}
       </Card>
 
       <Card className="p-6">

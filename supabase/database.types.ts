@@ -1,4 +1,4 @@
-export type Json =
+﻿export type Json =
   | string
   | number
   | boolean
@@ -472,81 +472,6 @@ export type Database = {
           },
         ]
       }
-      support_requests: {
-        Row: {
-          address: string | null
-          attachments: Json
-          chargerModel: string | null
-          chargerSerialNumber: string | null
-          companyId: string | null
-          country: string | null
-          createdAt: string
-          createdBy: string | null
-          details: string | null
-          id: string
-          question: string | null
-          scheduledDate: string | null
-          staffReply: string | null
-          status: string
-          summary: string | null
-          topic: string | null
-          type: string
-        }
-        Insert: {
-          address?: string | null
-          attachments?: Json
-          chargerModel?: string | null
-          chargerSerialNumber?: string | null
-          companyId?: string | null
-          country?: string | null
-          createdAt?: string
-          createdBy?: string | null
-          details?: string | null
-          id?: string
-          question?: string | null
-          scheduledDate?: string | null
-          staffReply?: string | null
-          status?: string
-          summary?: string | null
-          topic?: string | null
-          type?: string
-        }
-        Update: {
-          address?: string | null
-          attachments?: Json
-          chargerModel?: string | null
-          chargerSerialNumber?: string | null
-          companyId?: string | null
-          country?: string | null
-          createdAt?: string
-          createdBy?: string | null
-          details?: string | null
-          id?: string
-          question?: string | null
-          scheduledDate?: string | null
-          staffReply?: string | null
-          status?: string
-          summary?: string | null
-          topic?: string | null
-          type?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "support_requests_companyId_fkey"
-            columns: ["companyId"]
-            isOneToOne: false
-            referencedRelation: "companies"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "support_requests_createdBy_fkey"
-            columns: ["createdBy"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       pm_schedules: {
         Row: {
           assignedTechnicianIds: string[] | null
@@ -614,7 +539,12 @@ export type Database = {
         Row: {
           assetId: string
           assignedTechnicianIds: string[] | null
+          cancelledAt: string | null
+          cancelledById: string | null
+          cancelReason: string | null
           completedAt: string | null
+          completedById: string | null
+          completionNotes: string | null
           completionPhotoPath: string | null
           createdAt: string
           dueDate: string
@@ -627,7 +557,12 @@ export type Database = {
         Insert: {
           assetId: string
           assignedTechnicianIds?: string[] | null
+          cancelledAt?: string | null
+          cancelledById?: string | null
+          cancelReason?: string | null
           completedAt?: string | null
+          completedById?: string | null
+          completionNotes?: string | null
           completionPhotoPath?: string | null
           createdAt?: string
           dueDate: string
@@ -640,7 +575,12 @@ export type Database = {
         Update: {
           assetId?: string
           assignedTechnicianIds?: string[] | null
+          cancelledAt?: string | null
+          cancelledById?: string | null
+          cancelReason?: string | null
           completedAt?: string | null
+          completedById?: string | null
+          completionNotes?: string | null
           completionPhotoPath?: string | null
           createdAt?: string
           dueDate?: string
@@ -656,6 +596,20 @@ export type Database = {
             columns: ["assetId"]
             isOneToOne: false
             referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pm_task_occurrences_cancelledById_fkey"
+            columns: ["cancelledById"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pm_task_occurrences_completedById_fkey"
+            columns: ["completedById"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
           {
@@ -776,6 +730,81 @@ export type Database = {
           {
             foreignKeyName: "purchase_orders_requestedBy_fkey"
             columns: ["requestedBy"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      support_requests: {
+        Row: {
+          address: string | null
+          attachments: Json
+          chargerModel: string | null
+          chargerSerialNumber: string | null
+          companyId: string | null
+          country: string | null
+          createdAt: string
+          createdBy: string
+          details: string | null
+          id: string
+          question: string | null
+          scheduledDate: string | null
+          staffReply: string | null
+          status: string
+          summary: string | null
+          topic: string | null
+          type: string
+        }
+        Insert: {
+          address?: string | null
+          attachments?: Json
+          chargerModel?: string | null
+          chargerSerialNumber?: string | null
+          companyId?: string | null
+          country?: string | null
+          createdAt?: string
+          createdBy: string
+          details?: string | null
+          id?: string
+          question?: string | null
+          scheduledDate?: string | null
+          staffReply?: string | null
+          status?: string
+          summary?: string | null
+          topic?: string | null
+          type?: string
+        }
+        Update: {
+          address?: string | null
+          attachments?: Json
+          chargerModel?: string | null
+          chargerSerialNumber?: string | null
+          companyId?: string | null
+          country?: string | null
+          createdAt?: string
+          createdBy?: string
+          details?: string | null
+          id?: string
+          question?: string | null
+          scheduledDate?: string | null
+          staffReply?: string | null
+          status?: string
+          summary?: string | null
+          topic?: string | null
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_requests_companyId_fkey"
+            columns: ["companyId"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "support_requests_createdBy_fkey"
+            columns: ["createdBy"]
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
@@ -1155,52 +1184,139 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      assigned_ids_as_text:
+        | {
+            Args: { ids: string[] }
+            Returns: {
+              error: true
+            } & "Could not choose the best candidate function between: public.assigned_ids_as_text(ids => _text), public.assigned_ids_as_text(ids => _uuid). Try renaming the parameters or the function itself in the database so function overloading can be resolved"
+          }
+        | {
+            Args: { ids: string[] }
+            Returns: {
+              error: true
+            } & "Could not choose the best candidate function between: public.assigned_ids_as_text(ids => _text), public.assigned_ids_as_text(ids => _uuid). Try renaming the parameters or the function itself in the database so function overloading can be resolved"
+          }
       check_user_is_admin_or_manager: { Args: never; Returns: boolean }
       create_pm_schedule_with_occurrences: {
-        Args: {
-          p_asset_ids: string[]
-          p_occurrences: Json
-          p_schedule: Json
-        }
+        Args: { p_asset_ids: string[]; p_occurrences: Json; p_schedule: Json }
         Returns: Json
-      }
-      get_user_by_email: {
-        Args: { p_email: string }
-        Returns: Database['public']['Tables']['users']['Row'][]
       }
       delete_user_by_id: { Args: { p_id: string }; Returns: undefined }
       get_admin_by_email: {
         Args: { p_email: string }
-        Returns: { is_admin: boolean; is_manager: boolean }[]
+        Returns: {
+          is_admin: boolean
+          is_manager: boolean
+        }[]
       }
       get_current_user_company_id: { Args: never; Returns: string }
       get_my_email: { Args: never; Returns: string }
       get_my_role: { Args: never; Returns: string }
-      get_user_by_id: { Args: { p_id: string }; Returns: Database['public']['Tables']['users']['Row'][] }
-      get_users_list: { Args: Record<PropertyKey, never>; Returns: Database['public']['Tables']['users']['Row'][] }
-      insert_user: {
-        Args: {
-          p_id: string
-          p_email: string
-          p_name: string
-          p_role: string
-          p_is_active: boolean
-          p_company_id: string | null
-          p_department: string | null
+      get_user_by_email: {
+        Args: { p_email: string }
+        Returns: {
+          companyId: string | null
+          createdAt: string
+          department: string | null
+          email: string
+          id: string
+          isActive: boolean
+          lastLoginAt: string | null
+          name: string
+          role: string
+          updatedAt: string | null
+          workEmail: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "users"
+          isOneToOne: false
+          isSetofReturn: true
         }
-        Returns: undefined
       }
+      get_user_by_id: {
+        Args: { p_id: string }
+        Returns: {
+          companyId: string | null
+          createdAt: string
+          department: string | null
+          email: string
+          id: string
+          isActive: boolean
+          lastLoginAt: string | null
+          name: string
+          role: string
+          updatedAt: string | null
+          workEmail: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "users"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      get_users_list: {
+        Args: never
+        Returns: {
+          companyId: string | null
+          createdAt: string
+          department: string | null
+          email: string
+          id: string
+          isActive: boolean
+          lastLoginAt: string | null
+          name: string
+          role: string
+          updatedAt: string | null
+          workEmail: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "users"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      insert_user:
+        | {
+            Args: {
+              p_company_id: string
+              p_department: string
+              p_email: string
+              p_id: string
+              p_is_active: boolean
+              p_name: string
+              p_role: string
+            }
+            Returns: undefined
+          }
+        | { Args: { p_row: Json }; Returns: string }
       is_admin_or_manager: { Args: never; Returns: boolean }
       is_current_user_admin_or_manager: { Args: never; Returns: boolean }
-      update_user: {
-        Args: {
-          p_id: string
-          p_name: string
-          p_role: string
-          p_is_active: boolean
-          p_company_id: string | null
-          p_department: string | null
-        }
+      scrub_user_from_technician_assignments: {
+        Args: { p_user_id: string }
+        Returns: {
+          pm_tasks_updated: number
+          work_orders_updated: number
+        }[]
+      }
+      update_user:
+        | {
+            Args: {
+              p_company_id: string
+              p_department: string
+              p_id: string
+              p_is_active: boolean
+              p_name: string
+              p_role: string
+            }
+            Returns: undefined
+          }
+        | { Args: { p_id: string; p_row: Json }; Returns: undefined }
+      update_work_order_assignees: {
+        Args: { p_technician_ids: string[]; p_work_order_id: string }
         Returns: undefined
       }
       upsert_work_order: { Args: { p_row: Json }; Returns: undefined }
@@ -1388,6 +1504,7 @@ export type Database = {
           id: string
           in_progress_size: number
           key: string
+          metadata: Json | null
           owner_id: string | null
           upload_signature: string
           user_metadata: Json | null
@@ -1399,6 +1516,7 @@ export type Database = {
           id: string
           in_progress_size?: number
           key: string
+          metadata?: Json | null
           owner_id?: string | null
           upload_signature: string
           user_metadata?: Json | null
@@ -1410,6 +1528,7 @@ export type Database = {
           id?: string
           in_progress_size?: number
           key?: string
+          metadata?: Json | null
           owner_id?: string | null
           upload_signature?: string
           user_metadata?: Json | null
@@ -1528,12 +1647,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      allow_any_operation: {
+        Args: { expected_operations: string[] }
+        Returns: boolean
+      }
+      allow_only_operation: {
+        Args: { expected_operation: string }
+        Returns: boolean
+      }
       can_insert_object: {
         Args: { bucketid: string; metadata: Json; name: string; owner: string }
-        Returns: undefined
-      }
-      delete_leaf_prefixes: {
-        Args: { bucket_ids: string[]; names: string[] }
         Returns: undefined
       }
       extension: { Args: { name: string }; Returns: string }
@@ -1543,9 +1666,6 @@ export type Database = {
         Args: { p_delimiter: string; p_key: string; p_prefix: string }
         Returns: string
       }
-      get_level: { Args: { name: string }; Returns: number }
-      get_prefix: { Args: { name: string }; Returns: string }
-      get_prefixes: { Args: { name: string }; Returns: string[] }
       get_size_by_bucket: {
         Args: never
         Returns: {
@@ -1623,26 +1743,6 @@ export type Database = {
           created_at: string
           id: string
           key: string
-          last_accessed_at: string
-          metadata: Json
-          name: string
-          updated_at: string
-        }[]
-      }
-      search_legacy_v1: {
-        Args: {
-          bucketname: string
-          levels?: number
-          limits?: number
-          offsets?: number
-          prefix: string
-          search?: string
-          sortcolumn?: string
-          sortorder?: string
-        }
-        Returns: {
-          created_at: string
-          id: string
           last_accessed_at: string
           metadata: Json
           name: string

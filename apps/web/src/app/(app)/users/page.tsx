@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Pagination } from '@/components/Pagination';
 import { SearchFilterBar } from '@/components/SearchFilterBar';
@@ -11,9 +12,15 @@ import { USERS_LIST_QUERY_KEY, fetchUsersList, type UsersListEntry } from '@/lib
 import { validateUserForm } from '@/lib/users';
 import { useAuthStore } from '@/stores/auth-store';
 import { Card, CardContent } from '@/components/ui/Card';
+import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { Modal, ModalActions } from '@/components/ui/Modal';
+import { StatusBadge } from '@/components/ui/Badge';
+import { FilterChipLink } from '@/components/ui/FilterChipLink';
 import { DataTableShell, PageHeader } from '@/components/ui/PageStates';
+import { Users } from 'lucide-react';
+
+const USER_ROLE_FILTERS = ['admin', 'manager', 'technician', 'requestor'] as const;
 
 type UserRow = UsersListEntry;
 
@@ -29,6 +36,8 @@ const emptyForm = {
 
 export default function UsersPage() {
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
+  const roleFilter = searchParams.get('role') ?? '';
   const currentUser = useAuthStore((s) => s.user);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<UserRow | null>(null);
@@ -59,8 +68,20 @@ export default function UsersPage() {
   });
 
   const [search, setSearch] = useState('');
+
+  const roleCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const user of users ?? []) {
+      counts[user.role] = (counts[user.role] ?? 0) + 1;
+    }
+    return counts;
+  }, [users]);
+
   const filtered = useMemo(() => {
-    const list = users ?? [];
+    let list = users ?? [];
+    if (roleFilter) {
+      list = list.filter((u) => u.role === roleFilter);
+    }
     if (!search.trim()) return list;
     const q = search.trim().toLowerCase();
     return list.filter(
@@ -69,12 +90,15 @@ export default function UsersPage() {
         u.email.toLowerCase().includes(q) ||
         u.role.toLowerCase().includes(q)
     );
-  }, [users, search]);
+  }, [users, search, roleFilter]);
 
   const { page, setPage, pageSize, setPageSize, paginatedItems, totalItems } =
     usePagination(filtered);
 
-  useEffect(() => setPage(1), [search, setPage]);
+  useEffect(() => setPage(1), [search, roleFilter, setPage]);
+
+  const hasActiveFilters = !!search.trim() || !!roleFilter;
+  const showEmptySearch = !isLoading && !queryError && (users?.length ?? 0) > 0 && filtered.length === 0;
 
   const createMutation = useMutation({
     mutationFn: async (payload: typeof emptyForm) => {
@@ -242,6 +266,7 @@ export default function UsersPage() {
     <div className="space-y-4 sm:space-y-6">
       <PageHeader
         title="Users"
+        description="Team access for admins, managers, technicians, and requestors across web and mobile apps."
         actions={
           <>
             <SearchFilterBar
@@ -250,12 +275,35 @@ export default function UsersPage() {
               placeholder="Search name, email, role..."
               className="sm:min-w-[220px]"
             />
+            <Link
+              href="/orphan-assignments"
+              className="inline-flex h-9 shrink-0 items-center justify-center rounded-lg border border-border bg-background px-4 text-sm font-medium hover:bg-muted"
+            >
+              Orphan assignments
+            </Link>
             <Button onClick={openAdd} className="shrink-0">
               Add User
             </Button>
           </>
         }
       />
+
+      <div className="flex flex-wrap gap-2">
+        <FilterChipLink href="/users" active={!roleFilter} count={users?.length}>
+          All
+        </FilterChipLink>
+        {USER_ROLE_FILTERS.map((role) => (
+          <FilterChipLink
+            key={role}
+            href={`/users?role=${role}`}
+            active={roleFilter === role}
+            count={roleCounts[role] ?? 0}
+          >
+            <span className="capitalize">{role}</span>
+          </FilterChipLink>
+        ))}
+      </div>
+
       <Card>
         <CardContent className="p-0">
           <DataTableShell
@@ -269,13 +317,25 @@ export default function UsersPage() {
                 Add User
               </Button>
             }
+            emptyIcon={Users}
+            emptyIconClassName="bg-blue-100 text-blue-700"
             onRetry={() => refetch()}
             errorHint="Ensure you're logged in as admin and run the RLS script in Supabase."
           >
-            {filtered.length === 0 && (users?.length ?? 0) > 0 ? (
-              <div className="px-6 py-12 text-center">
+            {showEmptySearch ? (
+              <div className="flex flex-col items-center px-6 py-14 text-center">
+                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-blue-100 text-blue-700">
+                  <Users className="h-7 w-7" aria-hidden />
+                </div>
                 <p className="font-medium text-foreground">No matching users</p>
-                <p className="mt-1 text-sm text-muted-foreground">Try a different search term.</p>
+                <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                  Try a different search term or role filter.
+                </p>
+                {hasActiveFilters && (
+                  <Link href="/users" className="mt-4">
+                    <Button variant="outline">Clear filters</Button>
+                  </Link>
+                )}
               </div>
             ) : (
               <div className="table-scroll overflow-x-auto">
@@ -291,11 +351,15 @@ export default function UsersPage() {
                   </thead>
                   <tbody>
                     {paginatedItems.map((u) => (
-                      <tr key={u.id}>
+                      <tr key={u.id} className="transition-colors hover:bg-muted/40">
                         <td className="font-medium text-foreground">{u.name}</td>
                         <td className="text-sm">{u.email}</td>
                         <td className="capitalize">{u.role}</td>
-                        <td>{u.isActive ? 'Active' : 'Inactive'}</td>
+                        <td>
+                          <StatusBadge status={u.isActive ? 'active' : 'inactive'}>
+                            {u.isActive ? 'Active' : 'Inactive'}
+                          </StatusBadge>
+                        </td>
                         <td>
                           <div className="flex gap-2">
                             <Button variant="outline" size="sm" onClick={() => openEdit(u)}>

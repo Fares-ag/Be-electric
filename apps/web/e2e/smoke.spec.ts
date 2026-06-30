@@ -108,4 +108,20 @@ test.describe('Route guard', () => {
       await expect(page).toHaveURL(/\/work-orders\/[^/]+/, { timeout: 15000 });
     }
   });
+
+  test('requestor cannot access orphan assignments page', async ({ page }) => {
+    test.skip(!hasRequestorCreds, 'Set E2E_REQUESTOR_EMAIL and E2E_REQUESTOR_PASSWORD to run');
+    await loginAs(page, process.env.E2E_REQUESTOR_EMAIL!, process.env.E2E_REQUESTOR_PASSWORD!);
+    await page.goto('/orphan-assignments');
+    await expect(page).toHaveURL(/\/my-requests/, { timeout: 15000 });
+    await expect(page.getByRole('heading', { name: /orphan assignments/i })).not.toBeVisible();
+  });
+
+  test('admin can open orphan assignments page', async ({ page }) => {
+    test.skip(!hasAdminCreds, 'Set E2E_ADMIN_EMAIL and E2E_ADMIN_PASSWORD to run');
+    await loginAs(page, process.env.E2E_ADMIN_EMAIL!, process.env.E2E_ADMIN_PASSWORD!);
+    await page.goto('/orphan-assignments');
+    await expect(page).toHaveURL('/orphan-assignments');
+    await expect(page.getByRole('heading', { name: /orphan assignments/i })).toBeVisible();
+  });
 });

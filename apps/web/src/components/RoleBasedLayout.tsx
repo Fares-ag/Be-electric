@@ -4,10 +4,12 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/auth-store';
 import { prefetchRoute } from '@/lib/prefetch-routes';
 import { isAdminRole } from '@/lib/roles';
+import { supabase } from '@/lib/supabase';
+import { countOverduePmOccurrences } from '@/lib/queries/pm-schedules';
 import {
   LayoutDashboard,
   Wrench,
@@ -28,25 +30,86 @@ import {
   LogOut,
   Menu,
   X,
+  type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import beElectricLogo from '@/app/(app)/assets/beElectricLogo.png';
 
-const adminNav = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/work-orders', label: 'Work Orders', icon: Wrench },
-  { href: '/pm-schedules', label: 'PM Schedules', icon: ClipboardList },
-  { href: '/assets', label: 'Chargers', icon: Package },
-  { href: '/users', label: 'Users', icon: Users },
-  { href: '/companies', label: 'Companies', icon: Building2 },
-  { href: '/inventory', label: 'Inventory', icon: Boxes },
-  { href: '/parts-requests', label: 'Parts Requests', icon: ClipboardCheck },
-  { href: '/support-requests', label: 'Support Inbox', icon: LifeBuoy },
-  { href: '/purchase-orders', label: 'Purchase Orders', icon: ShoppingCart },
-  { href: '/analytics', label: 'Analytics', icon: BarChart3 },
-  { href: '/reports', label: 'Reports', icon: FileText },
-  { href: '/settings', label: 'Settings', icon: Settings },
-  { href: '/notifications', label: 'Notifications', icon: Bell },
+type NavBadgeKey = 'supportSubmitted' | 'pmOverdue';
+
+type AdminNavItem = {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  badgeKey?: NavBadgeKey;
+  matchPrefix?: boolean;
+};
+
+type AdminNavSection = {
+  title: string;
+  items: AdminNavItem[];
+};
+
+const adminNavSections: AdminNavSection[] = [
+  {
+    title: 'Overview',
+    items: [{ href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard }],
+  },
+  {
+    title: 'Operations',
+    items: [
+      { href: '/work-orders', label: 'Work Orders', icon: Wrench, matchPrefix: true },
+      {
+        href: '/pm-schedules',
+        label: 'PM Schedules',
+        icon: ClipboardList,
+        badgeKey: 'pmOverdue',
+        matchPrefix: true,
+      },
+      { href: '/assets', label: 'Chargers', icon: Package },
+      { href: '/parts-requests', label: 'Parts Requests', icon: ClipboardCheck, matchPrefix: true },
+    ],
+  },
+  {
+    title: 'Support',
+    items: [
+      {
+        href: '/support-requests',
+        label: 'Support Inbox',
+        icon: LifeBuoy,
+        badgeKey: 'supportSubmitted',
+        matchPrefix: true,
+      },
+    ],
+  },
+  {
+    title: 'Inventory & procurement',
+    items: [
+      { href: '/inventory', label: 'Inventory', icon: Boxes },
+      { href: '/purchase-orders', label: 'Purchase Orders', icon: ShoppingCart, matchPrefix: true },
+    ],
+  },
+  {
+    title: 'Organization',
+    items: [
+      { href: '/companies', label: 'Companies', icon: Building2 },
+      { href: '/users', label: 'Users', icon: Users },
+    ],
+  },
+  {
+    title: 'Insights',
+    items: [
+      { href: '/analytics', label: 'Analytics', icon: BarChart3 },
+      { href: '/reports', label: 'Reports', icon: FileText },
+    ],
+  },
+  {
+    title: 'System',
+    items: [
+      { href: '/settings', label: 'Settings', icon: Settings },
+      { href: '/notifications', label: 'Notifications', icon: Bell },
+    ],
+  },
 ];
 
 const requestorNav = [
@@ -57,20 +120,85 @@ const requestorNav = [
   { href: '/notifications', label: 'Notifications', icon: Bell },
 ];
 
-function NavLinks({
-  nav,
+function navItemActive(pathname: string, href: string, matchPrefix?: boolean): boolean {
+  if (matchPrefix) return pathname === href || pathname.startsWith(`${href}/`);
+  return pathname === href;
+}
+
+function NavBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span className="ml-auto inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">
+      {count > 99 ? '99+' : count}
+    </span>
+  );
+}
+
+function GroupedAdminNav({
+  pathname,
+  badges,
+  onPrefetch,
+  onLinkClick,
+}: {
+  pathname: string;
+  badges: { supportSubmitted: number; pmOverdue: number };
+  onPrefetch: (href: string) => void;
+  onLinkClick?: () => void;
+}) {
+  return (
+    <>
+      {adminNavSections.map((section) => (
+        <div key={section.title} className="space-y-1">
+          <p className="px-4 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80 first:pt-0">
+            {section.title}
+          </p>
+          {section.items.map(({ href, label, icon: Icon, badgeKey, matchPrefix }) => {
+            const isActive = navItemActive(pathname, href, matchPrefix);
+            const badgeCount =
+              badgeKey === 'supportSubmitted'
+                ? badges.supportSubmitted
+                : badgeKey === 'pmOverdue'
+                  ? badges.pmOverdue
+                  : 0;
+            return (
+              <Link
+                key={href}
+                href={href}
+                prefetch
+                onClick={onLinkClick}
+                onMouseEnter={() => onPrefetch(href)}
+                onTouchStart={() => onPrefetch(href)}
+                className={cn(
+                  'flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-medium transition-all duration-200 min-h-[44px]',
+                  isActive
+                    ? 'bg-primary text-primary-foreground shadow-button-primary'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                )}
+              >
+                <Icon className="h-[1.125rem] w-[1.125rem] shrink-0" />
+                <span className="truncate">{label}</span>
+                <NavBadge count={badgeCount} />
+              </Link>
+            );
+          })}
+        </div>
+      ))}
+    </>
+  );
+}
+
+function RequestorNavLinks({
   pathname,
   onPrefetch,
   onLinkClick,
 }: {
-  nav: typeof adminNav;
   pathname: string;
   onPrefetch: (href: string) => void;
   onLinkClick?: () => void;
 }) {
   return (
     <>
-      {nav.map(({ href, label, icon: Icon }) => {
+      {requestorNav.map(({ href, label, icon: Icon }) => {
         const isActive = pathname === href;
         return (
           <Link
@@ -96,6 +224,34 @@ function NavLinks({
   );
 }
 
+function useAdminNavBadges(enabled: boolean) {
+  const supportQuery = useQuery({
+    queryKey: ['nav-support-submitted-count'],
+    staleTime: 60 * 1000,
+    enabled,
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from('support_requests')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'submitted');
+      if (error) throw error;
+      return count ?? 0;
+    },
+  });
+
+  const pmQuery = useQuery({
+    queryKey: ['nav-pm-overdue-count'],
+    staleTime: 60 * 1000,
+    enabled,
+    queryFn: () => countOverduePmOccurrences(),
+  });
+
+  return {
+    supportSubmitted: supportQuery.data ?? 0,
+    pmOverdue: pmQuery.data ?? 0,
+  };
+}
+
 export function RoleBasedLayout({ children }: { children: React.ReactNode }) {
   const user = useAuthStore((s) => s.user);
   const signOut = useAuthStore((s) => s.signOut);
@@ -103,15 +259,13 @@ export function RoleBasedLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const isAdmin = isAdminRole(user?.role);
-  const nav = isAdmin ? adminNav : requestorNav;
+  const navBadges = useAdminNavBadges(isAdmin && !!user);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // Close mobile menu on route change
   useEffect(() => {
     setMobileMenuOpen(false);
   }, [pathname]);
 
-  // Lock body scroll when mobile menu is open
   useEffect(() => {
     if (mobileMenuOpen) document.body.style.overflow = 'hidden';
     else document.body.style.overflow = '';
@@ -126,7 +280,7 @@ export function RoleBasedLayout({ children }: { children: React.ReactNode }) {
   };
 
   const brand = (
-      <div className="flex min-h-[4.5rem] items-center gap-3 border-b border-border px-5 py-4 shrink-0">
+    <div className="flex min-h-[4.5rem] items-center gap-3 border-b border-border px-5 py-4 shrink-0">
       <Image
         src={beElectricLogo}
         alt="Be Electric"
@@ -155,18 +309,39 @@ export function RoleBasedLayout({ children }: { children: React.ReactNode }) {
     </div>
   );
 
+  const navContent = isAdmin ? (
+    <GroupedAdminNav
+      pathname={pathname}
+      badges={navBadges}
+      onPrefetch={handleNavPrefetch}
+    />
+  ) : (
+    <RequestorNavLinks pathname={pathname} onPrefetch={handleNavPrefetch} />
+  );
+
+  const mobileNavContent = isAdmin ? (
+    <GroupedAdminNav
+      pathname={pathname}
+      badges={navBadges}
+      onPrefetch={handleNavPrefetch}
+      onLinkClick={() => setMobileMenuOpen(false)}
+    />
+  ) : (
+    <RequestorNavLinks
+      pathname={pathname}
+      onPrefetch={handleNavPrefetch}
+      onLinkClick={() => setMobileMenuOpen(false)}
+    />
+  );
+
   return (
     <div className="flex min-h-screen bg-background">
-      {/* Desktop sidebar: hidden on mobile */}
       <aside className="hidden md:flex w-64 flex-col border-r border-border bg-card shadow-soft">
         {brand}
-        <nav className="flex-1 space-y-2 overflow-y-auto p-4 pt-5">
-          <NavLinks nav={nav} pathname={pathname} onPrefetch={handleNavPrefetch} />
-        </nav>
+        <nav className="flex-1 overflow-y-auto p-3 pt-4">{navContent}</nav>
         {footerBlock}
       </aside>
 
-      {/* Mobile header: logo centered, menu right */}
       <div className="fixed top-0 left-0 right-0 z-40 grid h-14 grid-cols-3 items-center border-b border-border bg-card px-4 md:hidden">
         <div className="w-10" aria-hidden />
         <div className="flex justify-center">
@@ -189,7 +364,6 @@ export function RoleBasedLayout({ children }: { children: React.ReactNode }) {
         </div>
       </div>
 
-      {/* Mobile menu overlay + drawer */}
       <div
         className={cn(
           'fixed inset-0 z-50 md:hidden transition-opacity duration-200',
@@ -220,20 +394,15 @@ export function RoleBasedLayout({ children }: { children: React.ReactNode }) {
               <X className="h-5 w-5" />
             </button>
           </div>
-          <nav className="flex-1 space-y-2 overflow-y-auto p-4 pt-5">
-            <NavLinks
-              nav={nav}
-              pathname={pathname}
-              onPrefetch={handleNavPrefetch}
-              onLinkClick={() => setMobileMenuOpen(false)}
-            />
-          </nav>
+          <nav className="flex-1 overflow-y-auto p-3 pt-4">{mobileNavContent}</nav>
           {footerBlock}
         </aside>
       </div>
 
       <main className="flex-1 overflow-auto min-h-screen">
-        <div className="container max-w-7xl px-4 sm:px-5 md:px-6 pt-16 sm:pt-20 pb-8 sm:pb-10 md:pt-8 md:pb-10">{children}</div>
+        <div className="container max-w-7xl px-4 sm:px-5 md:px-6 pt-16 sm:pt-20 pb-8 sm:pb-10 md:pt-8 md:pb-10">
+          {children}
+        </div>
       </main>
     </div>
   );

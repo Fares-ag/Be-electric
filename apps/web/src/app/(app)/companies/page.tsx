@@ -17,6 +17,7 @@ import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { DataTableShell, PageHeader } from '@/components/ui/PageStates';
+import { Building2 } from 'lucide-react';
 
 type Company = {
   id: string;
@@ -87,6 +88,9 @@ export default function CompaniesPage() {
     usePagination(filtered);
 
   useEffect(() => setPage(1), [search, setPage]);
+
+  const showEmptySearch = !isLoading && !queryError && (companies?.length ?? 0) > 0 && filtered.length === 0;
+  const hasActiveFilters = !!search.trim();
 
   const createMutation = useMutation({
     mutationFn: async (payload: typeof emptyForm) => {
@@ -203,6 +207,7 @@ export default function CompaniesPage() {
     <div className="space-y-4 sm:space-y-6">
       <PageHeader
         title="Companies"
+        description="Customer organizations — link chargers and requestors to the right company."
         actions={
           <>
             <SearchFilterBar
@@ -235,12 +240,24 @@ export default function CompaniesPage() {
                 Add Company
               </Button>
             }
+            emptyIcon={Building2}
+            emptyIconClassName="bg-blue-100 text-blue-700"
             onRetry={() => refetch()}
           >
-            {filtered.length === 0 && (companies?.length ?? 0) > 0 ? (
-              <div className="px-6 py-12 text-center">
+            {showEmptySearch ? (
+              <div className="flex flex-col items-center px-6 py-14 text-center">
+                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-blue-100 text-blue-700">
+                  <Building2 className="h-7 w-7" aria-hidden />
+                </div>
                 <p className="font-medium text-foreground">No matching companies</p>
-                <p className="mt-1 text-sm text-muted-foreground">Try a different search term.</p>
+                <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                  Try a different search term.
+                </p>
+                {hasActiveFilters && (
+                  <Button variant="outline" className="mt-4" onClick={() => setSearch('')}>
+                    Clear search
+                  </Button>
+                )}
               </div>
             ) : (
               <div className="table-scroll overflow-x-auto">
@@ -259,7 +276,7 @@ export default function CompaniesPage() {
                     {paginatedItems.map((c) => {
                       const chargerCount = chargerCountByCompany?.[c.id] ?? 0;
                       return (
-                        <tr key={c.id}>
+                        <tr key={c.id} className="transition-colors hover:bg-muted/40">
                           <td className="font-medium">{c.name}</td>
                           <td>
                             <Link

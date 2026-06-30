@@ -1,3 +1,5 @@
+import { toPhotoUrl } from '@/lib/storage-urls';
+
 export type WorkOrderActivityEntry = {
   at: string;
   type: string;
@@ -131,10 +133,7 @@ export function isAllowedAdminStatusTransition(
 
 export const STATUSES_REQUIRING_REASON = ['completed', 'closed', 'cancelled', 'reopened'] as const;
 
-const SUPABASE_STORAGE_PUBLIC =
-  typeof process !== 'undefined'
-    ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/work-order-photos`
-    : '';
+export { toPhotoUrl } from '@/lib/storage-urls';
 
 export function readMetaString(
   meta: Record<string, unknown> | null | undefined,
@@ -165,12 +164,6 @@ export function effortMinutesDisplay(value: unknown): string {
     );
   }
   return JSON.stringify(value);
-}
-
-export function toPhotoUrl(raw: string): string {
-  if (raw.startsWith('http')) return raw;
-  const clean = raw.startsWith('/') ? raw.slice(1) : raw;
-  return SUPABASE_STORAGE_PUBLIC ? `${SUPABASE_STORAGE_PUBLIC}/${clean}` : raw;
 }
 
 export function parsePhotoPaths(value: string | null | undefined): string[] {

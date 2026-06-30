@@ -14,7 +14,10 @@ import { useUsersMap } from '@/hooks/useUsersMap';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { StatusBadge } from '@/components/ui/Badge';
+import { FilterChipLink } from '@/components/ui/FilterChipLink';
+import { DismissibleHint } from '@/components/ui/DismissibleHint';
 import { DataTableShell, PageHeader } from '@/components/ui/PageStates';
+import { ClipboardCheck } from 'lucide-react';
 
 type PartsRequestRow = {
   id: string;
@@ -53,7 +56,7 @@ export default function PartsRequestsPage() {
   const statusFromUrl = searchParams.get('status') ?? '';
   const currentUser = useAuthStore((s) => s.user);
   const canModerate = isAdminRole(currentUser?.role);
-  const [statusFilter, setStatusFilter] = useState(statusFromUrl);
+  const statusFilter = statusFromUrl;
 
   const { usersMap } = useUsersMap();
 
@@ -130,9 +133,13 @@ export default function PartsRequestsPage() {
   const pending = requests?.filter((r) => r.status === 'pending') ?? [];
   const [search, setSearch] = useState('');
 
-  useEffect(() => {
-    setStatusFilter(statusFromUrl);
-  }, [statusFromUrl]);
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const request of requests ?? []) {
+      counts[request.status] = (counts[request.status] ?? 0) + 1;
+    }
+    return counts;
+  }, [requests]);
 
   const filtered = useMemo(() => {
     let list = requests ?? [];
@@ -154,10 +161,14 @@ export default function PartsRequestsPage() {
 
   useEffect(() => setPage(1), [search, statusFilter, setPage]);
 
+  const hasActiveFilters = !!search.trim() || !!statusFilter;
+  const showEmptySearch = !isLoading && !queryError && (requests?.length ?? 0) > 0 && filtered.length === 0;
+
   return (
     <div className="space-y-4 sm:space-y-6">
       <PageHeader
         title="Parts Requests"
+        description="Technicians request parts from the mobile app — approve or reject here and link to the work order."
         actions={
           <>
             <SearchFilterBar
@@ -173,18 +184,27 @@ export default function PartsRequestsPage() {
         }
       />
 
+      <DismissibleHint hintKey="parts-requests-overview" title="Parts request workflow">
+        <p>
+          Technicians submit requests from the mobile app, usually linked to a work order. Filter by{' '}
+          <strong className="font-medium text-foreground">Pending</strong>, open the row, then approve or
+          reject — the technician is notified in the app.
+        </p>
+      </DismissibleHint>
+
       <div className="flex flex-wrap gap-2">
-        <Link href="/parts-requests">
-          <Button variant={!statusFilter ? 'primary' : 'outline'} size="sm">
-            All
-          </Button>
-        </Link>
+        <FilterChipLink href="/parts-requests" active={!statusFilter} count={requests?.length}>
+          All
+        </FilterChipLink>
         {PARTS_STATUS_FILTERS.map((status) => (
-          <Link key={status} href={`/parts-requests?status=${status}`}>
-            <Button variant={statusFilter === status ? 'primary' : 'outline'} size="sm">
-              {status.charAt(0).toUpperCase() + status.slice(1)}
-            </Button>
-          </Link>
+          <FilterChipLink
+            key={status}
+            href={`/parts-requests?status=${status}`}
+            active={statusFilter === status}
+            count={statusCounts[status] ?? 0}
+          >
+            <StatusBadge status={status} />
+          </FilterChipLink>
         ))}
       </div>
 
@@ -196,12 +216,24 @@ export default function PartsRequestsPage() {
             isEmpty={!isLoading && !queryError && (requests?.length ?? 0) === 0}
             emptyTitle="No parts requests yet"
             emptyDescription="Technicians submit parts requests from the mobile app when work orders need supplies."
+            emptyIcon={ClipboardCheck}
+            emptyIconClassName="bg-blue-100 text-blue-700"
             onRetry={() => refetch()}
           >
-            {filtered.length === 0 && (requests?.length ?? 0) > 0 ? (
-              <div className="px-6 py-12 text-center">
+            {showEmptySearch ? (
+              <div className="flex flex-col items-center px-6 py-14 text-center">
+                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-blue-100 text-blue-700">
+                  <ClipboardCheck className="h-7 w-7" aria-hidden />
+                </div>
                 <p className="font-medium text-foreground">No matching requests</p>
-                <p className="mt-1 text-sm text-muted-foreground">Try a different search term.</p>
+                <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                  Try a different search term or status filter.
+                </p>
+                {hasActiveFilters && (
+                  <Link href="/parts-requests" className="mt-4">
+                    <Button variant="outline">Clear filters</Button>
+                  </Link>
+                )}
               </div>
             ) : (
               <div className="table-scroll overflow-x-auto">
@@ -213,7 +245,7 @@ export default function PartsRequestsPage() {
                       <th>Parts</th>
                       <th>Requested</th>
                       <th>Status</th>
-                      <th className="w-48" />
+                      <th className="w-48">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -227,7 +259,7 @@ export default function PartsRequestsPage() {
                           ? JSON.stringify(parts)
                           : '—';
                       return (
-                        <tr key={r.id}>
+                        <tr key={r.id} className="transition-colors hover:bg-muted/40">
                           <td>
                             {r.workOrderId ? (
                               <Link

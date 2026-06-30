@@ -39,7 +39,7 @@ export function formatAnalyticsLabel(value: string): string {
   return value.replace(/([A-Z])/g, ' $1').trim();
 }
 
-/** PM schedule occurrence counts by derived status (pending / overdue / completed / cancelled). */
+/** PM schedule occurrence counts by derived status (upcoming / overdue / completed / cancelled). */
 export function computePmOccurrenceStatusData(
   occurrences: AnalyticsPmOccurrence[],
   deriveStatus: (storedStatus: string, dueDate: string, todayIso?: string) => string,
