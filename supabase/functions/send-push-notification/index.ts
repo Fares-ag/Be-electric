@@ -32,7 +32,9 @@ serve(async (req) => {
     });
   }
 
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  const serviceRoleKey = (Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '')
+    .trim()
+    .replace(/^["']|["']$/g, '');
   if (!serviceRoleKey) {
     return new Response(
       JSON.stringify({ error: 'SUPABASE_SERVICE_ROLE_KEY not set on Edge Function' }),
@@ -40,7 +42,9 @@ serve(async (req) => {
     );
   }
   const authHeader = req.headers.get('Authorization') ?? '';
-  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+  const token = (authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '')
+    .trim()
+    .replace(/^["']|["']$/g, '');
   if (!token || token !== serviceRoleKey) {
     return unauthorized('Service role authorization required');
   }

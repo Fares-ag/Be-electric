@@ -29,8 +29,9 @@ export async function POST(request: Request) {
     );
   }
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  // Trim: Vercel/Dashboard values often pick up trailing newlines or quotes.
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim().replace(/^["']|["']$/g, '');
   if (!url || !serviceRoleKey) {
     return NextResponse.json(
       {
@@ -55,6 +56,7 @@ export async function POST(request: Request) {
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${serviceRoleKey}`,
+      apikey: serviceRoleKey,
     },
     body: JSON.stringify(payload),
   });
@@ -64,11 +66,13 @@ export async function POST(request: Request) {
     const hint =
       res.status === 404
         ? 'Deploy the Edge Function: Supabase Dashboard → Edge Functions → deploy "send-push-notification", and ensure NEXT_PUBLIC_SUPABASE_URL points to that project.'
-        : undefined;
+        : res.status === 401
+          ? 'Vercel SUPABASE_SERVICE_ROLE_KEY must be the service_role secret from the same Supabase project as NEXT_PUBLIC_SUPABASE_URL (Dashboard → Project Settings → API). Also set that key as an Edge Function secret, then redeploy.'
+          : undefined;
     return NextResponse.json(
       {
         error: `Push service returned ${res.status}: ${text}`,
-        code: 'EDGE_FUNCTION_ERROR',
+        code: res.status === 401 ? 'SERVICE_ROLE_MISMATCH' : 'EDGE_FUNCTION_ERROR',
         hint,
       },
       { status: isServerError ? 502 : 400 }

@@ -142,9 +142,11 @@ export default function WorkOrderDetailPage() {
             const data = await pushRes.json().catch(() => ({})) as { error?: string; code?: string; hint?: string };
             const msg = data.code === 'MISSING_SERVICE_ROLE_KEY'
               ? 'Assignment saved. Push not sent: add SUPABASE_SERVICE_ROLE_KEY in Vercel → Project → Settings → Environment Variables, then redeploy.'
-              : data.hint
-                ? `Assignment saved. Push failed: ${data.hint}`
-                : data.error ?? `Push failed (${pushRes.status}).`;
+              : data.code === 'SERVICE_ROLE_MISMATCH'
+                ? 'Assignment saved. Push not sent: Vercel SUPABASE_SERVICE_ROLE_KEY does not match this Supabase project (and Edge Function secret). Update both, redeploy.'
+                : data.hint
+                  ? `Assignment saved. Push failed: ${data.hint}`
+                  : data.error ?? `Push failed (${pushRes.status}).`;
             setPushWarning(msg);
           }
         } catch (e) {
