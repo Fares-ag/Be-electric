@@ -86,3 +86,23 @@ export function subscribePmOccurrences(
     .subscribe();
   return channel;
 }
+
+export function subscribePartsRequests(
+  onInsert?: (payload: unknown) => void,
+  onUpdate?: (payload: unknown) => void
+): RealtimeChannel {
+  const channel = supabase
+    .channel('parts-requests-changes')
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'parts_requests' },
+      (payload) => onInsert?.(payload)
+    )
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'parts_requests' },
+      (payload) => onUpdate?.(payload)
+    )
+    .subscribe();
+  return channel;
+}
