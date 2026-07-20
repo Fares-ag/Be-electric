@@ -1,4 +1,6 @@
-﻿import 'package:flutter/material.dart';
+﻿import 'dart:async';
+
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/parts_request.dart';
@@ -16,6 +18,7 @@ class PartsRequestQueueScreen extends StatefulWidget {
 
 class _PartsRequestQueueScreenState extends State<PartsRequestQueueScreen> {
   final PartsRequestService _service = PartsRequestService();
+  StreamSubscription<List<PartsRequest>>? _realtimeSub;
   bool _loading = false;
   List<PartsRequest> _requests = [];
   String _filter = 'pending';
@@ -24,6 +27,18 @@ class _PartsRequestQueueScreenState extends State<PartsRequestQueueScreen> {
   void initState() {
     super.initState();
     _load();
+    _realtimeSub = _service.requestsChanged.listen((all) {
+      if (!mounted) return;
+      setState(() {
+        _requests = _applyFilter(all, _filter);
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _realtimeSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {

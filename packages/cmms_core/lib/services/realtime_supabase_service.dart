@@ -43,6 +43,8 @@ class RealtimeSupabaseService {
 
   // Channel-based real-time subscription for work orders
   RealtimeChannel? _workOrdersChannel;
+  RealtimeChannel? _notificationsChannel;
+  RealtimeChannel? _partsRequestsChannel;
 
   /// Initialize the service
   Future<void> initialize() async {
@@ -61,8 +63,9 @@ class RealtimeSupabaseService {
       subscription.cancel();
     }
     _subscriptions.clear();
-    _workOrdersChannel?.unsubscribe();
-    _workOrdersChannel = null;
+    stopListeningToWorkOrderChanges();
+    stopListeningToNotificationChanges();
+    stopListeningToPartsRequestChanges();
     debugPrint('RealtimeSupabase: All subscriptions cancelled');
   }
 
@@ -127,6 +130,94 @@ class RealtimeSupabaseService {
     _workOrdersChannel?.unsubscribe();
     _workOrdersChannel = null;
     debugPrint('RealtimeSupabase: work_orders channel unsubscribed');
+  }
+
+  // ============================================================================
+  // NOTIFICATIONS - CHANNEL (filtered by userId)
+  // ============================================================================
+
+  /// Subscribe to INSERT/UPDATE on notifications for [userId].
+  void listenToNotificationChanges({
+    required String userId,
+    required void Function() onChanged,
+  }) {
+    if (userId.isEmpty) return;
+    stopListeningToNotificationChanges();
+
+    _notificationsChannel = _client
+        .channel('notifications_changes_$userId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'notifications',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'userId',
+            value: userId,
+          ),
+          callback: (_) => onChanged(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'notifications',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'userId',
+            value: userId,
+          ),
+          callback: (_) => onChanged(),
+        )
+        .subscribe((status, [error]) {
+      if (error != null) {
+        debugPrint('❌ notifications channel error: $error');
+      } else {
+        debugPrint('✅ notifications channel status: $status');
+      }
+    });
+  }
+
+  void stopListeningToNotificationChanges() {
+    _notificationsChannel?.unsubscribe();
+    _notificationsChannel = null;
+  }
+
+  // ============================================================================
+  // PARTS REQUESTS - CHANNEL
+  // ============================================================================
+
+  /// Subscribe to INSERT/UPDATE on parts_requests (RLS scopes rows).
+  void listenToPartsRequestChanges({
+    required void Function() onChanged,
+  }) {
+    stopListeningToPartsRequestChanges();
+
+    _partsRequestsChannel = _client
+        .channel('parts_requests_changes')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'parts_requests',
+          callback: (_) => onChanged(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'parts_requests',
+          callback: (_) => onChanged(),
+        )
+        .subscribe((status, [error]) {
+      if (error != null) {
+        debugPrint('❌ parts_requests channel error: $error');
+      } else {
+        debugPrint('✅ parts_requests channel status: $status');
+      }
+    });
+  }
+
+  void stopListeningToPartsRequestChanges() {
+    _partsRequestsChannel?.unsubscribe();
+    _partsRequestsChannel = null;
   }
 
   // ============================================================================
@@ -290,6 +381,21 @@ class RealtimeSupabaseService {
       }
     }).handleError((error) {
       debugPrint('RealtimeSupabase: PM task stream error: $error');
+    });
+  }
+
+  /// Real-time stream of PM task occurrences (Option A inbox).
+  Stream<List<Map<String, dynamic>>> getPmOccurrencesStream() {
+    return _client
+        .from('pm_task_occurrences')
+        .stream(primaryKey: ['id'])
+        .order('createdAt')
+        .map((snapshot) {
+      return snapshot
+          .map((doc) => Map<String, dynamic>.from(doc))
+          .toList();
+    }).handleError((error) {
+      debugPrint('RealtimeSupabase: PM occurrences stream error: $error');
     });
   }
 

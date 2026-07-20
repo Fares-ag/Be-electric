@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'realtime_supabase_service.dart';
 import 'supabase_database_service.dart';
 
 enum NotificationType {
@@ -174,6 +175,8 @@ class EnhancedNotificationService {
       StreamController<EnhancedNotification>.broadcast();
   final SupabaseDatabaseService _firestoreService =
       SupabaseDatabaseService.instance;
+  String? _realtimeUserId;
+  bool _realtimeListening = false;
 
   List<EnhancedNotification> get notifications =>
       List.unmodifiable(_notifications);
@@ -611,8 +614,32 @@ class EnhancedNotificationService {
         },
       );
 
+  /// Live INSERT/UPDATE for [userId] via Supabase Realtime (filtered).
+  void startRealtimeListener(String userId) {
+    if (userId.isEmpty) return;
+    if (_realtimeListening && _realtimeUserId == userId) return;
+
+    stopRealtimeListener();
+    _realtimeUserId = userId;
+    _realtimeListening = true;
+    RealtimeSupabaseService.instance.listenToNotificationChanges(
+      userId: userId,
+      onChanged: () {
+        unawaited(_loadNotifications());
+      },
+    );
+  }
+
+  void stopRealtimeListener() {
+    if (!_realtimeListening && _realtimeUserId == null) return;
+    RealtimeSupabaseService.instance.stopListeningToNotificationChanges();
+    _realtimeListening = false;
+    _realtimeUserId = null;
+  }
+
   /// Dispose resources
   void dispose() {
+    stopRealtimeListener();
     _notificationController.close();
     _newNotificationController.close();
   }

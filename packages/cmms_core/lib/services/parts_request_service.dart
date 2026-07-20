@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:cmms_core/models/inventory_item.dart';
 import 'package:cmms_core/models/parts_request.dart';
+import 'package:cmms_core/services/realtime_supabase_service.dart';
 import 'package:cmms_core/services/supabase_database_service.dart';
 import 'package:cmms_core/services/notification_service.dart';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class PartsRequestService {
@@ -12,9 +15,43 @@ class PartsRequestService {
   static final PartsRequestService _instance = PartsRequestService._internal();
 
   late SharedPreferences _prefs;
+  bool _realtimeListening = false;
+  final StreamController<List<PartsRequest>> _requestsController =
+      StreamController<List<PartsRequest>>.broadcast();
+
+  /// Emits whenever the parts-request cache is refreshed from realtime/API.
+  Stream<List<PartsRequest>> get requestsChanged => _requestsController.stream;
 
   Future<void> initialize() async {
     _prefs = await SharedPreferences.getInstance();
+  }
+
+  /// Live INSERT/UPDATE on parts_requests (RLS scopes visible rows).
+  void startRealtimeListener() {
+    if (_realtimeListening) return;
+    _realtimeListening = true;
+    RealtimeSupabaseService.instance.listenToPartsRequestChanges(
+      onChanged: () {
+        unawaited(_refreshFromRealtime());
+      },
+    );
+  }
+
+  void stopRealtimeListener() {
+    if (!_realtimeListening) return;
+    RealtimeSupabaseService.instance.stopListeningToPartsRequestChanges();
+    _realtimeListening = false;
+  }
+
+  Future<void> _refreshFromRealtime() async {
+    try {
+      final requests = await getAllPartsRequests();
+      if (!_requestsController.isClosed) {
+        _requestsController.add(requests);
+      }
+    } catch (e) {
+      debugPrint('PartsRequestService: realtime refresh failed: $e');
+    }
   }
 
   // Create a new parts request (persists to Supabase; errors are not swallowed).

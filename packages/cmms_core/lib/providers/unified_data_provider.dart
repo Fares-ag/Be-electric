@@ -14,6 +14,8 @@ import '../models/pm_task.dart';
 import '../models/user.dart';
 import '../models/work_order.dart';
 import '../models/workflow_models.dart';
+import '../services/enhanced_notification_service.dart';
+import '../services/parts_request_service.dart';
 import '../services/realtime_supabase_service.dart';
 import '../services/supabase_database_service.dart';
 import '../services/supabase_storage_service.dart';
@@ -280,6 +282,8 @@ class UnifiedDataProvider with ChangeNotifier {
   /// Cancel active realtime stream subscriptions before re-subscribing.
   Future<void> _cancelRealtimeStreamSubscriptions() async {
     RealtimeSupabaseService.instance.stopListeningToWorkOrderChanges();
+    EnhancedNotificationService().stopRealtimeListener();
+    PartsRequestService().stopRealtimeListener();
     await cancelStreamSubscriptions([
       _pmTasksSubscription,
       _assetsSubscription,
@@ -483,7 +487,18 @@ class UnifiedDataProvider with ChangeNotifier {
       },
     );
 
+    _startSharedRealtimeListeners();
+
     debugPrint('✅ UnifiedDataProvider: All real-time listeners started!');
+  }
+
+  /// Notifications + parts_requests channels (Admin ↔ Technician field loop).
+  void _startSharedRealtimeListeners() {
+    final userId = sb.Supabase.instance.client.auth.currentUser?.id;
+    if (userId != null && userId.isNotEmpty) {
+      EnhancedNotificationService().startRealtimeListener(userId);
+    }
+    PartsRequestService().startRealtimeListener();
   }
 
   /// Dispose all stream subscriptions
@@ -514,6 +529,7 @@ class UnifiedDataProvider with ChangeNotifier {
             break;
           case sb.AuthChangeEvent.signedOut:
           case sb.AuthChangeEvent.userDeleted:
+            unawaited(_cancelRealtimeStreamSubscriptions());
             _dataService.resetInitialization();
             _resetWorkOrderPagination();
             break;
