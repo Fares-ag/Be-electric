@@ -47,7 +47,8 @@ class RequestorAnalyticsScreen extends StatelessWidget {
               .toList();
 
           return RefreshIndicator(
-            onRefresh: () => unifiedProvider.refreshAll(),
+            onRefresh: () =>
+                unifiedProvider.loadRequestorWorkOrders(currentUser.id),
             child: Center(
               child: ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: maxWidth),

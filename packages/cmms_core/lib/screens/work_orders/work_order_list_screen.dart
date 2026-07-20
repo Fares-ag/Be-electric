@@ -107,8 +107,7 @@ class _WorkOrderListScreenState extends State<WorkOrderListScreen> {
             workOrders = unifiedProvider.workOrders
                 .where(
                   (wo) =>
-                      wo.hasTechnician(currentUserId) ||
-                      wo.requestorId == currentUserId,
+                      wo.hasTechnician(currentUserId),
                 )
                 .toList();
           } else if (authProvider.currentUser!.role == 'requestor') {
@@ -122,8 +121,7 @@ class _WorkOrderListScreenState extends State<WorkOrderListScreen> {
             workOrders = unifiedProvider.workOrders
                 .where(
                   (wo) =>
-                      wo.hasTechnician(currentUserId) ||
-                      wo.requestorId == currentUserId,
+                      wo.hasTechnician(currentUserId),
                 )
                 .toList();
           } else {

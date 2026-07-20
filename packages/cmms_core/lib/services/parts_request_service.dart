@@ -5,7 +5,7 @@ import 'package:cmms_core/models/inventory_item.dart';
 import 'package:cmms_core/models/parts_request.dart';
 import 'package:cmms_core/services/realtime_supabase_service.dart';
 import 'package:cmms_core/services/supabase_database_service.dart';
-import 'package:cmms_core/services/notification_service.dart';
+import 'package:cmms_core/services/enhanced_notification_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -144,18 +144,20 @@ class PartsRequestService {
         .toList();
   }
 
-  // Approve a parts request
+  // Approve a parts request (cloud UPDATE must succeed; stock decrements on fulfill).
   Future<PartsRequest> approvePartsRequest({
     required String requestId,
     required String approvedBy,
     String? notes,
   }) async {
+    if (approvedBy.trim().isEmpty || approvedBy == 'manager') {
+      throw Exception('Authenticated approver id is required');
+    }
     final request = await getPartsRequestById(requestId);
     if (request == null) {
       throw Exception('Parts request not found');
     }
 
-    // Block approval if insufficient stock
     final isAvailable = await checkPartsAvailability(
       request.inventoryItemId,
       request.quantity,
@@ -172,33 +174,20 @@ class PartsRequestService {
       updatedAt: DateTime.now(),
     );
 
-    // Try cloud first, then local
-    try {
-      await SupabaseDatabaseService.instance
-          .updatePartsRequest(updatedRequest.id, updatedRequest);
-    } catch (_) {}
-
-    // Adjust inventory stock (reserve) on approval
-    await _decrementInventoryQuantity(
-      request.inventoryItemId,
-      request.quantity,
-    );
+    await SupabaseDatabaseService.instance
+        .updatePartsRequest(updatedRequest.id, updatedRequest);
 
     await _savePartsRequest(updatedRequest);
-    // Notify technician of approval
-    await NotificationService().createNotification(
+    await _notifyRequester(
+      userId: request.technicianId,
       title: 'Parts Request Approved',
       message:
           'Your parts request for item ${request.inventoryItemId} (qty ${request.quantity}) has been approved.',
-      type: NotificationType.systemAlert,
       priority: NotificationPriority.high,
-      userId: request.technicianId,
-      relatedId: request.workOrderId,
-      data: {
-        'inventoryItemId': request.inventoryItemId,
-        'quantity': request.quantity,
-        'status': 'approved',
-      },
+      workOrderId: request.workOrderId,
+      inventoryItemId: request.inventoryItemId,
+      quantity: request.quantity,
+      status: 'approved',
     );
     return updatedRequest;
   }
@@ -209,6 +198,9 @@ class PartsRequestService {
     required String rejectedBy,
     required String rejectionReason,
   }) async {
+    if (rejectedBy.trim().isEmpty || rejectedBy == 'manager') {
+      throw Exception('Authenticated rejector id is required');
+    }
     final request = await getPartsRequestById(requestId);
     if (request == null) {
       throw Exception('Parts request not found');
@@ -221,38 +213,38 @@ class PartsRequestService {
       updatedAt: DateTime.now(),
     );
 
-    try {
-      await SupabaseDatabaseService.instance
-          .updatePartsRequest(updatedRequest.id, updatedRequest);
-    } catch (_) {}
+    await SupabaseDatabaseService.instance
+        .updatePartsRequest(updatedRequest.id, updatedRequest);
 
     await _savePartsRequest(updatedRequest);
-    // Notify technician of rejection
-    await NotificationService().createNotification(
+    await _notifyRequester(
+      userId: request.technicianId,
       title: 'Parts Request Rejected',
       message:
           'Your parts request for item ${request.inventoryItemId} was rejected.',
-      type: NotificationType.systemAlert,
       priority: NotificationPriority.medium,
-      userId: request.technicianId,
-      relatedId: request.workOrderId,
-      data: {
-        'inventoryItemId': request.inventoryItemId,
-        'quantity': request.quantity,
-        'status': 'rejected',
-      },
+      workOrderId: request.workOrderId,
+      inventoryItemId: request.inventoryItemId,
+      quantity: request.quantity,
+      status: 'rejected',
     );
     return updatedRequest;
   }
 
-  // Fulfill a parts request
+  // Fulfill a parts request — sole path that decrements inventory.
   Future<PartsRequest> fulfillPartsRequest({
     required String requestId,
     required String fulfilledBy,
   }) async {
+    if (fulfilledBy.trim().isEmpty || fulfilledBy == 'manager') {
+      throw Exception('Authenticated fulfiller id is required');
+    }
     final request = await getPartsRequestById(requestId);
     if (request == null) {
       throw Exception('Parts request not found');
+    }
+    if (request.status == PartsRequestStatus.fulfilled) {
+      return request;
     }
 
     final updatedRequest = request.copyWith(
@@ -262,12 +254,9 @@ class PartsRequestService {
       updatedAt: DateTime.now(),
     );
 
-    try {
-      await SupabaseDatabaseService.instance
-          .updatePartsRequest(updatedRequest.id, updatedRequest);
-    } catch (_) {}
+    await SupabaseDatabaseService.instance
+        .updatePartsRequest(updatedRequest.id, updatedRequest);
 
-    // Ensure inventory is decremented (idempotent safe if already approved)
     await _decrementInventoryQuantity(
       request.inventoryItemId,
       request.quantity,
@@ -290,10 +279,8 @@ class PartsRequestService {
   // Update parts request
   Future<PartsRequest> updatePartsRequest(PartsRequest request) async {
     final updatedRequest = request.copyWith(updatedAt: DateTime.now());
-    try {
-      await SupabaseDatabaseService.instance
-          .updatePartsRequest(updatedRequest.id, updatedRequest);
-    } catch (_) {}
+    await SupabaseDatabaseService.instance
+        .updatePartsRequest(updatedRequest.id, updatedRequest);
     await _savePartsRequest(updatedRequest);
     return updatedRequest;
   }
@@ -451,25 +438,53 @@ class PartsRequestService {
     }
   }
 
+  Future<void> _notifyRequester({
+    required String userId,
+    required String title,
+    required String message,
+    required NotificationPriority priority,
+    required String workOrderId,
+    required String inventoryItemId,
+    required int quantity,
+    required String status,
+  }) async {
+    if (userId.isEmpty) return;
+    try {
+      await EnhancedNotificationService().createNotification(
+        title: title,
+        message: message,
+        type: NotificationType.inventoryRequest,
+        priority: priority,
+        userId: userId,
+        relatedId: workOrderId,
+        relatedType: 'parts_request',
+        data: {
+          'inventoryItemId': inventoryItemId,
+          'quantity': quantity,
+          'status': status,
+        },
+      );
+    } catch (e) {
+      debugPrint('PartsRequestService: notification failed: $e');
+    }
+  }
+
   Future<void> _notifyManagersOfNewRequest(PartsRequest r) async {
     try {
       final users = await SupabaseDatabaseService.instance.getAllUsers();
       final managers =
           users.where((u) => u.role == 'manager' || u.role == 'admin').toList();
       for (final m in managers) {
-        await NotificationService().createNotification(
+        await _notifyRequester(
+          userId: m.id,
           title: 'New Parts Request',
           message:
               'Technician requested ${r.quantity} of ${r.inventoryItem?.name ?? r.inventoryItemId} for WO ${r.workOrder?.ticketNumber ?? r.workOrderId}.',
-          type: NotificationType.systemAlert,
           priority: NotificationPriority.high,
-          userId: m.id,
-          relatedId: r.workOrderId,
-          data: {
-            'inventoryItemId': r.inventoryItemId,
-            'quantity': r.quantity,
-            'status': r.status.name,
-          },
+          workOrderId: r.workOrderId,
+          inventoryItemId: r.inventoryItemId,
+          quantity: r.quantity,
+          status: r.status.name,
         );
       }
     } catch (_) {

@@ -86,8 +86,18 @@ class _PartsRequestQueueScreenState extends State<PartsRequestQueueScreen> {
 
   Future<void> _approve(PartsRequest r) async {
     final approverId =
-        Provider.of<AuthProvider>(context, listen: false).currentUser?.id ??
-            'manager';
+        Provider.of<AuthProvider>(context, listen: false).currentUser?.id;
+    if (approverId == null || approverId.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Sign in required to approve requests'),
+            backgroundColor: AppTheme.accentRed,
+          ),
+        );
+      }
+      return;
+    }
     setState(() => _loading = true);
     try {
       await _service.approvePartsRequest(
@@ -119,8 +129,18 @@ class _PartsRequestQueueScreenState extends State<PartsRequestQueueScreen> {
 
   Future<void> _reject(PartsRequest r) async {
     final approverId =
-        Provider.of<AuthProvider>(context, listen: false).currentUser?.id ??
-            'manager';
+        Provider.of<AuthProvider>(context, listen: false).currentUser?.id;
+    if (approverId == null || approverId.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Sign in required to reject requests'),
+            backgroundColor: AppTheme.accentRed,
+          ),
+        );
+      }
+      return;
+    }
     var reason = '';
     final ok = await showDialog<bool>(
       context: context,

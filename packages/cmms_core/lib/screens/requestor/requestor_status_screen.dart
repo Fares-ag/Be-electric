@@ -35,6 +35,9 @@ class _RequestorStatusScreenState extends State<RequestorStatusScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _onRefresh();
+    });
   }
 
   @override
@@ -45,7 +48,11 @@ class _RequestorStatusScreenState extends State<RequestorStatusScreen>
   }
 
   Future<void> _onRefresh() async {
-    await Provider.of<UnifiedDataProvider>(context, listen: false).refreshAll();
+    final userId =
+        Provider.of<AuthProvider>(context, listen: false).currentUser?.id;
+    if (userId == null || userId.isEmpty) return;
+    await Provider.of<UnifiedDataProvider>(context, listen: false)
+        .loadRequestorWorkOrders(userId);
   }
 
   Widget _buildRefreshableBody({required Widget child}) {
@@ -1008,8 +1015,11 @@ class _RequestorStatusScreenState extends State<RequestorStatusScreen>
     );
 
     if (result == true && mounted) {
-      // Refresh the data
-      await unifiedProvider.refreshAll();
+      final userId =
+          Provider.of<AuthProvider>(context, listen: false).currentUser?.id;
+      if (userId != null && userId.isNotEmpty) {
+        await unifiedProvider.loadRequestorWorkOrders(userId);
+      }
     }
   }
 

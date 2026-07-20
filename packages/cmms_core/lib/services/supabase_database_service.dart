@@ -678,6 +678,45 @@ class SupabaseDatabaseService {
     }
   }
 
+  /// All work orders for a requestor (not limited to the global page cache).
+  Future<List<WorkOrder>> getWorkOrdersByRequestor(String requestorId) async {
+    try {
+      if (!_isAuthenticated) throw Exception('User not authenticated');
+      if (requestorId.isEmpty) return [];
+
+      debugPrint('Supabase: Getting work orders for requestor $requestorId');
+
+      final response = await _client
+          .from('work_orders')
+          .select()
+          .eq('requestorId', requestorId)
+          .order('createdAt', ascending: false);
+
+      final workOrders = (response as List).map((doc) {
+        final data = convertFromSupabaseMap(Map<String, dynamic>.from(doc));
+        final normalizedId =
+            DeterministicIdGenerator.normalizeWorkOrderId(doc['id'] ?? '');
+        data['id'] = normalizedId;
+        final workOrder = WorkOrder.fromMap(data);
+        if (normalizedId != doc['id']) {
+          return workOrder.copyWith(
+            id: normalizedId,
+            ticketNumber: normalizedId,
+          );
+        }
+        return workOrder;
+      }).toList();
+
+      debugPrint(
+        'Supabase: Retrieved ${workOrders.length} work orders for requestor',
+      );
+      return workOrders;
+    } on Exception catch (e) {
+      debugPrint('Supabase: Error getting requestor work orders: $e');
+      rethrow;
+    }
+  }
+
   /// Get work orders by technician
   Future<List<WorkOrder>> getWorkOrdersByTechnician(String technicianId) async {
     try {
@@ -1516,11 +1555,11 @@ class SupabaseDatabaseService {
       return requests;
     } on Exception catch (e) {
       debugPrint('Supabase: Error getting parts requests: $e');
-      return [];
+      throw Exception('Failed to get parts requests: $e');
     }
   }
 
-  /// Update parts request
+  /// Update parts request (live schema only — see [buildPartsRequestUpdatePayload]).
   Future<void> updatePartsRequest(
     String requestId,
     PartsRequest request,
@@ -1528,9 +1567,24 @@ class SupabaseDatabaseService {
     try {
       if (!_isAuthenticated) throw Exception('User not authenticated');
 
-      final data = convertToSupabaseMap(request.toMap());
+      final data = convertToSupabaseMap(
+        buildPartsRequestUpdatePayload(
+          request: request,
+          inventoryItemName: request.inventoryItem?.name,
+        ),
+      );
 
-      await _client.from('parts_requests').update(data).eq('id', requestId);
+      final response = await _client
+          .from('parts_requests')
+          .update(data)
+          .eq('id', requestId)
+          .select('id');
+
+      if (response is! List || response.isEmpty) {
+        throw Exception(
+          'Failed to update parts request: no row updated (check RLS/id)',
+        );
+      }
     } on Exception catch (e) {
       debugPrint('Supabase: Error updating parts request: $e');
       throw Exception('Failed to update parts request: $e');

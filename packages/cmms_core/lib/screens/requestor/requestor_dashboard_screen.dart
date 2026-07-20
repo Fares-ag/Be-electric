@@ -71,10 +71,12 @@ class _RequestorDashboardScreenState extends State<RequestorDashboardScreen>
   }
 
   Future<void> _loadRequestorData() async {
-    // Load requestor-specific data
+    final userId =
+        Provider.of<AuthProvider>(context, listen: false).currentUser?.id;
+    if (userId == null || userId.isEmpty) return;
     final unifiedProvider =
         Provider.of<UnifiedDataProvider>(context, listen: false);
-    await unifiedProvider.refreshAll();
+    await unifiedProvider.loadRequestorWorkOrders(userId);
   }
 
   @override

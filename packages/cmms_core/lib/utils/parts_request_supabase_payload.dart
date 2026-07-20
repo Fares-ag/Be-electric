@@ -45,6 +45,51 @@ Map<String, dynamic> buildPartsRequestInsertPayload({
   };
 }
 
+/// Build an UPDATE row matching live `parts_requests` columns only.
+/// Never send legacy app fields (`technicianId`, `inventoryItemId`, `quantity`, `isOffline`).
+Map<String, dynamic> buildPartsRequestUpdatePayload({
+  required PartsRequest request,
+  String? inventoryItemName,
+}) {
+  final partName = (inventoryItemName != null && inventoryItemName.trim().isNotEmpty)
+      ? inventoryItemName.trim()
+      : request.inventoryItemId;
+
+  return {
+    'status': request.status.name,
+    'updatedAt': request.updatedAt.toIso8601String(),
+    if (request.approvedBy != null) 'approvedBy': request.approvedBy,
+    if (request.approvedAt != null)
+      'approvedAt': request.approvedAt!.toIso8601String(),
+    if (request.fulfilledAt != null)
+      'fulfilledAt': request.fulfilledAt!.toIso8601String(),
+    if (request.rejectionReason != null) 'rejectionReason': request.rejectionReason,
+    if (request.notes != null) 'notes': request.notes,
+    'requestedParts': [
+      {
+        'inventoryItemId': request.inventoryItemId,
+        'name': partName,
+        'quantity': request.quantity,
+        'unit': request.inventoryItem?.unit,
+        'reason': request.reason,
+        'priority': request.priority.name,
+        if (request.notes != null && request.notes!.trim().isNotEmpty)
+          'notes': request.notes!.trim(),
+      },
+    ],
+    'metadata': {
+      'reason': request.reason,
+      'priority': request.priority.name,
+      if (request.notes != null && request.notes!.trim().isNotEmpty)
+        'notes': request.notes!.trim(),
+      'inventoryItemId': request.inventoryItemId,
+      'quantity': request.quantity,
+      if (request.rejectionReason != null)
+        'rejectionReason': request.rejectionReason,
+    },
+  };
+}
+
 /// Parse live / legacy maps into app-level fields.
 ({
   String technicianId,

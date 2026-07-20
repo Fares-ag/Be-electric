@@ -41,6 +41,40 @@ void main() {
     });
   });
 
+  group('buildPartsRequestUpdatePayload', () {
+    test('uses live columns only (no technicianId / isOffline)', () {
+      final now = DateTime.utc(2026, 7, 20, 11);
+      final request = PartsRequest(
+        id: 'pr-1',
+        workOrderId: 'wo-1',
+        technicianId: 'tech-1',
+        inventoryItemId: 'inv-1',
+        quantity: 3,
+        reason: 'Need filter',
+        priority: PartsRequestPriority.high,
+        status: PartsRequestStatus.approved,
+        requestedAt: now,
+        approvedAt: now,
+        approvedBy: 'admin-1',
+        updatedAt: now,
+        notes: 'ok',
+      );
+
+      final row = buildPartsRequestUpdatePayload(
+        request: request,
+        inventoryItemName: 'Air Filter',
+      );
+
+      expect(row.containsKey('technicianId'), isFalse);
+      expect(row.containsKey('inventoryItemId'), isFalse);
+      expect(row.containsKey('quantity'), isFalse);
+      expect(row.containsKey('isOffline'), isFalse);
+      expect(row['status'], 'approved');
+      expect(row['approvedBy'], 'admin-1');
+      expect(row['requestedParts'], isA<List>());
+    });
+  });
+
   group('parsePartsRequestFields / fromMap', () {
     test('reads requestedBy and requestedParts from live row', () {
       final parsed = parsePartsRequestFields({

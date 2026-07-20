@@ -1,4 +1,8 @@
 ﻿// Sync Queue Service - Manages pending sync operations
+//
+// BE-QA-OFF-001: As of 2026-07-20 this service is registered but NOT wired into
+// work-order / parts write paths. Offline durability is not implemented; see
+// docs/TECHNICIAN_OFFLINE_MODE.md.
 
 import 'dart:async';
 import 'dart:convert';

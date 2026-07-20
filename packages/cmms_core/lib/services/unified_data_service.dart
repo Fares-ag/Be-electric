@@ -304,6 +304,22 @@ class UnifiedDataService {
     }
   }
 
+  /// Replace the work-order cache with all rows for [requestorId].
+  Future<void> loadWorkOrdersForRequestor(String requestorId) async {
+    if (requestorId.isEmpty) return;
+    _isWorkOrdersLoading = true;
+    try {
+      _workOrders = await SupabaseDatabaseService.instance
+          .getWorkOrdersByRequestor(requestorId);
+      debugPrint(
+        '📋 UnifiedDataService: Loaded ${_workOrders.length} '
+        'work orders for requestor $requestorId',
+      );
+    } finally {
+      _isWorkOrdersLoading = false;
+    }
+  }
+
   /// Append a page of work orders to the cache (called by provider on scroll).
   /// Returns the number of newly added rows.
   Future<int> appendWorkOrderPage(int page, {int pageSize = 30}) async {

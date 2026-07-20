@@ -561,6 +561,19 @@ class UnifiedDataProvider with ChangeNotifier {
     }
   }
 
+  /// Load the full requestor work-order list (not the global page-30 cache).
+  Future<void> loadRequestorWorkOrders(String requestorId) async {
+    try {
+      await _dataService.loadWorkOrdersForRequestor(requestorId);
+      _hasMoreWorkOrders = false;
+      _woNextPage = 1;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('UnifiedDataProvider: Error loading requestor WOs: $e');
+      rethrow;
+    }
+  }
+
   /// Refresh a specific work order (optimized - doesn't reload all data)
   Future<void> refreshWorkOrder(String workOrderId) async {
     try {
