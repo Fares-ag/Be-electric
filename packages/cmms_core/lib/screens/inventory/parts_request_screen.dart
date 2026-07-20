@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:cmms_core/models/inventory_item.dart';
 import 'package:cmms_core/models/parts_request.dart';
 import 'package:cmms_core/models/work_order.dart';
+import 'package:cmms_core/providers/auth_provider.dart';
 import 'package:cmms_core/providers/unified_data_provider.dart';
 import 'package:cmms_core/services/parts_request_service.dart';
 import 'package:cmms_core/theme/app_theme.dart';
@@ -83,12 +84,19 @@ class _PartsRequestScreenState extends State<PartsRequestScreen> {
       return;
     }
 
+    final currentUserId =
+        Provider.of<AuthProvider>(context, listen: false).currentUser?.id ?? '';
+    if (currentUserId.isEmpty) {
+      _showErrorSnackBar('Please sign in again to create a parts request');
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
       await _partsRequestService.createPartsRequest(
         workOrderId: widget.workOrder.id,
-        technicianId: widget.workOrder.assignedTechnicianId ?? '',
+        technicianId: currentUserId,
         inventoryItemId: _selectedItem!.id,
         quantity: quantity,
         reason: _reasonController.text.trim(),
@@ -96,6 +104,7 @@ class _PartsRequestScreenState extends State<PartsRequestScreen> {
         notes: _notesController.text.trim().isNotEmpty
             ? _notesController.text.trim()
             : null,
+        inventoryItem: _selectedItem,
       );
 
       _clearForm();

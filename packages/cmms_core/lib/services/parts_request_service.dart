@@ -17,7 +17,7 @@ class PartsRequestService {
     _prefs = await SharedPreferences.getInstance();
   }
 
-  // Create a new parts request
+  // Create a new parts request (persists to Supabase; errors are not swallowed).
   Future<PartsRequest> createPartsRequest({
     required String workOrderId,
     required String technicianId,
@@ -26,6 +26,7 @@ class PartsRequestService {
     required String reason,
     PartsRequestPriority priority = PartsRequestPriority.medium,
     String? notes,
+    InventoryItem? inventoryItem,
   }) async {
     final now = DateTime.now();
     final request = PartsRequest(
@@ -41,23 +42,15 @@ class PartsRequestService {
       notes: notes,
       isOffline: true,
       updatedAt: now,
+      inventoryItem: inventoryItem,
     );
 
-    // Try to create in Firestore if authenticated; fallback to local
-    try {
-      final id =
-          await SupabaseDatabaseService.instance.createPartsRequest(request);
-      final cloudRequest = request.copyWith(id: id, isOffline: false);
-      await _savePartsRequest(cloudRequest); // mirror to local cache
-      // Notify managers/admins of new request
-      await _notifyManagersOfNewRequest(cloudRequest);
-      return cloudRequest;
-    } catch (_) {
-      // Offline or unauthenticated path
-      await _savePartsRequest(request);
-      await _notifyManagersOfNewRequest(request);
-      return request;
-    }
+    final id =
+        await SupabaseDatabaseService.instance.createPartsRequest(request);
+    final cloudRequest = request.copyWith(id: id, isOffline: false);
+    await _savePartsRequest(cloudRequest);
+    await _notifyManagersOfNewRequest(cloudRequest);
+    return cloudRequest;
   }
 
   // Get all parts requests

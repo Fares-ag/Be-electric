@@ -1,6 +1,7 @@
 import 'package:cmms_core/models/inventory_item.dart';
 import 'package:cmms_core/models/user.dart';
 import 'package:cmms_core/models/work_order.dart';
+import 'package:cmms_core/utils/parts_request_supabase_payload.dart';
 
 enum PartsRequestStatus {
   pending,
@@ -42,39 +43,43 @@ class PartsRequest {
     this.approver,
   });
 
-  /// Create PartsRequest from data map
-  factory PartsRequest.fromMap(Map<String, dynamic> data) =>
-      PartsRequest(
-        id: data['id'] ?? '',
-        workOrderId: data['workOrderId'] ?? '',
-        technicianId: data['technicianId'] ?? '',
-        inventoryItemId: data['inventoryItemId'] ?? '',
-        quantity: data['quantity'] ?? 0,
-        reason: data['reason'] ?? '',
-        priority: PartsRequestPriority.values.firstWhere(
-          (e) => e.name == data['priority'],
-          orElse: () => PartsRequestPriority.medium,
-        ),
-        status: PartsRequestStatus.values.firstWhere(
-          (e) => e.name == data['status'],
-          orElse: () => PartsRequestStatus.pending,
-        ),
-        requestedAt: DateTime.parse(data['requestedAt']),
-        approvedAt: data['approvedAt'] != null
-            ? DateTime.parse(data['approvedAt'])
-            : null,
-        fulfilledAt: data['fulfilledAt'] != null
-            ? DateTime.parse(data['fulfilledAt'])
-            : null,
-        approvedBy: data['approvedBy'],
-        rejectionReason: data['rejectionReason'],
-        notes: data['notes'],
-        isOffline: data['isOffline'] ?? false,
-        lastSyncedAt: data['lastSyncedAt'] != null
-            ? DateTime.parse(data['lastSyncedAt'])
-            : null,
-        updatedAt: DateTime.parse(data['updatedAt']),
-      );
+  /// Create PartsRequest from data map (supports live Supabase + local cache).
+  factory PartsRequest.fromMap(Map<String, dynamic> data) {
+    final parsed = parsePartsRequestFields(data);
+    final requestedAtRaw = data['requestedAt'] ?? data['createdAt'];
+    final updatedAtRaw = data['updatedAt'] ?? requestedAtRaw;
+    return PartsRequest(
+      id: data['id'] ?? '',
+      workOrderId: data['workOrderId'] ?? '',
+      technicianId: parsed.technicianId,
+      inventoryItemId: parsed.inventoryItemId,
+      quantity: parsed.quantity,
+      reason: parsed.reason,
+      priority: PartsRequestPriority.values.firstWhere(
+        (e) => e.name == parsed.priorityName,
+        orElse: () => PartsRequestPriority.medium,
+      ),
+      status: PartsRequestStatus.values.firstWhere(
+        (e) => e.name == data['status'],
+        orElse: () => PartsRequestStatus.pending,
+      ),
+      requestedAt: DateTime.parse(requestedAtRaw.toString()),
+      approvedAt: data['approvedAt'] != null
+          ? DateTime.parse(data['approvedAt'].toString())
+          : null,
+      fulfilledAt: data['fulfilledAt'] != null
+          ? DateTime.parse(data['fulfilledAt'].toString())
+          : null,
+      approvedBy: data['approvedBy'],
+      rejectionReason: data['rejectionReason'],
+      notes: parsed.notes,
+      isOffline: data['isOffline'] ?? false,
+      lastSyncedAt: data['lastSyncedAt'] != null
+          ? DateTime.parse(data['lastSyncedAt'].toString())
+          : null,
+      updatedAt: DateTime.parse(updatedAtRaw.toString()),
+    );
+  }
   final String id;
   final String workOrderId;
   final String technicianId;

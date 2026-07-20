@@ -14,6 +14,8 @@ import '../models/user.dart' as app_user;
 import '../models/work_order.dart';
 import '../models/workflow_models.dart';
 import '../utils/deterministic_id_generator.dart';
+import '../utils/parts_request_supabase_payload.dart';
+import '../utils/supabase_write_result.dart';
 import '../utils/validators.dart';
 import 'audit_logging_service.dart';
 import 'enhanced_inventory_service.dart';
@@ -562,7 +564,12 @@ class SupabaseDatabaseService {
 
       _moveNonUuidWorkOrderFksToMetadata(data);
 
-      await _client.from('work_orders').update(data).eq('id', workOrderId);
+      final response = await _client
+          .from('work_orders')
+          .update(data)
+          .eq('id', workOrderId)
+          .select('id');
+      ensureRowsUpdated(response, entityLabel: 'Work order');
 
       debugPrint('Supabase: Work order updated successfully');
     } on Exception catch (e) {
@@ -1456,21 +1463,28 @@ class SupabaseDatabaseService {
   /// Create parts request in Supabase
   Future<String> createPartsRequest(PartsRequest request) async {
     try {
-      if (!_isAuthenticated) throw Exception('User not authenticated');
+      final requestedBy = _currentUserId;
+      if (requestedBy == null) throw Exception('User not authenticated');
 
       debugPrint('Supabase: Creating parts request ${request.id}');
 
-      final data = convertToSupabaseMap(request.toMap());
-      if (request.id.isNotEmpty) {
-        data['id'] = request.id;
-      }
+      final data = convertToSupabaseMap(
+        buildPartsRequestInsertPayload(
+          request: request,
+          requestedBy: requestedBy,
+          inventoryItemName: request.inventoryItem?.name,
+        ),
+      );
 
       final response =
-          await _client.from('parts_requests').insert(data).select();
+          await _client.from('parts_requests').insert(data).select('id');
 
-      final id = response != null && response.isNotEmpty
-          ? response[0]['id'] as String
-          : DateTime.now().millisecondsSinceEpoch.toString();
+      if (response is! List || response.isEmpty) {
+        throw Exception('Failed to create parts request: no row returned');
+      }
+
+      final id = response[0]['id'] as String? ??
+          DateTime.now().millisecondsSinceEpoch.toString();
 
       debugPrint('Supabase: Parts request created with ID: $id');
       return id;
