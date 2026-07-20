@@ -1,15 +1,5 @@
--- ============================================================
--- Run this in Supabase Dashboard → SQL Editor (or via Be-electric):
---   ./scripts/db.sh run scripts/sql/fix_update_work_order_assignees_text_id.sql
---
--- Fixes: "operator does not exist: text = uuid" when assigning technicians.
---
--- Schema SSOT (Flutter + live DB):
---   work_orders.id                    = text
---   work_orders.assignedTechnicianIds = text[]
---
--- Do NOT cast assignees to uuid[] and do NOT take p_work_order_id as uuid.
--- ============================================================
+-- Fix update_work_order_assignees for text id / text[] assignedTechnicianIds.
+-- Replaces broken uuid signature that caused: operator does not exist: text = uuid
 
 DROP FUNCTION IF EXISTS public.update_work_order_assignees(uuid, text[]);
 
