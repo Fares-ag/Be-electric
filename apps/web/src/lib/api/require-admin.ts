@@ -50,5 +50,24 @@ export async function requireAdmin(request: Request): Promise<RequireAdminResult
     };
   }
 
+  // Deactivated profiles must not keep API admin powers.
+  const { data: profile, error: profileError } = await supabaseAuth
+    .from('users')
+    .select('isActive')
+    .eq('id', user.id)
+    .maybeSingle();
+  if (profileError) {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: 'Unable to verify account status' }, { status: 403 }),
+    };
+  }
+  if (profile && profile.isActive === false) {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: 'Account deactivated' }, { status: 403 }),
+    };
+  }
+
   return { ok: true, email: user.email, userId: user.id, supabaseAuth };
 }
