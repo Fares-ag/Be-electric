@@ -1959,7 +1959,7 @@ class UnifiedDataProvider with ChangeNotifier {
     Set<String>? userIds,
     Set<String>? assetIds,
   }) async {
-    final futures = <Future<void>>[];
+    final futures = <Future<bool>>[];
     if (userIds != null && userIds.isNotEmpty) {
       futures.add(_dataService.ensureUsersLoaded(userIds));
     }
@@ -1969,7 +1969,11 @@ class UnifiedDataProvider with ChangeNotifier {
     if (futures.isEmpty) return;
 
     try {
-      await Future.wait(futures);
+      final results = await Future.wait(futures);
+      // Only rebuild when something new landed — otherwise missing requestor
+      // profiles under get_user_by_id Forbidden spam an infinite recover loop.
+      if (!results.any((loaded) => loaded)) return;
+
       if (_realtimeWorkOrders.isNotEmpty) {
         _realtimeWorkOrders = _populateWorkOrderReferences(
           _realtimeWorkOrders,

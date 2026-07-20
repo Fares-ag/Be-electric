@@ -44,6 +44,9 @@ class UnifiedDataService {
   bool _isHealingWorkOrders = false;
   final Set<String> _pendingUserFetches = <String>{};
   final Set<String> _pendingAssetFetches = <String>{};
+  /// Users that returned null/Forbidden from get_user_by_id (e.g. other roles
+  /// under RPC gate). Skip re-fetch so recoverMissingReferences cannot loop.
+  final Set<String> _unreadableUserIds = <String>{};
 
   // Single-flight + per-user init guard so duplicate initialize() callers (bootstrap,
   // ComprehensiveCMMSService, UnifiedDataProvider, post-login refresh) don't trigger
@@ -279,6 +282,9 @@ class UnifiedDataService {
   /// Reset the per-user cache marker (used on sign-out / user switch).
   void resetInitialization() {
     _initializedForUserId = null;
+    _unreadableUserIds.clear();
+    _pendingUserFetches.clear();
+    _pendingAssetFetches.clear();
   }
 
   /// Load the first page of work orders from Supabase.
@@ -396,16 +402,19 @@ class UnifiedDataService {
     }
   }
 
-  /// Ensure specific users are loaded into cache
-  Future<void> ensureUsersLoaded(Set<String> userIds) async {
+  /// Ensure specific users are loaded into cache.
+  /// Returns true only when at least one user was newly added/updated.
+  Future<bool> ensureUsersLoaded(Set<String> userIds) async {
     final targets = userIds
         .where((id) => id.isNotEmpty)
         .where((id) => !_users.any((user) => user.id == id))
+        .where((id) => !_unreadableUserIds.contains(id))
         .where((id) => !_pendingUserFetches.contains(id))
         .toList();
-    if (targets.isEmpty) return;
+    if (targets.isEmpty) return false;
 
     _pendingUserFetches.addAll(targets);
+    var loadedAny = false;
     try {
       debugPrint(
         '🔎 UnifiedDataService: Fetching ${targets.length} missing user(s)...',
@@ -415,39 +424,52 @@ class UnifiedDataService {
           final fetchedUser =
               await SupabaseDatabaseService.instance.getUserById(id);
           if (fetchedUser != null) {
+            _unreadableUserIds.remove(id);
             final existingIndex = _users.indexWhere((user) => user.id == id);
             if (existingIndex != -1) {
               _users[existingIndex] = fetchedUser;
             } else {
               _users.add(fetchedUser);
             }
+            loadedAny = true;
             // No local DB persistence - Supabase is the source of truth
             debugPrint(
               '✅ UnifiedDataService: Loaded user ${fetchedUser.name} ($id)',
             );
           } else {
-            debugPrint('⚠️ UnifiedDataService: User $id not found in Supabase');
+            // null covers missing rows and RPC Forbidden (get_user_by_id).
+            _unreadableUserIds.add(id);
+            debugPrint(
+              '⚠️ UnifiedDataService: User $id not readable (missing or RLS); '
+              'skipping further fetches',
+            );
           }
         } catch (e) {
+          _unreadableUserIds.add(id);
           debugPrint('❌ UnifiedDataService: Error fetching user $id: $e');
         }
       }
-      _populateReferences();
+      if (loadedAny) {
+        _populateReferences();
+      }
+      return loadedAny;
     } finally {
       _pendingUserFetches.removeAll(targets);
     }
   }
 
-  /// Ensure specific assets are loaded into cache
-  Future<void> ensureAssetsLoaded(Set<String> assetIds) async {
+  /// Ensure specific assets are loaded into cache.
+  /// Returns true only when at least one asset was newly added/updated.
+  Future<bool> ensureAssetsLoaded(Set<String> assetIds) async {
     final targets = assetIds
         .where((id) => id.isNotEmpty)
         .where((id) => !_assets.any((asset) => asset.id == id))
         .where((id) => !_pendingAssetFetches.contains(id))
         .toList();
-    if (targets.isEmpty) return;
+    if (targets.isEmpty) return false;
 
     _pendingAssetFetches.addAll(targets);
+    var loadedAny = false;
     try {
       debugPrint(
         '🔎 UnifiedDataService: Fetching ${targets.length} missing asset(s)...',
@@ -474,6 +496,7 @@ class UnifiedDataService {
             } else {
               _assets.add(fetchedAsset);
             }
+            loadedAny = true;
             // No local DB persistence - Supabase is the source of truth
             debugPrint(
               '✅ UnifiedDataService: Loaded asset ${fetchedAsset.name} ($id)',
@@ -485,7 +508,10 @@ class UnifiedDataService {
           debugPrint('❌ UnifiedDataService: Error fetching asset $id: $e');
         }
       }
-      _populateReferences();
+      if (loadedAny) {
+        _populateReferences();
+      }
+      return loadedAny;
     } finally {
       _pendingAssetFetches.removeAll(targets);
     }
@@ -509,11 +535,14 @@ class UnifiedDataService {
     }
   }
 
-  /// Validate that referenced users/assets exist (fetching them if possible)
-  /// Assets are optional (for general maintenance), so missing assets only log a warning
+  /// Validate that referenced users/assets exist (fetching them if possible).
+  /// Assets are optional (for general maintenance), so missing assets only log a warning.
+  /// When [requireUsers] is false (WO updates), unreadable users under get_user_by_id
+  /// (technicians cannot read requestors) only warn — DB FKs/triggers remain authoritative.
   Future<void> validateReferences({
     Set<String>? userIds,
     Set<String>? assetIds,
+    bool requireUsers = true,
   }) async {
     final missingUsers = <String>{};
     final missingAssets = <String>{};
@@ -548,15 +577,23 @@ class UnifiedDataService {
       );
     }
 
-    // Only throw error for missing users (they're required)
-    if (missingUsers.isNotEmpty) {
-      final buffer = StringBuffer('Reference validation failed:');
-      buffer.write(' missing users: ${missingUsers.join(', ')};');
-      if (missingAssets.isNotEmpty) {
-        buffer.write(' missing assets: ${missingAssets.join(', ')} (optional);');
-      }
-      throw Exception(buffer.toString());
+    if (missingUsers.isEmpty) return;
+
+    if (!requireUsers) {
+      debugPrint(
+        '⚠️ UnifiedDataService: User(s) not readable in cache: '
+        '${missingUsers.join(', ')}. Proceeding (update path; RPC/RLS may block '
+        'cross-role profile reads).',
+      );
+      return;
     }
+
+    final buffer = StringBuffer('Reference validation failed:');
+    buffer.write(' missing users: ${missingUsers.join(', ')};');
+    if (missingAssets.isNotEmpty) {
+      buffer.write(' missing assets: ${missingAssets.join(', ')} (optional);');
+    }
+    throw Exception(buffer.toString());
   }
 
   /// Populate cross-references between entities
@@ -901,9 +938,12 @@ class UnifiedDataService {
       if (assetId != null && assetId.isNotEmpty) {
         assetRefs.add(assetId);
       }
+      // Soft user check: technicians cannot load requestor profiles via
+      // get_user_by_id (admin/self only). Start Work must not hard-fail on that.
       await validateReferences(
         userIds: userRefs,
         assetIds: assetRefs,
+        requireUsers: false,
       );
 
       // Populate references before updating
