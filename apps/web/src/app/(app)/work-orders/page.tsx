@@ -21,6 +21,9 @@ import {
   type WorkOrderListRow,
 } from '@/lib/queries/work-orders';
 import { formatWorkOrderPriority, workOrderPriorityVariant } from '@/lib/work-order-list';
+import { workOrderCompanyName } from '@/lib/historical-work-order';
+import { isAdminRole } from '@/lib/roles';
+import { useAuthStore } from '@/stores/auth-store';
 import { Wrench } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 
@@ -37,6 +40,8 @@ const COMMON_STATUS_FILTERS = [
 export default function WorkOrdersPage() {
   const searchParams = useSearchParams();
   const statusFilter = searchParams.get('status') ?? undefined;
+  const user = useAuthStore((s) => s.user);
+  const isAdmin = isAdminRole(user?.role);
 
   const { data: workOrders, isLoading, error, refetch } = useQuery({
     queryKey: workOrdersListQueryKey(statusFilter),
@@ -55,7 +60,8 @@ export default function WorkOrdersPage() {
       (wo) =>
         String(wo.ticketNumber ?? '').toLowerCase().includes(q) ||
         String(wo.problemDescription ?? '').toLowerCase().includes(q) ||
-        String(wo.requestorName ?? '').toLowerCase().includes(q)
+        String(wo.requestorName ?? '').toLowerCase().includes(q) ||
+        workOrderCompanyName(wo).toLowerCase().includes(q)
     );
   }, [workOrders, search]);
 
@@ -83,24 +89,32 @@ export default function WorkOrdersPage() {
         title="Work Orders"
         description="Track maintenance requests from submission through completion."
         actions={
-          <ExportCsvButton
-            filename={`work-orders-${new Date().toISOString().slice(0, 10)}.csv`}
-            headers={WORK_ORDER_EXPORT_HEADERS}
-            disabled={!hasData}
-            getRows={() =>
-              filtered.map((wo) => ({
-                ticketNumber: wo.ticketNumber,
-                status: wo.status,
-                priority: wo.priority,
-                problemDescription: wo.problemDescription,
-                requestorName: wo.requestorName,
-                createdAt: wo.createdAt,
-                updatedAt: wo.updatedAt ?? '',
-                completedAt: wo.completedAt ?? '',
-              }))
-            }
-            label="Export filtered"
-          />
+          <>
+            {isAdmin && (
+              <Link href="/work-orders/new">
+                <Button>Record historical</Button>
+              </Link>
+            )}
+            <ExportCsvButton
+              filename={`work-orders-${new Date().toISOString().slice(0, 10)}.csv`}
+              headers={WORK_ORDER_EXPORT_HEADERS}
+              disabled={!hasData}
+              getRows={() =>
+                filtered.map((wo) => ({
+                  ticketNumber: wo.ticketNumber,
+                  status: wo.status,
+                  priority: wo.priority,
+                  problemDescription: wo.problemDescription,
+                  requestorName: wo.requestorName,
+                  companyName: workOrderCompanyName(wo),
+                  createdAt: wo.createdAt,
+                  updatedAt: wo.updatedAt ?? '',
+                  completedAt: wo.completedAt ?? '',
+                }))
+              }
+              label="Export filtered"
+            />
+          </>
         }
       />
 
@@ -131,7 +145,7 @@ export default function WorkOrdersPage() {
       <SearchFilterBar
         search={search}
         onSearchChange={setSearch}
-        placeholder="Search ticket, description, requestor..."
+        placeholder="Search ticket, description, requestor, company..."
       />
 
       <Card>
@@ -177,6 +191,7 @@ export default function WorkOrdersPage() {
                       <th>Status</th>
                       <th>Priority</th>
                       <th>Requestor</th>
+                      <th>Company</th>
                       <th>Assigned</th>
                       <th>Created</th>
                       <th className="w-12">
@@ -200,6 +215,9 @@ export default function WorkOrdersPage() {
                           </Badge>
                         </td>
                         <td className="text-sm">{wo.requestorName ?? '—'}</td>
+                        <td className="text-sm text-muted-foreground">
+                          {workOrderCompanyName(wo)}
+                        </td>
                         <td
                           className="max-w-[180px] truncate text-sm text-muted-foreground"
                           title={assignedTechnicianNames(wo)}

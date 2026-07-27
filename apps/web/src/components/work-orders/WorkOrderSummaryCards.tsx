@@ -7,6 +7,7 @@ type AssetMeta = {
   name?: string;
   location?: string | null;
   manufacturer?: string | null;
+  serialNumber?: string | null;
 } | null | undefined;
 
 type CompanyMeta = { id?: string; name?: string } | null | undefined;
@@ -38,8 +39,9 @@ export function WorkOrderLocationCard({
 }) {
   const assetName = wo.asset?.name ?? metaAsset?.name ?? '—';
   const assetId = wo.assetId ?? metaAsset?.id;
+  const serialNumber = wo.asset?.serialNumber ?? metaAsset?.serialNumber ?? null;
   const manufacturer =
-    manufacturerFromChargerName(assetName !== '—' ? assetName : null) ??
+    manufacturerFromChargerName(assetName !== '—' ? assetName : null, serialNumber) ??
     wo.asset?.manufacturer ??
     metaAsset?.manufacturer;
   const location =

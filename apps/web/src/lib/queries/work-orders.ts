@@ -13,16 +13,18 @@ export type WorkOrderListRow = {
   createdAt: string | null;
   requestorName: string | null;
   requestorId: string | null;
+  companyId: string | null;
+  company?: { name?: string | null } | null;
   assignedTechnicianIds: string[] | null;
   updatedAt?: string | null;
   completedAt?: string | null;
 };
 
 const LIST_SELECT =
-  'id, ticketNumber, problemDescription, status, priority, createdAt, updatedAt, completedAt, requestorName, requestorId, assignedTechnicianIds';
+  'id, ticketNumber, problemDescription, status, priority, createdAt, updatedAt, completedAt, requestorName, requestorId, companyId, assignedTechnicianIds, company:companies(name)';
 
 const EXPORT_SELECT =
-  'ticketNumber, status, priority, problemDescription, requestorName, createdAt, updatedAt, completedAt';
+  'ticketNumber, status, priority, problemDescription, requestorName, createdAt, updatedAt, completedAt, company:companies(name)';
 
 const ANALYTICS_SELECT = 'id, status, priority, createdAt, completedAt, closedAt';
 
@@ -58,6 +60,7 @@ export const WORK_ORDER_EXPORT_HEADERS = [
   'priority',
   'problemDescription',
   'requestorName',
+  'companyName',
   'createdAt',
   'updatedAt',
   'completedAt',

@@ -1,8 +1,25 @@
 export type ChargerManufacturer = 'Kostad' | 'Siemens';
 
-/** Kostad chargers are named with a KOS prefix; all others are Siemens. */
-export function manufacturerFromChargerName(name: string | null | undefined): ChargerManufacturer | null {
-  const trimmed = name?.trim();
-  if (!trimmed) return null;
-  return trimmed.toUpperCase().startsWith('KOS') ? 'Kostad' : 'Siemens';
+/**
+ * Charger manufacturer rule (shared with Flutter + Supabase trigger):
+ * - Name starts with KOS (case-insensitive) → Kostad
+ * - Otherwise → Siemens only if serial number starts with KOS
+ */
+export function manufacturerFromChargerName(
+  name: string | null | undefined,
+  serialNumber?: string | null | undefined
+): ChargerManufacturer | null {
+  const trimmedName = name?.trim();
+  if (!trimmedName) return null;
+
+  if (trimmedName.toUpperCase().startsWith('KOS')) {
+    return 'Kostad';
+  }
+
+  const trimmedSerial = serialNumber?.trim();
+  if (trimmedSerial && trimmedSerial.toUpperCase().startsWith('KOS')) {
+    return 'Siemens';
+  }
+
+  return null;
 }

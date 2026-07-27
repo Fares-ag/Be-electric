@@ -35,9 +35,14 @@ describe('charger-manufacturer', () => {
     expect(manufacturerFromChargerName('kos_charger_01')).toBe('Kostad');
   });
 
-  it('assigns Siemens for all other charger names', () => {
-    expect(manufacturerFromChargerName('SIE-001')).toBe('Siemens');
-    expect(manufacturerFromChargerName('Charger A')).toBe('Siemens');
+  it('assigns Siemens when serial starts with KOS and name does not', () => {
+    expect(manufacturerFromChargerName('SIE-001', 'KOS-001')).toBe('Siemens');
+    expect(manufacturerFromChargerName('Charger A', 'kos999')).toBe('Siemens');
+  });
+
+  it('returns null for other chargers without KOS serial', () => {
+    expect(manufacturerFromChargerName('SIE-001')).toBeNull();
+    expect(manufacturerFromChargerName('Charger A', 'SN-001')).toBeNull();
   });
 
   it('returns null for empty names', () => {
@@ -106,6 +111,7 @@ describe('roles', () => {
 describe('work-order-detail', () => {
   it('detects work order detail paths', () => {
     expect(isWorkOrderDetailRoute('/work-orders/wo-1')).toBe(true);
+    expect(isWorkOrderDetailRoute('/work-orders/new')).toBe(false);
     expect(isWorkOrderDetailRoute('/work-orders')).toBe(false);
   });
 

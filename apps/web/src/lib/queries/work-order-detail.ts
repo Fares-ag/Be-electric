@@ -57,7 +57,7 @@ const DETAIL_SELECT = [
   'lastSyncedAt',
   'activityHistory',
   'metadata',
-  'asset:assets(name,location,manufacturer)',
+  'asset:assets(name,location,manufacturer,serialNumber)',
   'company:companies(name)',
 ].join(',');
 

@@ -59,9 +59,16 @@ export function isSharedRoute(pathname: string): boolean {
   return matchesPrefix(pathname, SHARED_ROUTE_PREFIXES);
 }
 
+/** Reserved work-orders path segments that are admin pages, not detail IDs. */
+export const WORK_ORDER_RESERVED_SLUGS = ['new'] as const;
+
 /** Requestors may open a single work order they submitted (not the admin list). */
 export function isWorkOrderDetailRoute(pathname: string): boolean {
-  return /^\/work-orders\/[^/]+$/.test(pathname);
+  const match = pathname.match(/^\/work-orders\/([^/]+)$/);
+  if (!match) return false;
+  return !WORK_ORDER_RESERVED_SLUGS.includes(
+    match[1] as (typeof WORK_ORDER_RESERVED_SLUGS)[number]
+  );
 }
 
 export function canAccessRoute(pathname: string, role: AppRole | undefined): boolean {

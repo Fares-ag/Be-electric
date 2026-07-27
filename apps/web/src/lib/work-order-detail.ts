@@ -30,7 +30,7 @@ export type WorkOrderDetail = {
   requestorId: string;
   requestorName?: string | null;
   assetId?: string | null;
-  asset?: { name?: string; location?: string; manufacturer?: string | null; id?: string } | null;
+  asset?: { name?: string; location?: string; manufacturer?: string | null; serialNumber?: string | null; id?: string } | null;
   location?: string | null;
   companyId?: string | null;
   company?: { name?: string | null; id?: string } | null;

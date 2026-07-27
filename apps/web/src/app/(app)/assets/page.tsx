@@ -120,7 +120,10 @@ export default function AssetsPage() {
 
   const createMutation = useMutation({
     mutationFn: async (payload: typeof emptyForm) => {
-      const manufacturer = manufacturerFromChargerName(payload.name.trim());
+      const manufacturer = manufacturerFromChargerName(
+        payload.name.trim(),
+        payload.serialNumber.trim() || null
+      );
       const { error: e } = await supabase.from('assets').insert({
         id: crypto.randomUUID(),
         name: payload.name.trim(),
@@ -147,7 +150,10 @@ export default function AssetsPage() {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, ...payload }: Asset & typeof emptyForm) => {
-      const manufacturer = manufacturerFromChargerName(payload.name.trim());
+      const manufacturer = manufacturerFromChargerName(
+        payload.name.trim(),
+        payload.serialNumber.trim() || null
+      );
       const { error: e } = await supabase
         .from('assets')
         .update({
@@ -447,12 +453,12 @@ export default function AssetsPage() {
             <input
               type="text"
               readOnly
-              value={manufacturerFromChargerName(form.name) ?? '—'}
+              value={manufacturerFromChargerName(form.name, form.serialNumber) ?? '—'}
               className="w-full rounded-lg border border-border bg-muted px-3 py-2 text-sm text-muted-foreground"
               aria-describedby="manufacturer-hint"
             />
             <p id="manufacturer-hint" className="mt-1 text-xs text-muted-foreground">
-              KOS* names → Kostad; all other chargers → Siemens
+              KOS* names → Kostad; all other chargers → Siemens only if the serial number starts with KOS
             </p>
           </div>
           <div>

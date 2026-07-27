@@ -17,6 +17,7 @@ export type UsersMapEntry = {
   name: string;
   role?: string;
   email?: string;
+  companyId?: string | null;
 };
 
 export function normalizeUserRow(r: Record<string, unknown>): UsersListEntry {
@@ -38,6 +39,7 @@ export function toUsersMapEntry(row: UsersListEntry): UsersMapEntry {
     name: row.name,
     role: row.role,
     email: row.email,
+    companyId: row.companyId,
   };
 }
 

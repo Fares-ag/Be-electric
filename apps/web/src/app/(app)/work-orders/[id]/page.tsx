@@ -369,15 +369,15 @@ export default function WorkOrderDetailPage() {
             setStatusTransitionError(`Cannot change status from ${wo.status} to ${val}.`);
             return;
           }
-          if (STATUSES_REQUIRING_REASON.includes(val as typeof STATUSES_REQUIRING_REASON[number])) {
-            setStatusModalTarget(val);
-            setStatusReason('');
-            setStatusReasonError(null);
-            setStatusModalOpen(true);
-          } else {
-            updateStatusMutation.mutate({ newStatus: val });
-          }
-        }}
+                  if (STATUSES_REQUIRING_REASON.includes(val as typeof STATUSES_REQUIRING_REASON[number])) {
+                    setStatusModalTarget(val);
+                    setStatusReason('');
+                    setStatusReasonError(null);
+                    setStatusModalOpen(true);
+                  } else {
+                    updateStatusMutation.mutate({ newStatus: val });
+                  }
+                }}
         onReopenClick={() => setReopenOpen(true)}
       />
       {statusTransitionError && (
@@ -400,17 +400,17 @@ export default function WorkOrderDetailPage() {
           setStatusReasonError(null);
         }}
         onConfirm={() => {
-          setStatusReasonError(null);
-          if (statusReason.trim().length < 10) {
-            setStatusReasonError('Reason must be at least 10 characters');
-            return;
-          }
+                setStatusReasonError(null);
+                if (statusReason.trim().length < 10) {
+                  setStatusReasonError('Reason must be at least 10 characters');
+                  return;
+                }
           if (!statusModalTarget) return;
-          updateStatusMutation.mutate({
+                updateStatusMutation.mutate({
             newStatus: statusModalTarget,
-            reason: statusReason.trim(),
-          });
-        }}
+                  reason: statusReason.trim(),
+                });
+              }}
       />
 
       <WorkOrderReopenModal
@@ -437,11 +437,11 @@ export default function WorkOrderDetailPage() {
             wo={wo}
             primaryTechnicianName={primaryUser?.name}
             visible={Boolean(
-              isAdminOrManager ||
-                wo.assignedAt ||
-                (wo.assignedTechnicianIds && wo.assignedTechnicianIds.length > 0) ||
-                wo.primaryTechnicianId ||
-                wo.technicianEffortMinutes
+            isAdminOrManager ||
+              wo.assignedAt ||
+              (wo.assignedTechnicianIds && wo.assignedTechnicianIds.length > 0) ||
+              wo.primaryTechnicianId ||
+              wo.technicianEffortMinutes
             )}
           />
           <WorkOrderTimelineCard wo={wo} rawMeta={rawMeta} />
