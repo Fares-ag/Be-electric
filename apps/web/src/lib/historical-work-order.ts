@@ -1,3 +1,5 @@
+import type { Json } from '../../../../supabase/database.types';
+
 export const HISTORICAL_WORK_ORDER_STATUSES = ['completed', 'closed'] as const;
 export type HistoricalWorkOrderStatus = (typeof HISTORICAL_WORK_ORDER_STATUSES)[number];
 
@@ -52,7 +54,7 @@ export type HistoricalWorkOrderInsertPayload = {
   completedAt: string;
   closedAt: string | null;
   updatedAt: string;
-  metadata: Record<string, unknown>;
+  metadata: Json;
 };
 
 function parseLocalDateTime(value: string): Date | null {
