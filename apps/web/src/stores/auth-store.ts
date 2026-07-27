@@ -89,7 +89,9 @@ async function resolveProfileUser(
     }
   }
 
-  if (fallback?.email) {
+  // Fail closed in production: never mint a synthetic admin when profile RPCs fail.
+  // Dev-only escape hatch for local admin_users bootstrap without a users row.
+  if (process.env.NODE_ENV === 'development' && fallback?.email) {
     const adminRole = await getAdminRoleByEmail(fallback.email);
     if (adminRole) {
       return { user: await createFallbackUser(authId, fallback), error: null };

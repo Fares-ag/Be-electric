@@ -3,7 +3,13 @@
 import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/auth-store';
-import { subscribeWorkOrders, subscribeNotifications, subscribePMTasks, subscribePmOccurrences } from '@/lib/realtime';
+import {
+  subscribeWorkOrders,
+  subscribeNotifications,
+  subscribePMTasks,
+  subscribePmOccurrences,
+  subscribePartsRequests,
+} from '@/lib/realtime';
 
 export function useRealtimeSubscriptions() {
   const queryClient = useQueryClient();
@@ -28,10 +34,14 @@ export function useRealtimeSubscriptions() {
       queryClient.invalidateQueries({ queryKey: ['pm-schedule-occurrences'] });
       queryClient.invalidateQueries({ queryKey: ['pm-occurrence'] });
     };
+    const invalidatePartsRequests = () => {
+      queryClient.invalidateQueries({ queryKey: ['parts-requests'] });
+    };
 
     const channelWo = subscribeWorkOrders(invalidateWorkOrders, invalidateWorkOrders, invalidateWorkOrders);
     const channelPm = subscribePMTasks(invalidatePmTasks, invalidatePmTasks);
     const channelPmOcc = subscribePmOccurrences(invalidatePmSchedules, invalidatePmSchedules);
+    const channelParts = subscribePartsRequests(invalidatePartsRequests, invalidatePartsRequests);
 
     let channelNotif: ReturnType<typeof subscribeNotifications> | null = null;
     if (userId) {
@@ -44,6 +54,7 @@ export function useRealtimeSubscriptions() {
       channelWo.unsubscribe();
       channelPm.unsubscribe();
       channelPmOcc.unsubscribe();
+      channelParts.unsubscribe();
       channelNotif?.unsubscribe();
     };
   }, [user, authUser, queryClient]);

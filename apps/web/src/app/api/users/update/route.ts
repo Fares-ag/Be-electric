@@ -1,11 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/api/require-admin';
+import { assertCanAssignRole } from '@/lib/api/admin-privileges';
 import { validateUserForm } from '@/lib/users';
 
 /**
  * Updates a user in both public.users and Supabase Auth (user_metadata).
- * Keeps Auth and the app in sync.
+ * Deactivate also bans Auth, revokes sessions, and removes admin_users.
  */
 export async function POST(request: Request) {
   const auth = await requireAdmin(request);
@@ -33,12 +34,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'User id is required' }, { status: 400 });
   }
 
+  const nextRole = role ?? 'requestor';
   const validationError = validateUserForm(
-    { name, role: role ?? 'requestor', companyId },
+    { name, role: nextRole, companyId },
     'update'
   );
   if (validationError) {
     return NextResponse.json({ error: validationError }, { status: 400 });
+  }
+
+  const roleErr = await assertCanAssignRole(auth.supabaseAuth, auth.email, nextRole);
+  if (roleErr) {
+    return NextResponse.json({ error: roleErr }, { status: 403 });
   }
 
   if (auth.userId === id.trim() && isActive === false) {
@@ -51,11 +58,14 @@ export async function POST(request: Request) {
     { auth: { autoRefreshToken: false, persistSession: false } }
   );
 
+  const active = isActive !== false;
+
   const { error: authError } = await supabaseService.auth.admin.updateUserById(id.trim(), {
     user_metadata: {
       name: (name ?? '').trim(),
-      role: role ?? 'requestor',
+      role: nextRole,
     },
+    ban_duration: active ? 'none' : '876000h',
   });
   if (authError) {
     return NextResponse.json(
@@ -64,11 +74,29 @@ export async function POST(request: Request) {
     );
   }
 
+  if (!active) {
+    try {
+      await supabaseService.auth.admin.signOut(id.trim(), 'global');
+    } catch {
+      // Best-effort session revoke; ban still blocks refresh.
+    }
+
+    const { data: profile } = await supabaseService
+      .from('users')
+      .select('email')
+      .eq('id', id.trim())
+      .maybeSingle();
+    const email = (profile?.email as string | undefined)?.trim().toLowerCase();
+    if (email) {
+      await supabaseService.from('admin_users').delete().eq('email', email);
+    }
+  }
+
   const { error: profileError } = await auth.supabaseAuth.rpc('update_user', {
     p_id: id.trim(),
     p_name: (name ?? '').trim(),
-    p_role: role ?? 'requestor',
-    p_is_active: isActive !== false,
+    p_role: nextRole,
+    p_is_active: active,
     p_company_id: companyId?.trim() || null,
     p_department: department?.trim() || null,
   });
@@ -77,6 +105,31 @@ export async function POST(request: Request) {
       { error: `Profile update failed: ${profileError.message}` },
       { status: 500 }
     );
+  }
+
+  // Keep admin_users in sync when promoting/demoting active users.
+  if (active) {
+    const { data: profile } = await supabaseService
+      .from('users')
+      .select('email')
+      .eq('id', id.trim())
+      .maybeSingle();
+    const email = (profile?.email as string | undefined)?.trim().toLowerCase();
+    if (email) {
+      if (nextRole === 'admin' || nextRole === 'manager') {
+        await supabaseService.from('admin_users').upsert(
+          {
+            email,
+            is_admin: nextRole === 'admin',
+            is_manager: nextRole === 'manager' || nextRole === 'admin',
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'email' }
+        );
+      } else {
+        await supabaseService.from('admin_users').delete().eq('email', email);
+      }
+    }
   }
 
   return NextResponse.json({ ok: true, message: 'User updated in Auth and app.' });

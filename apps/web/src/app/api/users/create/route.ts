@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/api/require-admin';
+import { assertCanAssignRole } from '@/lib/api/admin-privileges';
 import { validateUserForm } from '@/lib/users';
 
 /**
@@ -33,17 +34,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Email is required' }, { status: 400 });
   }
 
+  const nextRole = role ?? 'requestor';
   const validationError = validateUserForm(
     {
       name: name ?? email,
       email,
-      role: role ?? 'requestor',
+      role: nextRole,
       companyId,
     },
     'create'
   );
   if (validationError) {
     return NextResponse.json({ error: validationError }, { status: 400 });
+  }
+
+  const roleErr = await assertCanAssignRole(auth.supabaseAuth, auth.email, nextRole);
+  if (roleErr) {
+    return NextResponse.json({ error: roleErr }, { status: 403 });
   }
 
   if (password?.trim() && password.trim().length < 6) {
@@ -67,7 +74,7 @@ export async function POST(request: Request) {
     email: email.trim().toLowerCase(),
     password: finalPassword,
     email_confirm: true,
-    user_metadata: { name: (name ?? email).trim(), role: role ?? 'requestor' },
+    user_metadata: { name: (name ?? email).trim(), role: nextRole },
   });
 
   if (authError) {
@@ -87,16 +94,29 @@ export async function POST(request: Request) {
     p_id: id,
     p_email: email.trim().toLowerCase(),
     p_name: (name ?? email).trim(),
-    p_role: role ?? 'requestor',
+    p_role: nextRole,
     p_is_active: true,
     p_company_id: companyId?.trim() || null,
     p_department: department?.trim() || null,
   });
 
   if (profileError) {
+    await supabaseService.auth.admin.deleteUser(id).catch(() => undefined);
     return NextResponse.json(
-      { error: `User created in Auth but profile failed: ${profileError.message}` },
+      { error: `Profile failed; Auth user rolled back: ${profileError.message}` },
       { status: 500 }
+    );
+  }
+
+  if (nextRole === 'admin' || nextRole === 'manager') {
+    await supabaseService.from('admin_users').upsert(
+      {
+        email: email.trim().toLowerCase(),
+        is_admin: nextRole === 'admin',
+        is_manager: nextRole === 'manager' || nextRole === 'admin',
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'email' }
     );
   }
 
@@ -112,9 +132,11 @@ export async function POST(request: Request) {
 
 function generateTempPassword(length = 14): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+  const bytes = new Uint8Array(length);
+  crypto.getRandomValues(bytes);
   let s = '';
   for (let i = 0; i < length; i++) {
-    s += chars[Math.floor(Math.random() * chars.length)];
+    s += chars[bytes[i]! % chars.length];
   }
   return s + '!1';
 }
